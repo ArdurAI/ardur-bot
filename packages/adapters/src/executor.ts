@@ -226,6 +226,7 @@ import {
   resolveAutoReviewProviderKind,
 } from "./auto-review.js";
 import { createAutoReviewProvider } from "./auto-review-factory.js";
+import { deliverPendingGoalBoardUpdates } from "./board/goal-delivery.js";
 import { BoardService } from "./board/service.js";
 import { BOARD_TOOL_NAMES, executeBoardTool, finishBoardRun } from "./board/tools.js";
 import { applyBoardToolAccess, botUpkeepPrompt, resolveBoardAccess } from "./board/upkeep.js";
@@ -5719,17 +5720,22 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (name === "finish_goal") {
             if (!thread.groupId || !goalRoom)
               return finish({ error: "finish_goal requires an active group goal" });
-            return finish(
-              await finishGoalFromRun(deps.prisma, {
-                goalId: goalRoom.id,
-                spaceId: run.spaceId,
-                userId: run.userId,
-                coordinatorBotId: run.botId,
-                threadId: thread.id,
-                summary: String(args.summary ?? ""),
-                secrets: runSecrets,
-              }),
-            );
+            const submitted = await finishGoalFromRun(deps.prisma, {
+              goalId: goalRoom.id,
+              spaceId: run.spaceId,
+              userId: run.userId,
+              coordinatorBotId: run.botId,
+              threadId: thread.id,
+              summary: String(args.summary ?? ""),
+              secrets: runSecrets,
+            });
+            if (submitted.ok)
+              void deliverPendingGoalBoardUpdates({
+                prisma: deps.prisma,
+                dataDir: deps.dataDir ?? "./data",
+                lockPool: deps.lockPool,
+              }).catch((error) => getLogger().error("goal board delivery", error));
+            return finish(submitted);
           }
           if (name === "ask_members") {
             if (!thread.groupId || !roomCanAsk)

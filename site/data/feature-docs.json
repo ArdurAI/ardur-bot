@@ -1154,6 +1154,8 @@
           "uiLabels": [
             "Objective",
             "Done when (one per line)",
+            "Board item",
+            "Board",
             "Start goal"
           ],
           "screenshotId": "docs-group-goals-form",
@@ -1188,7 +1190,8 @@
       ],
       "boundaries": [
         "Only an authorized owner with a group coordinator can start this flow.",
-        "Stopping a goal ends new coordinator work; it does not undo completed actions."
+        "Stopping a goal ends new coordinator work; it does not undo completed actions.",
+        "A linked board item is commented when the result is submitted and closed only when the owner accepts it."
       ],
       "troubleshooting": [
         {
@@ -2514,16 +2517,16 @@
       "id": "computer-edit-remove",
       "aliases": [],
       "title": "Edit",
-      "summary": "Saved computer connection editing is not on this checkout.",
+      "summary": "Edit and remove saved computer connections, with revision checks for active runs.",
       "area": "connections-and-computers",
       "order": 70,
-      "internal": true,
-      "internalReason": "Saved connection edit and remove controls exist only on the separate fleet branch, not this checkout.",
+      "internal": false,
+      "internalReason": null,
       "status": "draft",
       "availableSince": null,
       "platforms": {
-        "web": "unavailable",
-        "desktop": "unavailable",
+        "web": "configure",
+        "desktop": "configure",
         "mobile": "unavailable"
       },
       "settingsPath": {},

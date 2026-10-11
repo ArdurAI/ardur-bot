@@ -51,6 +51,7 @@ import {
   createVoiceProvider,
   defaultCatalogModelId,
   deletePushToken,
+  deliverPendingGoalBoardUpdates,
   deploymentAutoReviewDefault,
   deploymentHostLabel,
   destroyBot,
@@ -147,6 +148,7 @@ import {
   runtimeSupportsLocation,
   usableModelId,
 } from "@ardurbot/contracts";
+import { BoardError } from "@ardurbot/contracts/board";
 import { HostHealthSchema } from "@ardurbot/contracts/host-bridge";
 import { LOCAL_IMPORT_INVALID_FOLDER_CODE } from "@ardurbot/contracts/local-import";
 import { appContract } from "@ardurbot/contracts/rpc";
@@ -188,10 +190,13 @@ import {
   GoalReviewConflict,
   getBotCommunicationPolicy,
   getGoal,
+  getGoalRevision,
   getUserPreferences,
+  goalBoardResult,
   InvalidSpaceNameError,
   IsolationError,
   issueMessagingLinkCode,
+  linkGoal,
   listBotCommunicationDeliveries,
   listDelegations,
   lockOwnedGroup,
@@ -241,7 +246,8 @@ import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-sec
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
-import { boardCall, createBoard } from "./board.js";
+import { boardCall, boardOwnerRun, createBoard } from "./board.js";
+import { updateOwnerBoardItem } from "./board-update.js";
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import {
   botProfileLabelsChanged,
@@ -293,6 +299,7 @@ import {
   savePlacement,
   testFleetTarget,
 } from "./fleet.js";
+import { authorizeGoalBoardLink, goalBoardService } from "./goal-board.js";
 import { updateGroupMemberModelPin } from "./group-model-pin.js";
 import { guidedSetupStatus } from "./guided-setup.js";
 import { hermesAvailabilityConnectionSupported } from "./hermes-availability.js";
@@ -653,6 +660,31 @@ async function goalReviewCall<T>(action: () => Promise<T>): Promise<T> {
       throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
       throw new ORPCError("CONFLICT", { data: { reason: "already-reviewed" } });
+    throw error;
+  }
+}
+
+function scheduleGoalBoard(deps: RouterDeps) {
+  void deliverPendingGoalBoardUpdates({
+    prisma: deps.prisma,
+    dataDir: deps.dataDir,
+    lockPool: deps.lockPool,
+    ownerRun: deps.hostBridge ? boardOwnerRun(deps.hostBridge) : undefined,
+  }).catch((error) => getLogger().error("goal board delivery", error));
+}
+
+async function goalLinkOrRefuse(
+  deps: RouterDeps,
+  actor: RouterContext["actor"],
+  link: { workspaceId: string; itemId: string } | null,
+) {
+  if (!actor?.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+  try {
+    return await authorizeGoalBoardLink(actor, link, goalBoardService(deps));
+  } catch (error) {
+    if (error instanceof IsolationError) throw new ORPCError("FORBIDDEN");
+    if (error instanceof BoardError)
+      throw new ORPCError("BAD_REQUEST", { message: "Could not link that board item." });
     throw error;
   }
 }
@@ -6398,7 +6430,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     evidence: {
       runSummary: authed.evidence.runSummary.handler(({ context, input }) =>
-        runEvidenceSummary(deps.prisma, context.actor, input.runId),
+        runEvidenceSummary(deps.prisma, context.actor, input.runId, input.expectedFingerprint),
       ),
     },
     board: {
@@ -6440,12 +6472,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         ),
       ),
       update: authed.board.update.handler(({ context, input }) =>
-        boardCall(async () =>
-          (await board.service.provider(context.actor, input.workspaceId)).update(
-            input.id,
-            input.patch,
-          ),
-        ),
+        boardCall(() => updateOwnerBoardItem(board.service, context.actor, input)),
       ),
       claim: authed.board.claim.handler(({ context, input }) =>
         boardCall(async () =>
@@ -6522,12 +6549,16 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       submit: authed.goals.submit.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
-        return goalReviewCall(() => submitGoal(deps.prisma, context.actor, input));
+        const revision = await goalReviewCall(() => submitGoal(deps.prisma, context.actor, input));
+        scheduleGoalBoard(deps);
+        return revision;
       }),
       accept: authed.goals.accept.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
-        return goalReviewCall(() => acceptGoal(deps.prisma, context.actor, input));
+        const verdict = await goalReviewCall(() => acceptGoal(deps.prisma, context.actor, input));
+        scheduleGoalBoard(deps);
+        return verdict;
       }),
       reject: authed.goals.reject.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
@@ -6556,7 +6587,18 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       start: authed.goals.start.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
-        const goal = await startGoal(deps.prisma, context.actor, input);
+        const link =
+          input.boardWorkspaceId && input.boardItemId
+            ? await goalLinkOrRefuse(deps, context.actor, {
+                workspaceId: input.boardWorkspaceId,
+                itemId: input.boardItemId,
+              })
+            : null;
+        const goal = await startGoal(
+          deps.prisma,
+          context.actor,
+          link ? { ...input, boardWorkspaceId: link.workspaceId, boardItemId: link.itemId } : input,
+        );
         const first = await deps.prisma.run.findUnique({
           where: {
             spaceId_clientNonce: {
@@ -6578,10 +6620,36 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           throw new ORPCError("FORBIDDEN");
         return getGoal(deps.prisma, context.actor, input.groupId);
       }),
+      revision: authed.goals.revision.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return getGoalRevision(deps.prisma, context.actor, input);
+      }),
       stop: authed.goals.stop.handler(({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
         return stopGoal(deps.prisma, context.actor, input.goalId);
+      }),
+      link: authed.goals.link.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const link =
+          input.boardWorkspaceId && input.boardItemId
+            ? await goalLinkOrRefuse(deps, context.actor, {
+                workspaceId: input.boardWorkspaceId,
+                itemId: input.boardItemId,
+              })
+            : null;
+        return linkGoal(deps.prisma, context.actor, {
+          goalId: input.goalId,
+          boardWorkspaceId: link?.workspaceId ?? null,
+          boardItemId: link?.itemId ?? null,
+        });
+      }),
+      boardResult: authed.goals.boardResult.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return goalBoardResult(deps.prisma, context.actor, input.workspaceId, input.itemId);
       }),
     },
     delegations: {

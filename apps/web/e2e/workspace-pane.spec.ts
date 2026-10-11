@@ -200,6 +200,67 @@ async function openFiles(page: Page) {
   return pane;
 }
 
+for (const views of [["Files"], ["IDE"], ["Tasks", "Files"]]) {
+  test(`one header close restores ${views.join(" + ")} from Views`, async ({ page }, testInfo) => {
+    const { botId, unexpected } = await installWorkspace(page, "live");
+    await page.addInitScript(
+      ({ botId, views }) => {
+        localStorage.setItem(
+          `ardurbot:workspace-layout:${JSON.stringify(["fixture-user", "fixture-space", botId])}`,
+          JSON.stringify({
+            version: 1,
+            open: views.map((label) => ({ type: label.toLowerCase() })),
+            active: views.at(-1)!.toLowerCase(),
+            visible: false,
+            expanded: false,
+            position: "right",
+            width: 480,
+            height: 280,
+          }),
+        );
+      },
+      { botId, views },
+    );
+    await page.goto(`/app/${botId}`);
+    await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
+    const pane = page.getByTestId("side-panel");
+    const label = views.at(-1)!;
+    const chooseView = async (name: string) => {
+      await page.locator("[data-workspace-trigger]").click();
+      await page.getByRole("menuitemcheckbox", { name, exact: true }).click();
+    };
+    await chooseView(label);
+    await expect(pane.getByRole("tab", { name: label, exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(pane.getByRole("tab")).toHaveText(views);
+    await pane.getByRole("button", { name: "Expand", exact: true }).click();
+    await expect(pane).toHaveAttribute("data-overlay", "true");
+    await captureScreenshot(page, testInfo, `workspace-close-${label.toLowerCase()}-open`);
+    await pane.getByRole("button", { name: "Close panel", exact: true }).click();
+    await expect(pane).toHaveAttribute("data-panel", "closed");
+    await expect(pane).toHaveAttribute("aria-hidden", "true");
+    await expect(page.locator("[data-workspace-trigger]")).toBeFocused();
+    await captureScreenshot(page, testInfo, `workspace-close-${label.toLowerCase()}-closed`);
+    await chooseView(label);
+    await expect(pane).toHaveAttribute("aria-hidden", "false");
+    await expect(pane).toHaveAttribute("data-overlay", "false");
+    await expect(pane.getByRole("tab")).toHaveText(views);
+    await expect(pane.getByRole("tab", { name: label, exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await captureScreenshot(page, testInfo, `workspace-close-${label.toLowerCase()}-reopened`);
+    await pane.getByRole("tab", { name: label, exact: true }).focus();
+    await page.keyboard.press("Escape");
+    await expect(pane).toHaveAttribute("data-panel", "closed");
+    await chooseView("Workspace pane");
+    await expect(pane.getByRole("tab")).toHaveText(views);
+    expect(unexpected).toEqual([]);
+  });
+}
+
 test("one header menu keeps views, computer and settings reachable by keyboard", async ({
   page,
 }, testInfo) => {

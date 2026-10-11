@@ -13,6 +13,7 @@ import {
   memoryDocsFixture,
   routineDocsFixture,
 } from "./feature-docs-fixtures";
+import { captureScreenshot } from "./helpers";
 import { openAgentComputer, openWorkspaceView } from "./workspace-view";
 
 const captureRoot = process.env.FEATURE_DOCS_DIR
@@ -533,7 +534,9 @@ test("group-goals: start a goal in a room and stop it", async ({ page }) => {
   await capture(page, "docs-group-goals-stopped");
 });
 
-test("group-goals: review a submitted result and refresh after accepting it", async ({ page }) => {
+test("group-goals: review a submitted result and refresh after accepting it", async ({
+  page,
+}, testInfo) => {
   const state = groupGoalDocsFixture(true);
   await useDashboard(page, {
     botCount: 2,
@@ -544,6 +547,8 @@ test("group-goals: review a submitted result and refresh after accepting it", as
   await page.goto("/app/g/operations-group");
   await page.getByText("Goal: Completed", { exact: false }).click();
   await expect(page.getByText("Final owner review", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open board item" })).toBeVisible();
+  await expect(page.getByText("Board update pending")).toBeVisible();
   await page.getByRole("textbox", { name: "Rework notes" }).fill("Revise the sample plan.");
   await expect(page.getByRole("button", { name: "Accept result", exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Reject result", exact: true })).toBeEnabled();
@@ -551,4 +556,11 @@ test("group-goals: review a submitted result and refresh after accepting it", as
   await page.getByRole("button", { name: "Accept result", exact: true }).click();
   await expect(page.getByText("Goal: Accepted", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Accept result", exact: true })).toHaveCount(0);
+  await page.goto("/app/g/operations-group?goal=sample-goal&revision=sample-revision");
+  await expect(
+    page.getByText("The sample release plan is ready for review.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Accept result", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reject result", exact: true })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "goal-board-accepted-result");
 });

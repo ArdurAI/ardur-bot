@@ -18,7 +18,7 @@ export {
 
 import { timingSafeEqual } from "node:crypto";
 import path from "node:path";
-import { canReleaseScreenLease, canTakeScreenLease } from "@ardurbot/core";
+import { COMMAND_OUTPUT_LIMIT, canReleaseScreenLease, canTakeScreenLease } from "@ardurbot/core";
 import { z } from "zod";
 import { type SandboxInput, xdotoolCommand } from "./computer-spec.js";
 
@@ -387,6 +387,21 @@ export function normalizeWorkspaceRelative(value: string) {
 
 export function workspaceTarget(relative: string) {
   return relative ? path.posix.join("/home/ardurbot", relative) : "/home/ardurbot";
+}
+
+/** Git observation may ask for up to 1 MiB; ordinary exec stays at the shell-log cap. */
+export const MAX_EXEC_OUTPUT_BYTES = 1024 * 1024;
+
+export function boundedExecOutputLimit(requested: number | undefined): number {
+  if (
+    typeof requested === "number" &&
+    Number.isSafeInteger(requested) &&
+    requested > 0 &&
+    requested <= MAX_EXEC_OUTPUT_BYTES
+  ) {
+    return requested;
+  }
+  return COMMAND_OUTPUT_LIMIT;
 }
 
 export function sandboxTimeoutCommand(argv: string[], timeoutMs: number, completionMarker: string) {

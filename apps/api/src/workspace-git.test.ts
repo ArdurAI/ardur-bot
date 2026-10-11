@@ -100,6 +100,7 @@ describe("workspace git observation", () => {
         };
         const sandbox = createRunSandbox(kind, {
           dataDir: root,
+          supervisorUrl: "http://127.0.0.1:1",
           supervisorToken: "fixture",
           prisma: db as never,
           secrets: {
@@ -119,9 +120,11 @@ describe("workspace git observation", () => {
           status: "ok",
           diff: { before: null, after: "new content" },
         });
-        // Unsupported owners fail safely instead of falling back to the local host.
+        // A Docker computer is offered the view, but a missing container cannot
+        // fall back to reading the host checkout.
         f.computer.kind = "docker";
         if (kind === "docker") {
+          expect(await files.describe(actor, "bot")).toMatchObject({ git: true, files: "live" });
           expect(await git.observe(actor, f.input)).toMatchObject({ status: "unavailable" });
         }
       } finally {
@@ -155,6 +158,7 @@ describe("workspace git observation", () => {
     expect(ref).toMatchObject({ id: "provider-ref" });
     expect(request).toEqual({});
     expect(context).toMatchObject({ botId: "bot", userId: actor.userId, spaceId: actor.spaceId });
+    expect(context.fileRoot).toBe("bots/bot");
   });
 
   it("maps a provider diff observation into the contract", async () => {
