@@ -18,6 +18,7 @@ import {
   summaryOperationHash,
   summaryOperationManifest,
 } from "./hermes-provider-broker.js";
+import { nameHermesProviderFailure } from "./hermes-provider-problem.js";
 import { buildHostTurn } from "./host-turn.js";
 
 export { advertisedHostTools } from "./host-turn.js";
@@ -319,6 +320,8 @@ export class RemoteHostRuntime implements AgentRuntime {
         if (frame.channel !== "event") throw new Error("Unexpected runtime frame.");
         yield HostRuntimeEventSchema.parse(frame.data);
       }
+    } catch (error) {
+      throw this.kind === "hermes" ? nameHermesProviderFailure(error) : error;
     } finally {
       brokerSession?.broker.revoke();
       this.active.delete(request.runId);

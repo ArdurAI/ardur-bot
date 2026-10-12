@@ -10,6 +10,7 @@ import { msg } from "@lingui/core/macro";
 export const failureCategoryMessages: Record<FailureCategoryId, ReturnType<typeof msg>> = {
   "runtime-stopped": msg`{runtime}'s runtime stopped. Retry the run.`,
   "runtime-turn-failed": msg`{runtime} could not finish this turn. Retry the run.`,
+  "provider-rate-limit": msg`{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan.`,
   "usage-limit": msg`{runtime}'s usage limit is reached. Try again after it resets.`,
   "signed-out": msg`Sign in to {runtime} on this computer, then try again.`,
   "max-turns": msg`{runtime} reached this run's turn limit. Narrow the task and try again.`,
@@ -35,6 +36,7 @@ export const failureCategoryMessages: Record<FailureCategoryId, ReturnType<typeo
 
 /** Stands in a sentence for a runtime whose name is not known. */
 export const unknownRuntimeName = msg`This runtime`;
+export const unknownProviderName = msg`This connection`;
 
 /** Handoff-context sentences for the entries the table gives a member line. */
 export const failureCategoryMemberMessages: Partial<

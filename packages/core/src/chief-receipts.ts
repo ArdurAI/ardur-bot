@@ -24,6 +24,7 @@ export function applyChiefReceipt<
         requestMessageId: receipt.requestMessageId,
         key: receipt.key,
         ...(receipt.memberName ? { memberName: receipt.memberName } : {}),
+        ...(receipt.chiefDispatch ? { chiefDispatch: receipt.chiefDispatch } : {}),
         text: receipt.text,
       },
     ],

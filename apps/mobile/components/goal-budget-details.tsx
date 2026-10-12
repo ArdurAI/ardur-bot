@@ -1,4 +1,5 @@
 import type { Goal } from "@ardurbot/contracts";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { rpc } from "../lib/api";
@@ -9,6 +10,7 @@ import { useMobileTokens } from "../lib/native";
 export function GoalBudgetDetails({ groupId }: { groupId: string }) {
   const { t } = useI18n();
   const tokens = useMobileTokens();
+  const router = useRouter();
   const [goal, setGoal] = useState<Goal | null>(null);
   const [expanded, setExpanded] = useState(false);
   useEffect(() => {
@@ -55,6 +57,31 @@ export function GoalBudgetDetails({ groupId }: { groupId: string }) {
           </Text>
           {!goal.usageComplete ? (
             <Text style={{ color: tokens.mutedForeground }}>{t("Usage incomplete")}</Text>
+          ) : null}
+          {goal.boardWorkspaceId && goal.boardItemId ? (
+            <Text style={{ color: tokens.foreground }}>
+              {t("Board item")}: {goal.boardItemId}
+            </Text>
+          ) : null}
+          {goal.boardWorkspaceId && goal.boardItemId ? (
+            <Pressable
+              accessibilityRole="link"
+              onPress={() =>
+                router.push({
+                  pathname: "/overview",
+                  params: {
+                    view: "board",
+                    workspace: goal.boardWorkspaceId ?? "",
+                    item: goal.boardItemId ?? "",
+                  },
+                })
+              }
+            >
+              <Text style={{ color: tokens.foreground }}>{t("Open board item")}</Text>
+            </Pressable>
+          ) : null}
+          {goal.boardDelivery && goal.boardDelivery !== "delivered" ? (
+            <Text style={{ color: tokens.mutedForeground }}>{t("Board update pending")}</Text>
           ) : null}
         </View>
       ) : null}

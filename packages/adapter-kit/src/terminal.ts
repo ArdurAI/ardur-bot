@@ -17,6 +17,8 @@ export interface TerminalOutput {
   bytes: Uint8Array;
 }
 export interface TerminalProvider {
+  /** Live capability probe for providers whose terminal depends on a paired service. */
+  available?(computer: ComputerRef, context: AdapterContext): Promise<boolean>;
   open(
     computer: ComputerRef,
     options: { cols: number; rows: number; shellProfileId: string },

@@ -1,4 +1,5 @@
-import { Trans } from "@lingui/react/macro";
+import type { UsageSummary } from "@ardurbot/contracts";
+import { Plural, Trans } from "@lingui/react/macro";
 import type { RefObject } from "react";
 import { DesktopUpdateSection } from "../components/DesktopUpdates";
 import { SoftwareUpdateSection } from "../components/SoftwareUpdateSection";
@@ -10,9 +11,15 @@ export function UsageSettingsPanel({
   usage,
   panelRef,
 }: {
-  usage?: { runs: number; inputTokens: number; outputTokens: number } | null;
+  usage?: Pick<
+    UsageSummary,
+    "runs" | "records" | "runCount" | "inputTokens" | "outputTokens"
+  > | null;
   panelRef?: RefObject<HTMLDivElement | null>;
 }) {
+  const records = usage?.records ?? usage?.runs ?? 0;
+  const runs = usage?.runCount;
+  const tokens = (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0);
   return (
     <div
       ref={panelRef}
@@ -25,9 +32,15 @@ export function UsageSettingsPanel({
       </h3>
       {usage ? (
         <p className="mt-3 text-[14px] text-foreground/75">
-          <Trans>
-            {usage.runs} runs · {usage.inputTokens + usage.outputTokens} tokens
-          </Trans>
+          {runs === undefined ? null : (
+            <>
+              <Plural value={runs} one="# run" other="# runs" />
+              {" · "}
+            </>
+          )}
+          <Plural value={records} one="# usage record" other="# usage records" />
+          {" · "}
+          <Plural value={tokens} one="# token" other="# tokens" />
         </p>
       ) : null}
       <p className={`text-[12.5px] text-muted-foreground/80 ${usage ? "mt-2" : "mt-3"}`}>

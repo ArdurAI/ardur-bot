@@ -14,6 +14,29 @@ import {
 import { RuntimeKindSchema } from "./runtime-pins.js";
 
 describe("host protocol", () => {
+  it("refuses terminal environment and executable overrides", () => {
+    const operation = {
+      op: "computer.terminal",
+      homeKey: "home",
+      action: {
+        type: "open",
+        leaseId: "lease",
+        fence: 1,
+        generation: "host:home",
+        hostGeneration: "00000000-0000-4000-8000-000000000001",
+        expiresAt: 100000,
+        workingRoot: "/workspace",
+        cols: 80,
+        rows: 24,
+        shellProfileId: "default",
+      },
+    };
+    expect(HostOperationSchema.parse(operation)).toEqual(operation);
+    for (const override of [{ env: { API_KEY: "fake" } }, { shell: "/caller/shell" }])
+      expect(() =>
+        HostOperationSchema.parse({ ...operation, action: { ...operation.action, ...override } }),
+      ).toThrow();
+  });
   it("keeps a new host's health valid for strict servers before and after provider relay", () => {
     const health = {
       platform: "linux" as const,
@@ -24,6 +47,7 @@ describe("host protocol", () => {
       hermes: { runtimeKind: "hermes" as const, available: false, models: [] },
       capabilities: {
         providerRelay: 1 as const,
+        hostTerminal: { generation: "00000000-0000-4000-8000-000000000001" },
         hermesConfigurationProfile: "hermes-ardur-v2" as const,
         hermesLauncherGeneration: 1 as const,
       },

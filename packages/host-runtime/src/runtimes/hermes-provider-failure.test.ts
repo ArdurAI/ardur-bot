@@ -16,7 +16,7 @@ it.each([401, 403, 429, 500])(
     });
     expect(hermesProviderFailureCategory(hermesProviderFailure(original))).toBe(
       status === 429
-        ? "usage-limit"
+        ? "provider-rate-limit"
         : status < 429
           ? "provider-auth-failed"
           : "provider-request-failed",
@@ -137,3 +137,38 @@ it.each(["private fixture body", "__proto__", "constructor"])(
     }
   },
 );
+
+it.each(["1305", "rate_limit_exceeded", "insufficient_quota"] as const)(
+  "preserves allowlisted reason code %s through message-only callbacks",
+  (reasonCode) => {
+    const failure = {
+      kind: "provider-http",
+      status: 429,
+      layer: "upstream",
+      reason: "http-rate-limit",
+      reasonCode,
+    } as const;
+    const error = new HermesProviderRelayError(failure);
+    expect(hermesProviderFailure(new Error(error.message))).toEqual(failure);
+  },
+);
+it("drops arbitrary reason codes, including strings containing credential material", () => {
+  const error = new HermesProviderRelayError({
+    kind: "provider-http",
+    status: 429,
+    layer: "upstream",
+    reason: "http-rate-limit",
+    reasonCode: "private-fixture-value",
+  } as never);
+  expect(error.message).not.toContain("private-fixture-value");
+  expect(hermesProviderFailure(error)).not.toHaveProperty("reasonCode");
+});
+it.each([
+  [{ kind: "grant-refused", category: "run-budget" }, "provider-grant-refused"],
+  [{ kind: "grant-expired" }, "provider-grant-refused"],
+  [{ kind: "request-limit" }, "provider-request-too-large"],
+  [{ kind: "response-limit" }, "provider-response-too-large"],
+] as const)("keeps Ardur refusal %j separate from provider limits", (failure, category) => {
+  const message = new HermesProviderRelayError(failure).message;
+  expect(hermesProviderFailureCategory(hermesProviderFailure(new Error(message)))).toBe(category);
+});

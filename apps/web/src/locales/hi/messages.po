@@ -34,8 +34,8 @@ msgstr ""
 msgid " (unread)"
 msgstr " (अपठित)"
 
-#. placeholder {0}: group.entries.length
-#: src/pages/ModelSettingsOverlay.tsx
+#. placeholder {0}: filteredOptions.length
+#: src/components/CatalogModelPicker.tsx
 msgid "{0, plural, one {# model} other {# models}}"
 msgstr "{0, plural, one {# मॉडल} other {# मॉडल}}"
 
@@ -142,12 +142,6 @@ msgstr ""
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} rollup hours"
 msgstr ""
-
-#. placeholder {0}: usage.runs
-#. placeholder {1}: usage.inputTokens + usage.outputTokens
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "{0} runs · {1} tokens"
-msgstr "{0} रन · {1} टोकन"
 
 #. placeholder {0}: preview.runs
 #: src/pages/CompareStart.tsx
@@ -343,10 +337,15 @@ msgstr "{name} जवाब देने से पहले रुक गया
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
 msgstr "{pending, plural, one {समीक्षा के लिए # सुझाव} other {समीक्षा के लिए # सुझाव}}"
 
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider} अभी अनुरोध अस्वीकार कर रहा है (अनुरोध दर या उपयोग सीमा)। बाद में फिर कोशिश करें या अपना प्लान जाँचें।"
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{records, plural, one {# usage record} other {# usage records}}"
 msgstr "{records, plural, one {# उपयोग रिकॉर्ड} other {# उपयोग रिकॉर्ड}}"
@@ -354,6 +353,11 @@ msgstr "{records, plural, one {# उपयोग रिकॉर्ड} other {#
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "{remaining} शेष · बॉट देख रहा है, कार्रवाई नहीं कर रहा"
+
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{runs, plural, one {# run} other {# runs}}"
+msgstr "{runs, plural, one {# रन} other {# रन}}"
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
@@ -455,6 +459,7 @@ msgstr ""
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{tokens, plural, one {# token} other {# tokens}}"
 msgstr "{tokens, plural, one {# टोकन} other {# टोकन}}"
@@ -1028,6 +1033,7 @@ msgid "API is back, but the update did not finish. Check the host logs."
 msgstr ""
 
 #: src/components/AskCard.tsx
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
@@ -1441,7 +1447,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "अवरुद्ध"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
+#. placeholder {0}: row.blockerKey === "connect-linear" ? t`Connect Linear or grant a team member permission to read and write.` : row.blockerKey === "connect-github" ? t`Connect GitHub or grant a team member permission to read and write.` : row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, provider: row.reasonProvider ?? i18n._(unknownProviderName), }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "अवरुद्ध — {0}"
@@ -1458,6 +1464,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
@@ -1471,9 +1478,19 @@ msgstr ""
 msgid "Board files will be kept."
 msgstr "बोर्ड की फ़ाइलें सुरक्षित रहेंगी।"
 
+#: src/pages/GoalBoardLink.tsx
+#: src/pages/GoalForm.tsx
+msgid "Board item"
+msgstr "बोर्ड आइटम"
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Board status"
 msgstr "बोर्ड की स्थिति"
+
+#: src/pages/board/Board.tsx
+#: src/pages/GoalBoardLink.tsx
+msgid "Board update pending"
+msgstr "बोर्ड अपडेट लंबित"
 
 #: src/pages/settings-sections.ts
 #: src/pages/storage/StorageSettings.tsx
@@ -1606,6 +1623,10 @@ msgstr ""
 #: src/pages/customize/PluginsPage.tsx
 msgid "by {0}"
 msgstr ""
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "By bot"
+msgstr "बॉट के अनुसार"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "by you"
@@ -1834,6 +1855,10 @@ msgstr ""
 msgid "Check in."
 msgstr "जांच करें।"
 
+#: src/components/RunEvidence.tsx
+msgid "Check key"
+msgstr "कुंजी जाँचें"
+
 #: src/pages/Auth.tsx
 msgid "Check your email"
 msgstr "अपना ईमेल देखें"
@@ -1921,6 +1946,10 @@ msgstr "एक मॉडल चुनें"
 msgid "Choose a model in Models to enable memory suggestions."
 msgstr ""
 
+#: src/lib/model-selection-error.ts
+msgid "Choose a model."
+msgstr "एक मॉडल चुनें।"
+
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
 msgstr "नया पासवर्ड चुनें"
@@ -1928,6 +1957,10 @@ msgstr "नया पासवर्ड चुनें"
 #: src/components/composer/command-description.ts
 msgid "Choose a taught skill"
 msgstr ""
+
+#: src/components/CatalogModelPicker.tsx
+msgid "Choose connection"
+msgstr "कनेक्शन चुनें"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose effort"
@@ -2081,6 +2114,7 @@ msgid "Close navigation"
 msgstr "नेविगेशन बंद करें"
 
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Close panel"
 msgstr "पैनल बंद करें"
 
@@ -2399,6 +2433,16 @@ msgstr "API कुंजी कनेक्ट करें"
 msgid "Connect Executor"
 msgstr "Executor कनेक्ट करें"
 
+#: src/components/ai/CoordinationLine.tsx
+#: src/pages/TeamBoard.tsx
+msgid "Connect GitHub or grant a team member permission to read and write."
+msgstr "GitHub कनेक्ट करें या टीम के किसी सदस्य को पढ़ने और लिखने की अनुमति दें।"
+
+#: src/components/ai/CoordinationLine.tsx
+#: src/pages/TeamBoard.tsx
+msgid "Connect Linear or grant a team member permission to read and write."
+msgstr "Linear कनेक्ट करें या टीम के किसी सदस्य को पढ़ने और लिखने की अनुमति दें।"
+
 #: src/pages/shell/message-cards.tsx
 msgid "Connect MCP server “{name}”"
 msgstr "MCP सर्वर “{name}” कनेक्ट करें"
@@ -2410,6 +2454,14 @@ msgstr "OAuth कनेक्ट करें"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Connect remote account"
 msgstr ""
+
+#: src/lib/model-selection-error.ts
+msgid "Connect that model first."
+msgstr "पहले उस मॉडल को कनेक्ट करें।"
+
+#: src/lib/model-selection-error.ts
+msgid "Connect that model server first."
+msgstr "पहले उस मॉडल के सर्वर को कनेक्ट करें।"
 
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
@@ -2438,7 +2490,6 @@ msgstr "Treg कनेक्ट करें"
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected"
@@ -2497,6 +2548,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Connection saved, but the test failed:"
 msgstr "कनेक्शन सहेजा गया, लेकिन जाँच विफल रही:"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Connection settings"
+msgstr "कनेक्शन सेटिंग्स"
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -2600,6 +2655,7 @@ msgstr "समन्वयक"
 msgid "Coordinator bot"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copied"
@@ -2617,6 +2673,10 @@ msgstr ""
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy command"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Copy fingerprint"
+msgstr "फ़िंगरप्रिंट कॉपी करें"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy output"
@@ -2810,6 +2870,10 @@ msgstr "जारी नहीं रखा जा सका"
 msgid "Could not copy. Select and copy the prompt."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Could not copy. Select the fingerprint and copy it."
+msgstr "कॉपी नहीं हो सका। फ़िंगरप्रिंट चुनें और कॉपी करें।"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Could not create bot"
 msgstr "बॉट नहीं बनाया जा सका"
@@ -2890,6 +2954,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not install connector"
 msgstr "कनेक्टर इंस्टॉल नहीं हो सका"
+
+#: src/pages/GoalForm.tsx
+msgid "Could not link that board item."
+msgstr "उस बोर्ड आइटम को लिंक नहीं किया जा सका."
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -4314,6 +4382,10 @@ msgstr "विस्तृत करें"
 msgid "Expand {0}"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Expected fingerprint"
+msgstr "अपेक्षित फ़िंगरप्रिंट"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -4347,6 +4419,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export data"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Export identity card"
+msgstr "पहचान कार्ड निर्यात करें"
 
 #: src/pages/ComparePanel.tsx
 msgid "Export JSON"
@@ -4478,6 +4554,10 @@ msgstr "खोजा जा रहा है…"
 msgid "Fine-grained token"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Fingerprint"
+msgstr "फ़िंगरप्रिंट"
+
 #: src/pages/GuidedOnboarding.tsx
 msgid "Finish setup"
 msgstr "सेटअप पूरा करें"
@@ -4585,10 +4665,6 @@ msgstr ""
 msgid "Four terminals are already open."
 msgstr "चार टर्मिनल पहले से खुले हैं।"
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Free"
-msgstr ""
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
 msgstr ""
@@ -4675,6 +4751,14 @@ msgstr ""
 msgid "Goal"
 msgstr "लक्ष्य"
 
+#: src/pages/board/Board.tsx
+msgid "Goal accepted"
+msgstr "लक्ष्य स्वीकार किया गया"
+
+#: src/pages/board/Board.tsx
+msgid "Goal completed"
+msgstr "लक्ष्य पूरा हुआ"
+
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check the request and choose the next step."
 msgstr "समझ गया — अनुरोध जाँचूँगा और अगला कदम चुनूँगा।"
@@ -4688,12 +4772,24 @@ msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "समझ गया — क्या कमी है, जाँचूँगा और इंस्टॉल करने से पहले पूछूँगा।"
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to file this issue in Linear."
+msgstr "समझ गया — Linear में यह इश्यू दर्ज करने के लिए टीम का एक सदस्य चुनूँगा।"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to manage the GitHub repository."
+msgstr "समझ गया — GitHub रिपॉज़िटरी प्रबंधित करने के लिए टीम का एक सदस्य चुनूँगा।"
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "समझ गया — इसे Notion में रखने के लिए टीम का एक सदस्य चुनूँगा।"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll keep {name} off this task."
 msgstr "समझ गया — {name} को इस काम से अलग रखूँगा।"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — this task needs you before I can assign it."
+msgstr "समझ गया — यह काम सौंपने से पहले आपकी मदद चाहिए।"
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -5238,6 +5334,10 @@ msgstr ""
 msgid "key"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Key version"
+msgstr "कुंजी संस्करण"
+
 #. placeholder {0}: target.context.slice(5)
 #: src/pages/fleet/target-name.ts
 msgid "kind ({0})"
@@ -5565,6 +5665,10 @@ msgstr ""
 msgid "Local only"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
+msgid "Local server"
+msgstr "स्थानीय सर्वर"
+
 #: src/pages/LocalSettings.tsx
 msgid "Local Server Settings"
 msgstr ""
@@ -5656,9 +5760,9 @@ msgstr "प्रति अनुरोध अधिकतम इमेज"
 msgid "Maximum output tokens"
 msgstr "अधिकतम आउटपुट टोकन"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "May not be available on your plan"
-msgstr ""
+msgstr "हो सकता है कि आपके प्लान में उपलब्ध न हो"
 
 #: src/pages/settings-sections.ts
 msgid "MCP"
@@ -5870,6 +5974,7 @@ msgstr "मिनट"
 msgid "minutes"
 msgstr "मिनट"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
@@ -5908,7 +6013,7 @@ msgstr "इस समूह में मॉडल"
 msgid "Model name"
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Model options"
 msgstr "मॉडल विकल्प"
 
@@ -6124,6 +6229,7 @@ msgstr ""
 msgid "Needs takeover"
 msgstr "नियंत्रण लेना ज़रूरी"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
 msgid "Needs you"
@@ -6278,6 +6384,10 @@ msgstr ""
 msgid "No embedding service is configured."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "No expected key given; self-consistent only"
+msgstr "अपेक्षित कुंजी नहीं दी गई; केवल आंतरिक संगति की पुष्टि"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
 msgstr "बिल्ट-इन कैटलॉग में अभी कोई एक्सटेंशन नहीं हैं। इस कंप्यूटर से एक्सटेंशन बंडल (.mcpb या .dxt फ़ाइल) इंस्टॉल करने के लिए जोड़ें का उपयोग करें।"
@@ -6306,9 +6416,9 @@ msgstr "अब सक्रिय नहीं"
 msgid "No managed app catalog is configured on this deployment."
 msgstr "इस डिप्लॉयमेंट पर कोई प्रबंधित ऐप कैटलॉग कॉन्फ़िगर नहीं है।"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "No matching models"
-msgstr ""
+msgstr "कोई मिलते-जुलते मॉडल नहीं"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "No matching output."
@@ -6342,10 +6452,6 @@ msgstr ""
 #: src/pages/dashboard/panels.ts
 msgid "No proposals"
 msgstr ""
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "No providers found."
-msgstr "कोई प्रोवाइडर नहीं मिला।"
 
 #: src/pages/dashboard/panels.ts
 #: src/pages/dashboard/WorkPanel.tsx
@@ -6684,6 +6790,10 @@ msgstr ""
 msgid "Open Ardur"
 msgstr ""
 
+#: src/pages/GoalBoardLink.tsx
+msgid "Open board item"
+msgstr "बोर्ड आइटम खोलें"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
@@ -6908,6 +7018,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Park"
 msgstr "पार्क करें"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partial cost"
+msgstr "आंशिक लागत"
 
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Partially reported"
@@ -7170,12 +7284,10 @@ msgstr ""
 msgid "provider"
 msgstr ""
 
-#: src/pages/Onboarding.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Provider"
 msgstr "प्रोवाइडर"
 
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Providers"
 msgstr "प्रोवाइडर्स"
@@ -7289,12 +7401,13 @@ msgstr "दस्तावेज़ पढ़ा जा रहा है"
 msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
-msgstr ""
+msgstr "तैयार"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ready. The bot can use Hermes."
@@ -8267,10 +8380,10 @@ msgstr "इस कंप्यूटर पर स्क्रीन उपल�
 msgid "Screen recording"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/board/Board.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
@@ -8300,13 +8413,9 @@ msgstr ""
 msgid "Search integrations.sh"
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Search models"
-msgstr ""
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Search providers"
-msgstr "प्रोवाइडर्स खोजें"
+msgstr "मॉडल खोजें"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Search run output"
@@ -8567,6 +8676,7 @@ msgstr "टीम के साथ साझा"
 msgid "Sharing"
 msgstr "साझा करना"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
 msgstr ""
@@ -8607,6 +8717,7 @@ msgstr ""
 msgid "Showing {start}–{end} of {total}"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/Auth.tsx
@@ -8682,6 +8793,14 @@ msgstr ""
 msgid "Sign-in was declined."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Signed by a different key"
+msgstr "अलग कुंजी से हस्ताक्षरित"
+
+#: src/components/RunEvidence.tsx
+msgid "Signed by the expected key"
+msgstr "अपेक्षित कुंजी से हस्ताक्षरित"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
 msgstr ""
@@ -8689,6 +8808,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Signed in on this computer as {identity}"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Signing identity"
+msgstr "हस्ताक्षर पहचान"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -8777,6 +8900,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "Source revision"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Space"
+msgstr "स्पेस"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "Space board"
@@ -9431,6 +9558,15 @@ msgstr "यह कॉन्फ़िगरेशन बहुत जटिल �
 msgid "This configuration version is not supported."
 msgstr "यह कॉन्फ़िगरेशन संस्करण समर्थित नहीं है।"
 
+#: src/lib/failure-category-copy.ts
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This connection"
+msgstr "यह कनेक्शन"
+
+#: src/lib/model-selection-error.ts
+msgid "This connection cannot serve that model."
+msgstr "यह कनेक्शन उस मॉडल को उपलब्ध नहीं करा सकता।"
+
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This field is not supported."
 msgstr "यह फ़ील्ड समर्थित नहीं है।"
@@ -9746,6 +9882,11 @@ msgstr "अपना उत्तर लिखें"
 msgid "Unassigned"
 msgstr "असाइन नहीं किया गया"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unattributed usage"
+msgstr "बिना श्रेय का उपयोग"
+
+#: src/components/CatalogModelPicker.tsx
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -9789,9 +9930,17 @@ msgstr ""
 msgid "Unknown"
 msgstr "अज्ञात"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unknown bot"
+msgstr "अज्ञात बॉट"
+
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr ""
+
+#: src/lib/model-selection-error.ts
+msgid "Unknown model for that provider"
+msgstr "उस प्रदाता के लिए अज्ञात मॉडल"
 
 #: src/components/ai/CompactWorkRecord.tsx
 msgid "Unknown: {title}"
@@ -10031,6 +10180,7 @@ msgstr ""
 
 #: src/components/OllamaSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 msgid "Use this model"
 msgstr "यह मॉडल उपयोग करें"
 

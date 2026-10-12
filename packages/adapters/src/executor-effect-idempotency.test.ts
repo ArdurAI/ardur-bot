@@ -217,6 +217,7 @@ function fixture(
         coordinatorBotId: "bot-1",
       })),
     },
+    teamGoal: { findFirst: vi.fn(async () => null) },
     delegation: {
       findMany: vi.fn(async () => []),
       findUnique: vi.fn(async () => null),

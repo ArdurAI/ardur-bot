@@ -11,6 +11,8 @@ import { t } from "./i18n";
 
 export function chiefReceiptText(key: ChiefReceiptKey, memberName?: string): string {
   switch (key) {
+    case "needs-owner":
+      return t("Got it — this task needs you before I can assign it.");
     case "exclude-member":
       return memberName
         ? t("Got it — I’ll keep {name} off this task.", { name: memberName })
@@ -23,11 +25,16 @@ export function chiefReceiptText(key: ChiefReceiptKey, memberName?: string): str
       return t("Got it — I’ll check what’s missing and ask before installing it.");
     case "greeting":
       return t("Hi everyone.");
+    case "create-issue":
+      return t("Got it — I’ll choose a team member to file this issue in Linear.");
+    case "manage-repository":
+      return t("Got it — I’ll choose a team member to manage the GitHub repository.");
     default:
       return t("Got it — I’ll check the request and choose the next step.");
   }
 }
 export function chiefDispatchSummary(dispatch: ChiefDispatch): string {
+  if (dispatch.state === "needs-owner") return t("Needs you");
   if (dispatch.stop) {
     const name = dispatch.stop.memberName;
     switch (dispatch.stop.state) {
