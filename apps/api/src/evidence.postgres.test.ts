@@ -433,6 +433,9 @@ describePostgres("signing key rotation and revocation (PostgreSQL)", () => {
   });
   it("dates an emergency revocation and keeps earlier records verified", async () => {
     const kid = await headKeyId();
+    // Signatures in the revocation's own second are untrusted, so revoke in a
+    // later second than the run's records to check that earlier ones verify.
+    await new Promise((resolve) => setTimeout(resolve, 1050 - (Date.now() % 1000)));
     const revoked = await revokeSpaceEvidenceKey(
       prisma,
       actor(ownerId),
