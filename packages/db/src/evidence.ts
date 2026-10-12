@@ -30,6 +30,26 @@ async function activeKeyForUpdate(tx: Prisma.TransactionClient, spaceId: string)
   return tx.evidenceKey.findFirst({ where: { spaceId, revokedAt: null } });
 }
 
+/**
+ * Shared fence for every signature write. Emergency revocation takes the same
+ * space-key lock, so re-checking the key row inside this transaction means no
+ * record or seal lands after a committed revocation. A replaced key stays
+ * signable: runs admitted before a rotation keep their key by design.
+ */
+async function assertKeyStillSignable(
+  tx: Prisma.TransactionClient,
+  spaceId: string,
+  kid: string | null | undefined,
+) {
+  if (!kid) return;
+  await lockSpaceKeys(tx, spaceId);
+  const row = await tx.evidenceKey.findUnique({
+    where: { kid },
+    select: { revokedAt: true, replacedAt: true },
+  });
+  if (row?.revokedAt && !row.replacedAt) throw new Error("Evidence key revoked");
+}
+
 export async function insertRecord(
   prisma: PrismaClient,
   data: Prisma.EvidenceRecordUncheckedCreateInput,
@@ -40,6 +60,7 @@ export async function insertRecord(
       if (await tx.evidenceSeal.findUnique({ where: { runId: data.runId } })) {
         throw new Error("Evidence run is sealed");
       }
+      await assertKeyStillSignable(tx, data.spaceId, data.kid);
       return tx.evidenceRecord.create({ data });
     });
   } catch (error) {
@@ -76,6 +97,7 @@ export async function insertSeal(
     if (!head || head.sha256 !== data.headSha256 || head.seq + 1 !== data.recordCount) {
       throw new EvidenceSequenceConflict(data.runId);
     }
+    await assertKeyStillSignable(tx, data.spaceId, head.kid);
     return tx.evidenceSeal.create({ data });
   });
 }
