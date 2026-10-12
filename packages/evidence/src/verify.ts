@@ -152,6 +152,16 @@ function verificationKey(publicKey: KeyObject | string): KeyObject {
   return key;
 }
 
+/**
+ * Receipts and seals carry whole-second timestamps while a revocation keeps
+ * milliseconds. Anything signed in the second the revocation happened in
+ * could postdate it, so that whole second is untrusted.
+ */
+function signedAtOrAfterRevocation(iatSeconds: number, revokedAt: Date): boolean {
+  const revocationSecond = revokedAt.getTime() - (revokedAt.getTime() % 1000);
+  return iatSeconds * 1000 >= revocationSecond;
+}
+
 function verifyChainContents(
   jwsList: readonly string[],
   publicKey: KeyObject | string,
@@ -241,7 +251,7 @@ function verifyChainContents(
     if (
       options?.revokedAt &&
       typeof claims.iat === "number" &&
-      claims.iat * 1000 > options.revokedAt.getTime()
+      signedAtOrAfterRevocation(claims.iat, options.revokedAt)
     ) {
       failures.push({
         index,
@@ -296,7 +306,7 @@ function verifySealContents(
   if (
     options?.revokedAt &&
     typeof seal.iat === "number" &&
-    seal.iat * 1000 > options.revokedAt.getTime()
+    signedAtOrAfterRevocation(seal.iat, options.revokedAt)
   ) {
     fail("signed_after_revocation", "Seal is dated after the signing key was revoked");
   }

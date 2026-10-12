@@ -150,6 +150,39 @@ describe("chain and seal verification", () => {
       expect.objectContaining({ code: "signed_after_revocation" }),
     ]);
   });
+  it("treats the revocation second as untrusted at millisecond precision", () => {
+    // Receipts carry whole-second timestamps: anything signed in the second the
+    // revocation happened in could postdate it, so that second is untrusted.
+    const revokedAt = new Date("2026-09-29T13:00:00.100Z");
+    const chain = createEvidenceChain(privateKey, keys.kid);
+    const early = chain.append(receiptInput({ now: new Date("2026-09-29T12:59:59.900Z") })).jws;
+    // Signed one millisecond after the revocation, inside its second.
+    const late = chain.append(receiptInput({ now: new Date("2026-09-29T13:00:00.101Z") })).jws;
+    const untrusted = verifyChain([early, late], keys.publicKeyPem, undefined, { revokedAt });
+    expect(untrusted.ok).toBe(false);
+    expect(untrusted.failures).toEqual([
+      expect.objectContaining({ index: 1, code: "signed_after_revocation" }),
+    ]);
+    const seal = sealRun(
+      {
+        records: [early, late],
+        actor: "bot-test",
+        grantId: "grant-test",
+        iss: "ardur:space-test:evidence",
+        now: new Date("2026-09-29T13:00:00.101Z"),
+      },
+      privateKey,
+      keys.kid,
+    );
+    const sealResult = verifySeal(seal, [early, late], keys.publicKeyPem, undefined, { revokedAt });
+    expect(sealResult.ok).toBe(false);
+    expect(sealResult.failures).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "signed_after_revocation" })]),
+    );
+    // The second before the revocation stays trusted.
+    const before = verifyChain([early], keys.publicKeyPem, undefined, { revokedAt });
+    expect(before.ok).toBe(true);
+  });
   it("accepts the full sealed run", () => {
     const { records, seal } = run();
     const last = decodeCompact(records[3]).payload as { receipt_id: string };
