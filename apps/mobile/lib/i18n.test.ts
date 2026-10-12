@@ -41,7 +41,7 @@ describe("mobile i18n", () => {
   it.each(["ru", "zh-CN"] as const)(
     "translates freeze cancellation in chat and copy text (%s)",
     async (locale) => {
-      const { resetI18nForTests } = await import("./i18n");
+      const { resetI18nForTests, t } = await import("./i18n");
       const { blockText, copyableMobileMessageText } = await import("./api");
       resetI18nForTests(locale);
       const message = {
@@ -53,6 +53,7 @@ describe("mobile i18n", () => {
       try {
         for (const rendered of [blockText(message), copyableMobileMessageText(message)]) {
           expect(rendered).toContain("Coordinator → Worker: cancelled.");
+          expect(rendered).toContain(t("The goal reached owner review before this work started."));
           expect(rendered).not.toContain("goal.freeze-cancelled");
           expect(rendered).not.toContain("The goal reached owner review before this work started.");
         }

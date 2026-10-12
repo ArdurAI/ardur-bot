@@ -802,9 +802,10 @@ async function settleFrozenRunEffects(
 
 /**
  * The resume freeze. A goal run that is not in flight — queued, waiting on an answer
- * or a takeover, or holding an expired lease — must never be claimed while the goal is
- * frozen; neither may a retry or a recovery of a dead lease. The run settles exactly
- * like a queued run the submission freeze caught. Returns true when the freeze holds
+ * or a takeover, paused or ready for peer work, or holding an expired lease — must never
+ * be claimed while the goal is frozen; neither may a retry or a recovery of a dead lease.
+ * The run settles exactly like a queued run the submission freeze caught.
+ * Returns true when the freeze holds
  * the run, so the caller must not claim it. A live in-flight lease survives, as at
  * submission. The status re-check is conditional, like the claim's, so a concurrent
  * claim that won the row first is left to finish its call.
@@ -846,7 +847,11 @@ export async function cancelRunHeldByFrozenGoal(
       run,
       {
         OR: [
-          { status: { in: ["queued", "waiting_input", "waiting_takeover"] } },
+          {
+            status: {
+              in: ["queued", "waiting_input", "waiting_takeover", "peer_paused", "peer_ready"],
+            },
+          },
           { status: { in: ["leased", "running"] }, leaseExpiresAt: { lte: now } },
         ],
       },

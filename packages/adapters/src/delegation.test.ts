@@ -531,6 +531,7 @@ it("records deadline or budget when the task itself is stopping", async () => {
     delegationRoot: { findUnique: vi.fn(async () => root) },
     delegation: { findFirst: vi.fn(async () => null) },
     botMessageWake: { findFirst: vi.fn(async () => null) },
+    teamGoal: { findFirst: vi.fn(async () => ({ status: "running" })) },
   } as unknown as PrismaClient;
   expect(await checkDelegationExecution(prisma, "run")).toContain("stopping");
   expect(requestCancel).toHaveBeenCalledWith(
@@ -637,6 +638,7 @@ it("keeps workers admitted before their coordinator's turn pushed the task over 
       },
       delegationRoot: { findUnique: vi.fn(async () => overspent) },
       botMessageWake: { findFirst: vi.fn(async () => null) },
+      teamGoal: { findFirst: vi.fn(async () => ({ status: "running" })) },
       delegation: {
         findFirst: vi.fn(async () => null),
         findUniqueOrThrow: vi.fn(async () => ({

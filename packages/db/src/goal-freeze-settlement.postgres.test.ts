@@ -247,7 +247,7 @@ describePostgres("Goal admission freeze and settlement (PostgreSQL)", () => {
       where: { admissionKey: `freeze-fixture-${goal.id}` },
     });
     expect(delegation.status).toBe("cancelled");
-    expect(delegation.result).toContain("reached owner review");
+    expect(delegation.result).toBe("goal.freeze-cancelled");
     const root = await prisma.delegationRoot.findUniqueOrThrow({
       where: { rootTaskId: goal.rootTaskId },
     });
@@ -259,6 +259,16 @@ describePostgres("Goal admission freeze and settlement (PostgreSQL)", () => {
       [staleRun.id, workerRun.id].sort(),
     );
 
+    // The already-running coordinator must finish before acceptance can settle.
+    await prisma.run.update({
+      where: { id: parentRun.id },
+      data: {
+        status: "completed",
+        completedAt: new Date(),
+        leaseOwner: null,
+        leaseExpiresAt: null,
+      },
+    });
     // With the freeze drained, acceptance settles.
     await passConditions(goal.id, revision.id);
     await acceptGoal(prisma, actor, { goalId: goal.id, revisionId: revision.id });
@@ -375,6 +385,7 @@ describePostgres("Goal admission freeze and settlement (PostgreSQL)", () => {
       request: { value: 1 },
     });
     expect(admitted.ok).toBe(true);
+    if (!admitted.ok) throw new Error("Expected effect admission while the goal is running");
     const wake = await prisma.botMessageWake.create({
       data: {
         spaceId,
@@ -389,6 +400,27 @@ describePostgres("Goal admission freeze and settlement (PostgreSQL)", () => {
       },
     });
 
+    // An admitted intention is still pending dispatch, so it cannot enter owner review.
+    await expect(submit(goal.id)).rejects.toMatchObject({ reason: "effects-open" });
+    expect((await prisma.teamGoal.findUniqueOrThrow({ where: { id: goal.id } })).status).toBe(
+      "running",
+    );
+    expect(await prisma.goalRevision.count({ where: { goalId: goal.id } })).toBe(0);
+    expect(
+      await claimGoalRunEffect(prisma, {
+        spaceId,
+        userId,
+        goalId: goal.id,
+        rootTaskId: goal.rootTaskId,
+        effectId: admitted.effect.id,
+        from: "intended",
+      }),
+    ).toBe(true);
+    // Persist the existing effect's receipt before submitting; never replay it to settle.
+    await prisma.externalEffect.update({
+      where: { id: admitted.effect.id },
+      data: { status: "completed", result: { ok: true } },
+    });
     await submit(goal.id);
 
     // Child admission refuses with the delegation problem and touches nothing.
@@ -424,6 +456,9 @@ describePostgres("Goal admission freeze and settlement (PostgreSQL)", () => {
     });
     expect(late).toEqual({ ok: false, reason: "goal-frozen" });
     expect(await prisma.externalEffect.count({ where: { runId: run.id } })).toBe(1);
+    expect(
+      await prisma.externalEffect.findUniqueOrThrow({ where: { id: admitted.effect.id } }),
+    ).toMatchObject({ status: "completed", result: { ok: true } });
 
     // A pending peer wake cannot bind once the goal is frozen.
     const dispatched = await dispatchBotMessageWake(prisma, wake.id);

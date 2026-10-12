@@ -1040,7 +1040,7 @@ describe("goal freeze at resume and replay", () => {
             // cancelled; a live in-flight lease survives.
             if (where.OR) {
               const claimable =
-                ["queued", "waiting_input", "waiting_takeover"].includes(state.run.status) ||
+                where.OR[0].status.in.includes(state.run.status) ||
                 (["leased", "running"].includes(state.run.status) &&
                   state.run.leaseExpiresAt !== null &&
                   state.run.leaseExpiresAt <= where.OR[1].leaseExpiresAt.lte);
@@ -1069,7 +1069,7 @@ describe("goal freeze at resume and replay", () => {
     return { prisma, tx, state, effectUpdates };
   }
 
-  it.each(["queued", "waiting_input", "waiting_takeover"] as const)(
+  it.each(["queued", "waiting_input", "waiting_takeover", "peer_paused", "peer_ready"] as const)(
     "cancels and settles a %s run a stale continue claims while the goal is frozen",
     async (status) => {
       const f = frozenRunFixture(status, "completed");
