@@ -10626,11 +10626,3 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: ../mobile/components/run-evidence.tsx
-msgid "Replace key?"
-msgstr "कुंजी बदलें?"
-
-#: ../mobile/components/run-evidence.tsx
-msgid "Runs already admitted keep their key; new runs sign with the new key."
-msgstr "पहले से स्वीकृत रन अपनी कुंजी रखते हैं; नए रन नई कुंजी से हस्ताक्षर करते हैं।"

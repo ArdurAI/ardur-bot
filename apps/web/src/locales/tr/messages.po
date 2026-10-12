@@ -10626,11 +10626,3 @@ msgstr "Gerçek işler verebileceğin,<0/>her zaman açık agent takımın."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: ../mobile/components/run-evidence.tsx
-msgid "Replace key?"
-msgstr "Anahtar değiştirilsin mi?"
-
-#: ../mobile/components/run-evidence.tsx
-msgid "Runs already admitted keep their key; new runs sign with the new key."
-msgstr "Zaten kabul edilmiş çalıştırmalar anahtarlarını korur; yeni çalıştırmalar yeni anahtarla imzalanır."

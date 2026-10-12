@@ -10626,11 +10626,3 @@ msgstr "Sua equipe de agentes sempre ativos<0/>, a quem você pode dar trabalho 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: ../mobile/components/run-evidence.tsx
-msgid "Replace key?"
-msgstr "Substituir a chave?"
-
-#: ../mobile/components/run-evidence.tsx
-msgid "Runs already admitted keep their key; new runs sign with the new key."
-msgstr "As execuções já admitidas mantêm sua chave; as novas assinam com a nova chave."
