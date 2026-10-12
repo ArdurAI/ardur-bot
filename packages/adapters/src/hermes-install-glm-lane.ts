@@ -627,19 +627,22 @@ export function registerTranslatedGlmLane(trusted: { python: string; root: strin
     assertClean(result);
   }, 240_000);
 
-  it("classifies an upstream 429 with a Z.AI error body as the current category", async () => {
+  it("classifies an upstream 429 with a Z.AI error body as a provider refusal, not a Hermes limit", async () => {
     const result = await runTranslatedGlm(trusted, "429");
     expect(result.failures[0], result.diagnostic).toEqual({
       kind: "provider-http",
       status: 429,
       layer: "upstream",
       reason: "http-rate-limit",
+      // The provider's recognized, non-secret reason code is kept for diagnosis.
+      reasonCode: "1305",
     });
     expect(result.error, result.diagnostic).toBeInstanceOf(RuntimePinError);
-    expect((result.error as RuntimePinError).problem.reasonId).toBe("usage-limit");
-    expect((result.error as Error).message).toBe(
+    expect((result.error as RuntimePinError).problem.reasonId).toBe("provider-rate-limit");
+    expect((result.error as Error).message).not.toBe(
       failureCategoryMessage("usage-limit", { runtime: "Hermes" }),
     );
+    expect((result.error as Error).message).toMatch(/is refusing requests right now/);
     expect(result.events.at(-1)).not.toEqual({ type: "done" });
     assertClean(result);
   }, 240_000);
