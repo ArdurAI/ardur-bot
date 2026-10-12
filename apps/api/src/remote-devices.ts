@@ -234,6 +234,7 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "briefs/list",
   "context/settings",
   "metrics/context",
+  "evidence/keyHistory",
 ]);
 export const STATE_CHANGING_READ_PROCEDURES = new Set(["threads/markRead"]);
 function publicGrant(grant: DeviceGrant) {

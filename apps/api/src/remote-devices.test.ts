@@ -282,6 +282,21 @@ it.each(["runs/list", "team/board", "dashboard/now", "dashboard/connections", "u
     );
   },
 );
+it("lets paired devices read the public evidence key history but never manage keys", async () => {
+  const f = fixture();
+  expect(
+    (await f.call(f.signed("rpc", { procedure: "evidence/keyHistory", input: {} }))).status,
+  ).toBe(200);
+  expect(f.read).toHaveBeenCalledWith(
+    expect.objectContaining({ spaceId: "space", userId: "owner" }),
+    "evidence/keyHistory",
+    {},
+  );
+  for (const procedure of ["evidence/replaceKey", "evidence/revokeKey"]) {
+    expect((await f.call(f.signed("rpc", { procedure, input: {} }))).status).toBe(403);
+  }
+  expect(f.read).toHaveBeenCalledTimes(1);
+});
 it("does not expose feature mutation or device management through Overview grants", async () => {
   for (const procedure of ["features/set", "devices/list", "mcp/servers/create"]) {
     const f = fixture();
