@@ -309,6 +309,66 @@ describe("run evidence", () => {
       failureCodes: ["run_mismatch"],
     });
   });
+  it("keeps a run that finishes on its original key verified after an ordinary replacement", async () => {
+    const f = fixture();
+    const fake = fakeEvidenceStore();
+    vi.mocked(fake.store.governanceEnabled).mockResolvedValue(true);
+    const recorder = createEvidenceRecorder({
+      store: fake.store,
+      secretStore: new EncryptedSecretStore("test-only-encryption-material"),
+    });
+    const runInput = {
+      run: { ...f.run, userId: actor.userId },
+      toolName: "shell",
+      viaConnector: false,
+      args: {},
+      decisionKind: "allowed_by_default" as const,
+    };
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-10T12:00:00.000Z"));
+      await recorder.recordDecision(runInput);
+      await vi.advanceTimersByTimeAsync(60_000);
+      // Ordinary replacement: the old key is retained as replaced and the
+      // admitted run deliberately keeps signing with it.
+      const generated = generateEvidenceKey();
+      const stored = await new EncryptedSecretStore("test-only-encryption-material").put(
+        generated.privateKeyPem,
+        {
+          operationId: "evidence-key:test",
+          traceId: "trace:test",
+          spaceId: "space",
+          userId: actor.userId,
+          signal: new AbortController().signal,
+        },
+        "key-rotation-fixture",
+      );
+      const head = (await fake.store.keysForSpace("space")).at(-1)!;
+      await fake.store.replaceKey({
+        spaceId: "space",
+        expectedKid: head.kid,
+        data: {
+          kid: generated.kid,
+          publicKeyPem: generated.publicKeyPem,
+          privateKeyCiphertext: stored.ciphertext,
+          secretRecordId: stored.id,
+        },
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
+      await recorder.recordDecision(runInput);
+      expect(await recorder.sealRunEvidence("run")).toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
+    f.records.mockImplementation(() => fake.store.recordsForRun("run") as never);
+    f.seal.mockImplementation(() => fake.store.sealForRun("run") as never);
+    vi.mocked(f.prisma.evidenceKey.findUnique).mockImplementation(
+      ({ where }) => fake.store.keyByKid(where.kid!) as never,
+    );
+    const summary = await runEvidenceSummary(f.prisma, actor, "run");
+    expect(summary).toMatchObject({ state: "verified", sealed: true, failureCodes: [] });
+    expect((await f.download()).status).toBe(200);
+  });
   it("keeps pre-revocation records verified and names the revocation date", async () => {
     const f = fixture();
     // The fixture journal is signed at test time; a revocation one minute in

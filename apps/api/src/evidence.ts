@@ -60,7 +60,13 @@ async function loadRunEvidence(
   const key = kid
     ? await prisma.evidenceKey.findUnique({
         where: { kid },
-        select: { publicKeyPem: true, spaceId: true, version: true, revokedAt: true },
+        select: {
+          publicKeyPem: true,
+          spaceId: true,
+          version: true,
+          replacedAt: true,
+          revokedAt: true,
+        },
       })
     : null;
   const activeKey = await prisma.evidenceKey.findFirst({
@@ -71,7 +77,9 @@ async function loadRunEvidence(
   const failures = new Set<string>();
   let signerMatch: EvidenceRunSummary["signerMatch"] = null;
   if (records.length || seal) {
-    const options = key?.revokedAt ? { revokedAt: key.revokedAt } : undefined;
+    // Only an emergency revocation untrusts later signatures; a replaced key
+    // stays valid for runs admitted before the rotation, like the recorder.
+    const options = key?.revokedAt && !key.replacedAt ? { revokedAt: key.revokedAt } : undefined;
     const chain = verifyChain(journal, key?.publicKeyPem ?? "", undefined, options);
     for (const failure of chain.failures) failures.add(failure.code);
     if (seal) {
