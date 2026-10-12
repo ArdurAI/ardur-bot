@@ -7755,6 +7755,10 @@ msgstr "API कुंजी बदलें"
 msgid "Replace key"
 msgstr "कुंजी बदलें"
 
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Replace key?"
+msgstr "कुंजी बदलें?"
+
 #: src/components/RunEvidence.tsx
 msgid "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
 msgstr "हस्ताक्षर कुंजी बदलें? पहले से स्वीकृत रन अपनी कुंजी रखते हैं; नए रन नई कुंजी से हस्ताक्षर करते हैं।"
@@ -8204,6 +8208,10 @@ msgstr "चल रहा है · रोकें"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "चल रहा है…"
+
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Runs already admitted keep their key; new runs sign with the new key."
+msgstr "पहले से स्वीकृत रन अपनी कुंजी रखते हैं; नए रन नई कुंजी से हस्ताक्षर करते हैं।"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"

@@ -7755,6 +7755,10 @@ msgstr "替换 API 密钥"
 msgid "Replace key"
 msgstr "替换密钥"
 
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Replace key?"
+msgstr "更换密钥？"
+
 #: src/components/RunEvidence.tsx
 msgid "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
 msgstr "更换签名密钥？已准入的运行保留原密钥；新运行使用新密钥签名。"
@@ -8204,6 +8208,10 @@ msgstr "运行中 · 停止"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "正在运行…"
+
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Runs already admitted keep their key; new runs sign with the new key."
+msgstr "已准入的运行保留原密钥；新运行使用新密钥签名。"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"

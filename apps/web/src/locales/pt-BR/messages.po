@@ -7755,6 +7755,10 @@ msgstr "Substituir chave de API"
 msgid "Replace key"
 msgstr "Substituir chave"
 
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Replace key?"
+msgstr "Substituir a chave?"
+
 #: src/components/RunEvidence.tsx
 msgid "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
 msgstr "Substituir a chave de assinatura? As execuções já admitidas mantêm a chave; novas execuções assinam com a nova chave."
@@ -8204,6 +8208,10 @@ msgstr "Em execução · Parar"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "Executando..."
+
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Runs already admitted keep their key; new runs sign with the new key."
+msgstr "As execuções já admitidas mantêm sua chave; as novas assinam com a nova chave."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"

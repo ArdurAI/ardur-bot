@@ -7755,6 +7755,10 @@ msgstr "API anahtarını değiştir"
 msgid "Replace key"
 msgstr "Anahtarı değiştir"
 
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Replace key?"
+msgstr "Anahtar değiştirilsin mi?"
+
 #: src/components/RunEvidence.tsx
 msgid "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
 msgstr "İmza anahtarı değiştirilsin mi? Zaten kabul edilmiş çalıştırmalar anahtarını korur; yeni çalıştırmalar yeni anahtarla imzalar."
@@ -8204,6 +8208,10 @@ msgstr "Çalışıyor · Durdur"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "Çalışıyor…"
+
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Runs already admitted keep their key; new runs sign with the new key."
+msgstr "Zaten kabul edilmiş çalıştırmalar anahtarlarını korur; yeni çalıştırmalar yeni anahtarla imzalanır."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"

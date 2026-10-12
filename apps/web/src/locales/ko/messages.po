@@ -7755,6 +7755,10 @@ msgstr "API 키 교체"
 msgid "Replace key"
 msgstr "키 교체"
 
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Replace key?"
+msgstr "키를 교체할까요?"
+
 #: src/components/RunEvidence.tsx
 msgid "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
 msgstr "서명 키를 교체할까요? 이미 승인된 실행은 기존 키를 유지하고, 새 실행은 새 키로 서명합니다."
@@ -8204,6 +8208,10 @@ msgstr "실행 중 · 중지"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "실행 중…"
+
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Runs already admitted keep their key; new runs sign with the new key."
+msgstr "이미 승인된 실행은 기존 키를 유지하고, 새 실행은 새 키로 서명합니다."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"

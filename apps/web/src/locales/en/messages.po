@@ -7755,6 +7755,10 @@ msgstr "Replace API key"
 msgid "Replace key"
 msgstr "Replace key"
 
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Replace key?"
+msgstr "Replace key?"
+
 #: src/components/RunEvidence.tsx
 msgid "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
 msgstr "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
@@ -8204,6 +8208,10 @@ msgstr "Running · Stop"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "Running…"
+
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Runs already admitted keep their key; new runs sign with the new key."
+msgstr "Runs already admitted keep their key; new runs sign with the new key."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
