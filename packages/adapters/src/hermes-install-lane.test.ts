@@ -16,6 +16,7 @@ import {
 import { startHermesProviderRelay } from "@ardurbot/host-runtime/runtimes/hermes-provider-relay";
 import { HermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-runtime";
 import { expect, it } from "vitest";
+import { registerTranslatedGlmLane } from "./hermes-install-glm-lane.js";
 import type { BrokerScope } from "./hermes-provider-broker.js";
 import { HermesProviderBroker } from "./hermes-provider-broker.js";
 
@@ -338,6 +339,7 @@ if (!qualified) {
     runInstallLane,
     240_000,
   );
+  registerTranslatedGlmLane(trusted);
 }
 
 it("resolves the launcher beside a relocated host bundle", () => {
