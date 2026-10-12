@@ -337,6 +337,10 @@ msgstr "{name} parou antes de responder"
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
 msgstr "{pending, plural, one {# sugestão para revisar} other {# sugestões para revisar}}"
 
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider} está recusando solicitações agora (limite de frequência ou uso). Tente mais tarde ou verifique seu plano."
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
@@ -1443,7 +1447,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "Bloqueado"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, provider: row.reasonProvider ?? i18n._(unknownProviderName), }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Bloqueado — {0}"
@@ -9531,6 +9535,11 @@ msgstr "Esta configuração é complexa demais."
 msgid "This configuration version is not supported."
 msgstr "Esta versão da configuração não é compatível."
 
+#: src/lib/failure-category-copy.ts
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This connection"
+msgstr "Esta conexão"
+
 #: src/lib/model-selection-error.ts
 msgid "This connection cannot serve that model."
 msgstr "Esta conexão não pode fornecer esse modelo."
@@ -10540,11 +10549,3 @@ msgstr "Sua equipe de agentes sempre ativos<0/>, a quem você pode dar trabalho 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/lib/failure-category-copy.ts
-msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
-msgstr "{provider} está recusando solicitações agora (limite de frequência ou uso). Tente mais tarde ou verifique seu plano."
-
-#: src/lib/failure-category-copy.ts
-msgid "This connection"
-msgstr "Esta conexão"

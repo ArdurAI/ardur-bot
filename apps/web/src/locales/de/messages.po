@@ -337,6 +337,10 @@ msgstr "{name} wurde vor dem Antworten gestoppt"
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
 msgstr "{pending, plural, one {# Vorschlag zu prüfen} other {# Vorschläge zu prüfen}}"
 
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider} lehnt Anfragen derzeit ab (Anfrage- oder Nutzungslimit). Versuche es später erneut oder prüfe deinen Tarif."
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
@@ -1443,7 +1447,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "Blockiert"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, provider: row.reasonProvider ?? i18n._(unknownProviderName), }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Blockiert — {0}"
@@ -9531,6 +9535,11 @@ msgstr "Diese Konfiguration ist zu komplex."
 msgid "This configuration version is not supported."
 msgstr "Diese Konfigurationsversion wird nicht unterstützt."
 
+#: src/lib/failure-category-copy.ts
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This connection"
+msgstr "Diese Verbindung"
+
 #: src/lib/model-selection-error.ts
 msgid "This connection cannot serve that model."
 msgstr "Diese Verbindung kann dieses Modell nicht bereitstellen."
@@ -10540,11 +10549,3 @@ msgstr "Dein Team aus jederzeit verfügbaren Agents<0/>für echte Aufgaben."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/lib/failure-category-copy.ts
-msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
-msgstr "{provider} lehnt Anfragen derzeit ab (Anfrage- oder Nutzungslimit). Versuche es später erneut oder prüfe deinen Tarif."
-
-#: src/lib/failure-category-copy.ts
-msgid "This connection"
-msgstr "Diese Verbindung"

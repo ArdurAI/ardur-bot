@@ -337,6 +337,10 @@ msgstr "{name} stopped before answering"
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
 msgstr "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
 
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr "{reconnectCount} need reconnection"
@@ -1443,7 +1447,7 @@ msgstr "Block link copied."
 msgid "Blocked"
 msgstr "Blocked"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, provider: row.reasonProvider ?? i18n._(unknownProviderName), }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Blocked — {0}"
@@ -9531,6 +9535,11 @@ msgstr "This configuration is too complex."
 msgid "This configuration version is not supported."
 msgstr "This configuration version is not supported."
 
+#: src/lib/failure-category-copy.ts
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This connection"
+msgstr "This connection"
+
 #: src/lib/model-selection-error.ts
 msgid "This connection cannot serve that model."
 msgstr "This connection cannot serve that model."
@@ -10540,11 +10549,3 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr "Yours"
-
-#: src/lib/failure-category-copy.ts
-msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
-msgstr "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
-
-#: src/lib/failure-category-copy.ts
-msgid "This connection"
-msgstr "This connection"

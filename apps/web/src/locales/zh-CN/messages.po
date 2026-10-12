@@ -337,6 +337,10 @@ msgstr "{name} 在回答前已停止"
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
 msgstr "{pending, plural, other {# 条建议待审}}"
 
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider} 目前拒绝请求（请求频率或用量限制）。请稍后重试，或检查您的套餐。"
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
@@ -1443,7 +1447,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "已阻止"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, provider: row.reasonProvider ?? i18n._(unknownProviderName), }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "已阻塞 — {0}"
@@ -9531,6 +9535,11 @@ msgstr "此配置过于复杂。"
 msgid "This configuration version is not supported."
 msgstr "不支持此配置版本。"
 
+#: src/lib/failure-category-copy.ts
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This connection"
+msgstr "此连接"
+
 #: src/lib/model-selection-error.ts
 msgid "This connection cannot serve that model."
 msgstr "此连接无法提供此模型。"
@@ -10540,11 +10549,3 @@ msgstr "你的一支随时在线的 Agent 团队<0/>可以交给它们真正的�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/lib/failure-category-copy.ts
-msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
-msgstr "{provider} 目前拒绝请求（请求频率或用量限制）。请稍后重试，或检查您的套餐。"
-
-#: src/lib/failure-category-copy.ts
-msgid "This connection"
-msgstr "此连接"
