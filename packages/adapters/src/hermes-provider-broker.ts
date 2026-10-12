@@ -492,6 +492,7 @@ function admittedTranslatedBody(
 
 /** Dormant worker-only broker. The host relay is composed in a later stream. */
 export class HermesProviderBroker {
+  private providerFailure: HermesProviderFailure | undefined;
   private deliveredBytes = 0;
   readonly grant: BrokerGrant;
   private readonly options: BrokerOptions;
@@ -561,7 +562,9 @@ export class HermesProviderBroker {
     this.allowed = catalog(this.options.tools);
     this.transport = diagnosticProviderFetch(
       createOpenAiCompatibleFetch(options.fetch),
-      () => undefined,
+      (failure) => {
+        this.providerFailure = failure;
+      },
     );
     this.grant = Object.freeze({
       id: randomUUID(),
@@ -685,7 +688,10 @@ export class HermesProviderBroker {
         });
         responseBody = response.body;
         await active();
-        if (!response.ok) throw new HermesProviderRelayError(upstreamHttpFailure(response.status));
+        if (!response.ok)
+          throw new HermesProviderRelayError(
+            this.providerFailure ?? upstreamHttpFailure(response.status),
+          );
         const mime = response.headers.get("content-type") ?? "";
         if (!mime.includes("application/json") && !mime.includes("text/event-stream")) {
           controller.abort();

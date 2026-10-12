@@ -2,7 +2,7 @@
 
 One typed table — `packages/contracts/src/failure-categories.ts` — names every cause a run
 or a handoff can end with. The server stores the category id plus its parameters (bot,
-runtime, member). Codex failures also retain bounded, redacted process and protocol
+runtime, member, provider). Codex failures also retain bounded, redacted process and protocol
 diagnostics in `runtimeProblem.failure`, separate from the sentence shown in chat. Each
 app translates the category's sentence through its own catalogs: web through Lingui
 (`apps/web/src/lib/failure-category-copy.ts`, whose test pins every message to the table),
@@ -12,6 +12,7 @@ mobile through its own catalogs (English source plus ru and zh).
 
 | id | meaning | action offered |
 | --- | --- | --- |
+| `provider-rate-limit` | the connection returned HTTP 429; rate, usage or capacity refusal, without claiming quota is exhausted | retry later or check the plan |
 | `usage-limit` | the runtime's usage limit is reached; it resets on its own | retry |
 | `signed-out` | the runtime's sign-in expired or is missing | connect |
 | `max-turns` | the run reached its turn limit | retry with a narrower task |
@@ -90,3 +91,15 @@ retryable precondition sentence, not an invalid-settings refusal.
 3. Extract and fill the web catalogs (`pnpm --filter @ardurbot/web intl:extract`, then a
    non-empty `msgstr` in all nine) and add the ru and zh mobile catalog entries.
 4. Add the row above.
+
+## Hermes provider refusals
+
+Hermes provider HTTP 429 failures use `provider-rate-limit` and name the public provider
+catalog label, resolved by the worker when a local or paired host reports the failure. They do not claim the runtime exhausted its
+usage allowance. Ardur grant and run-budget refusals keep `provider-grant-refused`; byte
+limits keep their request or response category. Relay admission guards return 403, not 429.
+
+Provider diagnostics retain only the observed HTTP status, fixed layer and reason, and
+an allowlisted reason code from a bounded JSON error body. Codes `1305`,
+`rate_limit_exceeded` and `insufficient_quota` are retained as codes, without inferring
+a plan state. Unknown codes, messages, headers and response bodies are discarded.
