@@ -33,10 +33,10 @@ describe("failure-category table completeness", () => {
     // A web message may only use the placeholders its table entry declares.
     for (const entry of FAILURE_CATEGORIES) {
       const declared = new Set(
-        [...entry.message.matchAll(/\{(bot|runtime|member)\}/g)].map((match) => match[1]),
+        [...entry.message.matchAll(/\{(bot|runtime|member|provider)\}/g)].map((match) => match[1]),
       );
       for (const used of [
-        ...failureCategory(entry.id).message.matchAll(/\{(bot|runtime|member)\}/g),
+        ...failureCategory(entry.id).message.matchAll(/\{(bot|runtime|member|provider)\}/g),
       ])
         expect(declared.has(used[1]), `${entry.id}: ${used[1]}`).toBe(true);
     }

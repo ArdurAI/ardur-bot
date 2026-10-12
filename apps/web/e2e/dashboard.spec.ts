@@ -219,6 +219,11 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   const governance = page.locator('[data-panel="governance"]');
   await expect(governance.getByRole("link")).toHaveText("About evidence");
   await expect(governance.getByRole("button")).toHaveCount(0);
+  const usage = page.locator('[data-panel="usage"]');
+  await expect(usage.getByRole("list", { name: "By bot" })).toContainText("Reviewer");
+  await expect(usage).toContainText("1 run · 3 usage records");
+  await expect(usage).toContainText("Partial cost: 0.2");
+  await captureScreenshot(page, testInfo, "dashboard-usage-per-bot");
   await captureScreenshot(page, testInfo, "dashboard-overview");
   await page.getByRole("button", { name: "Allow once", exact: true }).click();
   await expect

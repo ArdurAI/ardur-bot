@@ -40,7 +40,7 @@ vi.mock("@lingui/react/macro", () => {
 });
 
 import type { CoordinationBlock } from "@ardurbot/core";
-import { CoordinationLine } from "./CoordinationLine";
+import { ChiefDispatchLine, ChiefReceiptText, CoordinationLine } from "./CoordinationLine";
 
 function block(patch: Partial<CoordinationBlock> = {}): CoordinationBlock {
   return {
@@ -96,6 +96,55 @@ describe("CoordinationLine in German", () => {
     expect(failure).toBeTruthy();
     return failure!;
   }
+
+  it("renders the saved access blocker and blocked receipt in German", () => {
+    act(() =>
+      root.render(
+        <ChiefDispatchLine
+          dispatch={{
+            requestMessageId: "request",
+            revision: 1,
+            memberId: "chief",
+            memberName: "Chief",
+            state: "needs-owner",
+            blockerKey: "connect-linear",
+            reason: "access",
+          }}
+          detail="request"
+        />,
+      ),
+    );
+    expect(container.querySelector('[data-testid="chief-activity"]')?.textContent).toBe(
+      "Verbinden Sie Linear oder geben Sie einem Teammitglied Lese- und Schreibzugriff.",
+    );
+    expect(container.textContent).not.toContain("Messaged");
+    act(() => root.render(<ChiefReceiptText receiptKey="needs-owner" />));
+    expect(container.textContent).toBe(
+      "Verstanden — diese Aufgabe braucht Ihre Hilfe, bevor ich sie zuweisen kann.",
+    );
+  });
+
+  it.each(["de", "en", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "has all blocked assignment copy in %s",
+    async (locale) => {
+      const filename = path.join(import.meta.dirname, `../../locales/${locale}/messages.po`);
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Needs you",
+        "Got it — this task needs you before I can assign it.",
+        "Connect Linear or grant a team member permission to read and write.",
+        "Connect GitHub or grant a team member permission to read and write.",
+      ]) {
+        const entry = Object.values(catalog).find((entry) => entry.message === message);
+        expect(entry?.translation).toBeTruthy();
+        if (locale !== "en") expect(entry?.translation).not.toBe(message);
+      }
+    },
+  );
 
   it.each([
     ["auth", "zai-bot konnte nicht antworten: Das Modellkonto erfordert Aufmerksamkeit"],

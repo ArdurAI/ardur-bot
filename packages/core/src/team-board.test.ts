@@ -50,4 +50,30 @@ describe("teamRowText failure categories", () => {
       "Blocked — rate limit reached; retry later",
     );
   });
+
+  it.each([
+    ["connect-linear", "Connect Linear or grant a team member permission to read and write."],
+    ["connect-github", "Connect GitHub or grant a team member permission to read and write."],
+  ] as const)("translates pre-dispatch capability blocker key %s", (blockerKey, sentence) => {
+    const { reasonCategory, reasonRuntime, ...rest } = blocked;
+    const calls: Array<{ text: string }> = [];
+    const text = teamRowText({ ...rest, reason: sentence, blockerKey }, (t) => {
+      calls.push({ text: t });
+      return `[${t}]`;
+    });
+    expect(calls).toContainEqual({ text: sentence });
+    expect(text).toBe(`[Blocked] — [${sentence}]`);
+  });
+});
+
+it("names the provider on a blocked rate-limit card", () => {
+  const text = teamRowText({
+    ...blocked,
+    reasonCategory: "provider-rate-limit",
+    reasonProvider: "Z.AI Coding CN",
+    reasonRuntime: "Hermes",
+  });
+  expect(text).toContain("Z.AI Coding CN is refusing requests right now");
+  expect(text).not.toContain("Hermes");
+  expect(text).not.toContain("{provider}");
 });

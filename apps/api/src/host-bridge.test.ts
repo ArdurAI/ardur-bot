@@ -94,6 +94,102 @@ describe.each([
 });
 
 describe("host pairing and grants", () => {
+  it.each([
+    "valid",
+    "member",
+    "stale-host",
+    "stale-computer",
+    "expired",
+    "wrong-fence",
+    "wrong-home",
+    "wrong-space",
+    "lease-lost",
+    "bot-control",
+    "maintenance",
+    "sleeping",
+    "cleanup-after-lease",
+  ])("checks owner and terminal control at the bridge: %s", async (scenario) => {
+    const { bridge, prisma } = fixture();
+    await bridge.pair("owner");
+    const registration = (await prisma.hostRegistration.findUnique())!;
+    const host = { send: vi.fn(async (_frame: HostFrame) => {}), close: vi.fn() };
+    const worker = { send: vi.fn(async (_frame: HostFrame) => {}), close: vi.fn() };
+    const hostGeneration = "00000000-0000-4000-8000-000000000001";
+    const computer = {
+      kind: "desktop",
+      connectionId: null,
+      homeKey: "home",
+      providerRef: "host:home",
+      spaceId: "space",
+      userId: "owner",
+      scope: "dedicated",
+      state: "running",
+      maintenanceId: null as string | null,
+      controlBotId: "bot",
+      controlHolder: "user",
+      controlLeaseId: "lease",
+      controlFence: 3,
+      controlLeaseExpiresAt: new Date(Date.now() + 60000),
+    };
+    Object.assign(prisma, { bot: { findFirst: vi.fn(async () => ({ id: "bot", computer })) } });
+    bridge.hub.attach(host, "owner", registration.generation);
+    bridge.hub.health = {
+      platform: "linux",
+      roots: [],
+      load: 0,
+      claude: { runtimeKind: "claude-code", available: false, models: [] },
+      codex: { runtimeKind: "codex-app-server", available: false, models: [] },
+      capabilities: { providerRelay: 1, hostTerminal: { generation: hostGeneration } },
+    };
+    const action = {
+      type: "open" as const,
+      cols: 80,
+      rows: 24,
+      shellProfileId: "default" as const,
+      leaseId: "lease",
+      fence: 3,
+      generation: "host:home",
+      hostGeneration,
+      expiresAt: Date.now() + 30000,
+      workingRoot: "/workspace",
+    };
+    const request: HostRequest = {
+      v: 1,
+      type: "request",
+      id: "host-terminal",
+      scope: { userId: "owner", spaceId: "space", botId: "bot", runId: "terminal" },
+      operation: { op: "computer.terminal", homeKey: "home", action },
+    };
+    if (scenario === "member") request.scope.userId = "member";
+    if (scenario === "stale-host") action.hostGeneration = "00000000-0000-4000-8000-000000000002";
+    if (scenario === "stale-computer") action.generation = "stale";
+    if (scenario === "expired") action.expiresAt = Date.now() - 1;
+    if (scenario === "wrong-fence") action.fence++;
+    if (scenario === "wrong-home" && request.operation.op === "computer.terminal")
+      request.operation.homeKey = "other";
+    if (scenario === "wrong-space") computer.spaceId = "other";
+    if (scenario === "lease-lost" || scenario === "cleanup-after-lease")
+      computer.controlLeaseId = "new-lease";
+    if (scenario === "maintenance") computer.maintenanceId = "maintenance";
+    if (scenario === "bot-control") computer.controlHolder = "bot";
+    if (scenario === "sleeping") computer.state = "sleeping";
+    if (scenario === "cleanup-after-lease")
+      request.operation = {
+        op: "computer.terminal",
+        homeKey: "home",
+        action: { ...action, type: "close", sessionId: "00000000-0000-4000-8000-000000000003" },
+      };
+    try {
+      await bridge.hub.request(request, worker);
+      expect(host.send).toHaveBeenCalledTimes(
+        scenario === "valid" || scenario === "cleanup-after-lease" ? 1 : 0,
+      );
+      if (host.send.mock.calls.length)
+        await bridge.hub.fromHost(host, { v: 1, type: "end", id: request.id });
+    } finally {
+      bridge.hub.detach();
+    }
+  });
   it("allows owner import jobs without a bot run and rejects members, run scopes and revoked hosts", async () => {
     const { bridge, prisma } = fixture();
     await bridge.pair("owner");

@@ -51,6 +51,7 @@ import {
   createVoiceProvider,
   defaultCatalogModelId,
   deletePushToken,
+  deliverPendingGoalBoardUpdates,
   deploymentAutoReviewDefault,
   deploymentHostLabel,
   destroyBot,
@@ -102,7 +103,6 @@ import {
   resolveBotWorkspacePath,
   revokeScreenControl,
   runtimeComputerLocation,
-  SUBSCRIPTION_SIGN_IN_PROVIDERS,
   sanitizeComposioError,
   savePushToken,
   scheduleComputerControlExpiry,
@@ -148,6 +148,7 @@ import {
   runtimeSupportsLocation,
   usableModelId,
 } from "@ardurbot/contracts";
+import { BoardError } from "@ardurbot/contracts/board";
 import { HostHealthSchema } from "@ardurbot/contracts/host-bridge";
 import { LOCAL_IMPORT_INVALID_FOLDER_CODE } from "@ardurbot/contracts/local-import";
 import { appContract } from "@ardurbot/contracts/rpc";
@@ -179,18 +180,23 @@ import {
   createThreadMessageInTransaction,
   deleteEmptySpaceForMember,
   deleteUnreferencedCredentialSecret,
+  findBoundModelCredential,
   findDefaultModelCredential,
   findDefaultVoiceCredential,
   findModelCredential,
   findSpaceMemoryConfig,
+  findUserModelCredentials,
   formatMessagingLinkCode,
   GoalReviewConflict,
   getBotCommunicationPolicy,
   getGoal,
+  getGoalRevision,
   getUserPreferences,
+  goalBoardResult,
   InvalidSpaceNameError,
   IsolationError,
   issueMessagingLinkCode,
+  linkGoal,
   listBotCommunicationDeliveries,
   listDelegations,
   lockOwnedGroup,
@@ -233,14 +239,15 @@ import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { MemoryRedactionError } from "@ardurbot/memory";
 import type { Router } from "@orpc/server";
-import { implement, ORPCError } from "@orpc/server";
+import { implement, ORPCError, ValidationError } from "@orpc/server";
 import { createAccountService } from "./account.js";
 import { exportDownload } from "./account-export.js";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
-import { boardCall, createBoard } from "./board.js";
+import { boardCall, boardOwnerRun, createBoard } from "./board.js";
+import { updateOwnerBoardItem } from "./board-update.js";
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import {
   botProfileLabelsChanged,
@@ -297,6 +304,7 @@ import {
   savePlacement,
   testFleetTarget,
 } from "./fleet.js";
+import { authorizeGoalBoardLink, goalBoardService } from "./goal-board.js";
 import { updateGroupMemberModelPin } from "./group-model-pin.js";
 import { guidedSetupStatus } from "./guided-setup.js";
 import { hermesAvailabilityConnectionSupported } from "./hermes-availability.js";
@@ -327,13 +335,14 @@ import {
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
 import { createChannelPairing } from "./messaging-dispatch.js";
+import { modelDefaultSelectionIssue } from "./model-default-selection.js";
 import {
   botRunComputerLocation,
   validateBotCanRun,
   validateModelPinSelection,
 } from "./model-pin-validation.js";
 import { notificationActivity } from "./notification-activity.js";
-import { ollamaConnection, ollamaStatus } from "./ollama.js";
+import { ollamaCatalogStates, ollamaConnection, ollamaStatus } from "./ollama.js";
 import {
   chooseFocus,
   dismissFocus,
@@ -660,6 +669,31 @@ async function goalReviewCall<T>(action: () => Promise<T>): Promise<T> {
   }
 }
 
+function scheduleGoalBoard(deps: RouterDeps) {
+  void deliverPendingGoalBoardUpdates({
+    prisma: deps.prisma,
+    dataDir: deps.dataDir,
+    lockPool: deps.lockPool,
+    ownerRun: deps.hostBridge ? boardOwnerRun(deps.hostBridge) : undefined,
+  }).catch((error) => getLogger().error("goal board delivery", error));
+}
+
+async function goalLinkOrRefuse(
+  deps: RouterDeps,
+  actor: RouterContext["actor"],
+  link: { workspaceId: string; itemId: string } | null,
+) {
+  if (!actor?.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+  try {
+    return await authorizeGoalBoardLink(actor, link, goalBoardService(deps));
+  } catch (error) {
+    if (error instanceof IsolationError) throw new ORPCError("FORBIDDEN");
+    if (error instanceof BoardError)
+      throw new ORPCError("BAD_REQUEST", { message: "Could not link that board item." });
+    throw error;
+  }
+}
+
 export function createRouter(deps: RouterDeps): Router<typeof appContract, RouterContext> {
   const board = createBoard(deps);
   const comparisons = createComparisons({
@@ -734,7 +768,21 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
 
   const authed = os.use(async ({ context, next }) => {
     if (!context.actor) throw new ORPCError("UNAUTHORIZED");
-    return next({ context: { ...context, actor: context.actor } });
+    try {
+      return await next({ context: { ...context, actor: context.actor } });
+    } catch (error) {
+      if (
+        error instanceof ORPCError &&
+        error.code === "BAD_REQUEST" &&
+        error.cause instanceof ValidationError &&
+        error.cause.issues.some(
+          (issue) => issue.message === "Choose a model." && issue.path?.at(-1) === "modelId",
+        )
+      ) {
+        throw new ORPCError("BAD_REQUEST", { message: "Choose a model." });
+      }
+      throw error;
+    }
   });
 
   const systemSettings = createSystemSettings(deps.prisma);
@@ -1380,23 +1428,37 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         return { ok: true };
       }),
       list: authed.models.list.handler(async ({ context }) => {
-        const state = await ollamaStatus(deps, context.actor, context.signal);
+        const connections = await findUserModelCredentials(
+          deps.prisma,
+          context.actor.userId,
+          "ollama",
+        );
+        const states = await ollamaCatalogStates(
+          deps,
+          context.actor,
+          connections.map((connection) => connection.id),
+          context.signal,
+        );
         return [
           ...listPiCatalog(),
           scriptedCatalogEntry,
           ollamaCatalogPlaceholder,
-          ...ollamaCatalog(state.models, state.credentialId ?? ""),
+          ...states.flatMap((state) => ollamaCatalog(state.models, state.credentialId ?? "")),
         ];
       }),
-      ollama: authed.models.ollama.handler(({ context }) =>
-        ollamaStatus(deps, context.actor, context.signal),
+      ollama: authed.models.ollama.handler(({ context, input }) =>
+        ollamaStatus(deps, context.actor, context.signal, undefined, input?.credentialId),
       ),
       testOllama: authed.models.testOllama.handler(({ context, input }) =>
         ollamaStatus(deps, context.actor, context.signal, input.baseUrl),
       ),
       pullOllama: authed.models.pullOllama.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
-        const connection = await ollamaConnection(deps, context.actor);
+        const connection = await ollamaConnection(deps, context.actor, input.credentialId).catch(
+          (error) => {
+            throw new ORPCError("BAD_REQUEST", { message: ollamaErrorMessage(error) });
+          },
+        );
         if (!connection) throw new ORPCError("BAD_REQUEST", { message: "Connect Ollama first." });
         return (async function* () {
           try {
@@ -1417,15 +1479,8 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           },
           orderBy: newestModelCredentialOrder,
         });
-        // OAuth markers need the stored secret too, and only subscription
-        // sign-in providers can hold an OAuth credential.
-        const secretRows = rows.filter(
-          (row) =>
-            row.provider === OPENAI_COMPATIBLE_PROVIDER_ID ||
-            row.provider === "anthropic" ||
-            row.provider === "ollama" ||
-            row.provider in SUBSCRIPTION_SIGN_IN_PROVIDERS,
-        );
+        // Return connection metadata only; absent or unreadable storage is not ready.
+        const secretRows = rows;
         const secrets = secretRows.length
           ? await deps.prisma.secret.findMany({
               where: {
@@ -1445,25 +1500,35 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             defaultModel: preference?.modelId ?? null,
           };
           const ciphertext = ciphertextById.get(row.secretId);
-          if (!ciphertext) return modelCredentialDto(selected);
+          if (!ciphertext) return { ...modelCredentialDto(selected), hasKey: false };
           try {
             return modelCredentialDto(selected, deps.secrets.load(ciphertext, row.secretId));
           } catch {
-            return modelCredentialDto(selected);
+            return { ...modelCredentialDto(selected), hasKey: false };
           }
         });
       }),
       connect: authed.models.connect.handler(async ({ context, input }) => {
+        const selectedCredential = input.credentialId
+          ? await findBoundModelCredential(
+              deps.prisma,
+              context.actor,
+              input.provider,
+              input.credentialId,
+            )
+          : null;
+        if (input.credentialId && !selectedCredential)
+          throw new ORPCError("NOT_FOUND", { message: "Connect that model first." });
+        const requestedModelId =
+          usableModelId(input.modelId) ?? defaultCatalogModelId(input.provider);
         let plaintext: string;
         try {
           let previousPlaintext: string | undefined;
           let omitVisionModelIds = false;
           if (input.provider === OPENAI_COMPATIBLE_PROVIDER_ID) {
-            const credential = await findModelCredential(
-              deps.prisma,
-              context.actor,
-              input.provider,
-            );
+            const credential =
+              selectedCredential ??
+              (await findModelCredential(deps.prisma, context.actor, input.provider));
             if (credential) {
               const secret = await deps.prisma.secret.findFirst({
                 where: { id: credential.secretId, userId: context.actor.userId, spaceId: null },
@@ -1500,8 +1565,28 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             });
           input.modelId = input.modelId ?? result.models[0]?.id;
         }
+        if (input.provider !== "ollama" || input.modelId) {
+          const metadata = modelCredentialDto(
+            {
+              id: input.credentialId ?? "pending",
+              provider: input.provider,
+              label: input.label ?? input.provider,
+              isDefault: false,
+              defaultModel: input.modelId ?? requestedModelId,
+            },
+            plaintext,
+          );
+          const issue = modelDefaultSelectionIssue(
+            input.provider,
+            input.modelId ?? requestedModelId,
+            metadata,
+            [...listPiCatalog(), scriptedCatalogEntry],
+          );
+          if (issue) throw new ORPCError("BAD_REQUEST", { message: issue });
+        }
         return persistModelCredential(deps, context.actor, {
           provider: input.provider,
+          credentialId: input.credentialId,
           plaintext,
           label: input.label,
           modelId: input.modelId,
@@ -1580,18 +1665,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         return { ok: true as const };
       }),
       setDefault: authed.models.setDefault.handler(async ({ context, input }) => {
-        if (input.provider === "ollama") {
-          const state = await ollamaStatus(deps, context.actor, context.signal);
-          if (state.issue || !state.models.some((model) => model.id === input.modelId))
-            throw new ORPCError("BAD_REQUEST", {
-              message: state.issue ?? "This Ollama model is not installed. Change pin.",
-            });
-        }
         await withSerializableRetry(() =>
           deps.prisma.$transaction(
             async (tx) => {
               const credential = await tx.userModelCredential.findFirst({
-                where: { userId: context.actor.userId, provider: input.provider },
+                where: {
+                  userId: context.actor.userId,
+                  provider: input.provider,
+                  ...(input.credentialId ? { id: input.credentialId } : {}),
+                },
                 orderBy: newestModelCredentialOrder,
               });
               if (!credential) {
@@ -1600,6 +1682,40 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 });
               }
               const modelId = usableModelId(input.modelId) ?? defaultCatalogModelId(input.provider);
+              const secret = await tx.secret.findFirst({
+                where: { id: credential.secretId, userId: context.actor.userId, spaceId: null },
+                select: { ciphertext: true },
+              });
+              if (!secret)
+                throw new ORPCError("BAD_REQUEST", { message: "Connect that model first." });
+              let plaintext: string;
+              try {
+                plaintext = deps.secrets.load(secret.ciphertext, credential.secretId);
+              } catch {
+                throw new ORPCError("BAD_REQUEST", { message: "Connect that model first." });
+              }
+              const metadata = modelCredentialDto(
+                { ...credential, defaultModel: modelId, isDefault: false },
+                plaintext,
+              );
+              const issue = modelDefaultSelectionIssue(input.provider, modelId, metadata, [
+                ...listPiCatalog(),
+                scriptedCatalogEntry,
+              ]);
+              if (issue) throw new ORPCError("BAD_REQUEST", { message: issue });
+              if (input.provider === "ollama") {
+                const state = await ollamaStatus(
+                  deps,
+                  context.actor,
+                  context.signal,
+                  metadata.baseUrl,
+                );
+                if (state.issue || !state.models.some((model) => model.id === modelId))
+                  throw new ORPCError("BAD_REQUEST", {
+                    message: state.issue ?? "This Ollama model is not installed. Change pin.",
+                  });
+              }
+
               await validateDefaultModelDestinations(
                 { ...deps, prisma: tx as PrismaClient },
                 context.actor,
@@ -6381,12 +6497,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         ),
       ),
       update: authed.board.update.handler(({ context, input }) =>
-        boardCall(async () =>
-          (await board.service.provider(context.actor, input.workspaceId)).update(
-            input.id,
-            input.patch,
-          ),
-        ),
+        boardCall(() => updateOwnerBoardItem(board.service, context.actor, input)),
       ),
       claim: authed.board.claim.handler(({ context, input }) =>
         boardCall(async () =>
@@ -6463,12 +6574,16 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       submit: authed.goals.submit.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
-        return goalReviewCall(() => submitGoal(deps.prisma, context.actor, input));
+        const revision = await goalReviewCall(() => submitGoal(deps.prisma, context.actor, input));
+        scheduleGoalBoard(deps);
+        return revision;
       }),
       accept: authed.goals.accept.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
-        return goalReviewCall(() => acceptGoal(deps.prisma, context.actor, input));
+        const verdict = await goalReviewCall(() => acceptGoal(deps.prisma, context.actor, input));
+        scheduleGoalBoard(deps);
+        return verdict;
       }),
       reject: authed.goals.reject.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
@@ -6497,7 +6612,18 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       start: authed.goals.start.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
-        const goal = await startGoal(deps.prisma, context.actor, input);
+        const link =
+          input.boardWorkspaceId && input.boardItemId
+            ? await goalLinkOrRefuse(deps, context.actor, {
+                workspaceId: input.boardWorkspaceId,
+                itemId: input.boardItemId,
+              })
+            : null;
+        const goal = await startGoal(
+          deps.prisma,
+          context.actor,
+          link ? { ...input, boardWorkspaceId: link.workspaceId, boardItemId: link.itemId } : input,
+        );
         const first = await deps.prisma.run.findUnique({
           where: {
             spaceId_clientNonce: {
@@ -6519,10 +6645,36 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           throw new ORPCError("FORBIDDEN");
         return getGoal(deps.prisma, context.actor, input.groupId);
       }),
+      revision: authed.goals.revision.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return getGoalRevision(deps.prisma, context.actor, input);
+      }),
       stop: authed.goals.stop.handler(({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
         return stopGoal(deps.prisma, context.actor, input.goalId);
+      }),
+      link: authed.goals.link.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const link =
+          input.boardWorkspaceId && input.boardItemId
+            ? await goalLinkOrRefuse(deps, context.actor, {
+                workspaceId: input.boardWorkspaceId,
+                itemId: input.boardItemId,
+              })
+            : null;
+        return linkGoal(deps.prisma, context.actor, {
+          goalId: input.goalId,
+          boardWorkspaceId: link?.workspaceId ?? null,
+          boardItemId: link?.itemId ?? null,
+        });
+      }),
+      boardResult: authed.goals.boardResult.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return goalBoardResult(deps.prisma, context.actor, input.workspaceId, input.itemId);
       }),
     },
     delegations: {
@@ -7138,6 +7290,7 @@ async function persistModelCredential(
   actor: Actor,
   input: {
     provider: string;
+    credentialId?: string;
     plaintext: string;
     label?: string;
     modelId?: string;
@@ -7159,9 +7312,15 @@ async function persistModelCredential(
       async (tx) => {
         throwIfAborted(input.signal);
         const existing = await tx.userModelCredential.findFirst({
-          where: { userId: actor.userId, provider: input.provider },
+          where: {
+            userId: actor.userId,
+            provider: input.provider,
+            ...(input.credentialId ? { id: input.credentialId } : {}),
+          },
           orderBy: newestModelCredentialOrder,
         });
+        if (input.credentialId && !existing)
+          throw new ORPCError("NOT_FOUND", { message: "Connect that model first." });
         throwIfAborted(input.signal);
         const secret = await tx.secret.create({
           data: {
@@ -7210,6 +7369,11 @@ async function persistModelCredential(
           defaultModel = preference?.modelId ?? null;
           isDefault = preference?.isDefault ?? false;
         } else {
+          await validateDefaultModelDestinations({ ...deps, prisma: tx as PrismaClient }, actor, {
+            provider: input.provider,
+            modelId: defaultModel,
+            credentialId: credential.id,
+          });
           await selectSpaceModelPreference(tx, actor, credential.id, defaultModel);
         }
         throwIfAborted(input.signal);

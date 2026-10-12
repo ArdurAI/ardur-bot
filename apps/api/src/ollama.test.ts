@@ -3,6 +3,7 @@ import type { PrismaClient } from "@ardurbot/db";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { botModelPinUpdate } from "./bot-model-pin.js";
+import { ollamaCatalogStates } from "./ollama.js";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
 
@@ -21,7 +22,10 @@ function fixture(owner = true, connected = true) {
   const deps = {
     env: { deploymentKind: "source", agentRuntime: "pi" },
     prisma: {
-      userModelCredential: { findFirst: vi.fn(async () => (connected ? credential : null)) },
+      userModelCredential: {
+        findFirst: vi.fn(async () => (connected ? credential : null)),
+        findMany: vi.fn(async () => (connected ? [credential] : [])),
+      },
       spaceModelPreference: {
         findFirst: vi.fn(async () => (connected ? { credential, modelId: "llama3.2:1b" } : null)),
       },
@@ -182,4 +186,103 @@ describe("Ollama connection API", () => {
       ),
     ).rejects.toThrow("not installed");
   });
+});
+
+it("lists each local server connection and loads only the explicitly selected one", async () => {
+  const f = fixture();
+  const connections = ["one", "two"].map((id) => ({
+    id,
+    provider: "ollama",
+    secretId: id,
+    label: id,
+  }));
+  vi.mocked(f.deps.prisma.userModelCredential.findMany).mockResolvedValue(connections as never);
+  vi.mocked(f.deps.prisma.userModelCredential.findFirst).mockImplementation(
+    async ({ where }: any) => (connections.find((entry) => entry.id === where.id) ?? null) as never,
+  );
+  vi.mocked(f.deps.prisma.secret.findFirst).mockImplementation(
+    async ({ where }: any) => ({ id: where.id, ciphertext: where.id }) as never,
+  );
+  f.deps.secrets.load = (_ciphertext, id) =>
+    JSON.stringify({
+      kind: "openai_compatible",
+      baseUrl: `http://127.0.0.1:${id === "one" ? 11434 : 11435}`,
+    });
+  const catalog = await (await f.rpc("list")).json();
+  expect(
+    catalog.json
+      .filter(
+        (entry: { provider: string; placeholder?: boolean }) =>
+          entry.provider === "ollama" && !entry.placeholder,
+      )
+      .map((entry: { credentialId: string }) => entry.credentialId),
+  ).toEqual(["one", "two"]);
+  http.fetch.mockClear();
+  expect(await (await f.rpc("ollama", { credentialId: "one" })).json()).toMatchObject({
+    json: { credentialId: "one", baseUrl: "http://127.0.0.1:11434" },
+  });
+  expect(http.fetch).toHaveBeenCalled();
+  expect(
+    http.fetch.mock.calls.every(([url]) => String(url).startsWith("http://127.0.0.1:11434/")),
+  ).toBe(true);
+  http.fetch.mockClear();
+  http.fetch.mockResolvedValue(new Response('{"status":"success"}\n'));
+  const pull = await f.rpc("pullOllama", { model: "local:small", credentialId: "one" });
+  expect(pull.status).toBe(200);
+  await pull.text();
+  expect(http.fetch).toHaveBeenCalled();
+  expect(
+    http.fetch.mock.calls.every(([url]) => String(url).startsWith("http://127.0.0.1:11434/")),
+  ).toBe(true);
+  http.fetch.mockClear();
+  expect(
+    (await f.rpc("pullOllama", { model: "local:small", credentialId: "foreign" })).status,
+  ).toBe(400);
+  expect(http.fetch).not.toHaveBeenCalled();
+  expect(await (await f.rpc("ollama", { credentialId: "foreign" })).json()).toMatchObject({
+    json: { models: [], issue: expect.any(String) },
+  });
+  expect(http.fetch).not.toHaveBeenCalled();
+});
+
+it("bounds catalog discovery concurrency and returns healthy models before the deadline", async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture();
+    const ids = ["slow-1", "healthy", "slow-2", "slow-3", "queued"];
+    vi.mocked(f.deps.prisma.userModelCredential.findFirst).mockImplementation(
+      async ({ where }: any) => ({ id: where.id, provider: "ollama", secretId: where.id }) as never,
+    );
+    vi.mocked(f.deps.prisma.secret.findFirst).mockImplementation(
+      async ({ where }: any) => ({ id: where.id, ciphertext: where.id }) as never,
+    );
+    f.deps.secrets.load = (_ciphertext, id) =>
+      JSON.stringify({
+        kind: "openai_compatible",
+        baseUrl: `http://127.0.0.1:${11434 + ids.indexOf(id)}`,
+      });
+    const healthyFetch = http.fetch.getMockImplementation()!;
+    const started = new Set<string>();
+    const aborted: AbortSignal[] = [];
+    http.fetch.mockImplementation(async (url, init) => {
+      const host = new URL(String(url)).port;
+      started.add(host);
+      if (host === "11435") return healthyFetch(url, init);
+      if (init?.signal) aborted.push(init.signal);
+      // Simulate a transport that ignores cancellation: the list must still finish.
+      return new Promise<Response>(() => {});
+    });
+    const request = ollamaCatalogStates(f.deps, f.actor, ids);
+    await vi.advanceTimersByTimeAsync(0);
+    expect([...started]).toEqual(["11434", "11435", "11436", "11437"]);
+    expect(started.has("11438")).toBe(false);
+    await vi.advanceTimersByTimeAsync(3_000);
+    const states = await request;
+    expect(states).toHaveLength(1);
+    expect(states[0]).toMatchObject({ credentialId: "healthy", models: [{ id: "llama3.2:1b" }] });
+    expect(aborted.every((signal) => signal.aborted)).toBe(true);
+    expect(started.has("11438")).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
 });

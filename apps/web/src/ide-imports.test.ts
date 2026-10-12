@@ -88,6 +88,7 @@ it("keeps optional screens, Board, Fleet, Dashboard widgets and runtime contract
     "pages/ide/diff.tsx",
     "pages/ide/terminal.tsx",
     "pages/shell/terminal-session.tsx",
+    "pages/GoalNamedResult.tsx",
   ])
     expect(seen.has(path.join(root, file)), file).toBe(false);
   for (const name of [

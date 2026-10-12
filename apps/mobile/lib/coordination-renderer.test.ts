@@ -95,6 +95,34 @@ describe("native correction dispatch renderer", () => {
     vi.unstubAllGlobals();
   });
 
+  it("shows the access blocker without truncating its corrective sentence", () => {
+    act(() =>
+      root.render(
+        createElement(ChiefDispatchLine, {
+          dispatch: {
+            requestMessageId: "request",
+            revision: 1,
+            memberId: "chief",
+            memberName: "Chief",
+            state: "needs-owner",
+            blockerKey: "connect-linear",
+            reason: "access",
+          },
+          detail: "Got it — this task needs you before I can assign it.",
+          actionProps: {},
+        }),
+      ),
+    );
+    expect(container.querySelector("button")?.getAttribute("aria-label")).toBe(
+      "Needs you · Connect Linear or grant a team member permission to read and write.",
+    );
+    const lines = container.querySelectorAll('[aria-live="polite"]');
+    expect(lines[1]?.textContent).toBe(
+      "Connect Linear or grant a team member permission to read and write.",
+    );
+    expect(lines[1]?.hasAttribute("data-lines")).toBe(false);
+    expect(container.textContent).not.toMatch(/Messaged|Queued/);
+  });
   it.each([
     ["requested", "Told Member to stand down", "Stopping Member"],
     ["confirmed", "Member stood down", undefined],

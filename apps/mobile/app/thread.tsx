@@ -2682,6 +2682,14 @@ const MessageBubble = memo(function MessageBubble({
   const chiefReceipt = message.blocks.find((block) => block.kind === "chief_receipt");
   const chiefResult = message.blocks.find((block) => block.kind === "chief_result");
   if (chiefResult) return <ChiefResultBubble block={chiefResult} actionProps={actionProps} />;
+  if (chiefReceipt?.chiefDispatch)
+    return (
+      <ChiefDispatchLine
+        dispatch={chiefReceipt.chiefDispatch}
+        detail={chiefReceipt.text}
+        actionProps={actionProps}
+      />
+    );
   if (chiefReceipt)
     return (
       <Text style={{ color: tokens.foreground, fontSize: 15.5 }} accessibilityLiveRegion="polite">

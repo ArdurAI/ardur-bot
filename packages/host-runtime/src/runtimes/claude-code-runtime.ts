@@ -380,7 +380,10 @@ export class ClaudeStreamParser {
         const reasonId =
           value.subtype === "error_max_turns"
             ? ("max-turns" as const)
-            : (nativeFailureCategory(nativeFailureDetail(value.result, value.errors)) ??
+            : (nativeFailureCategory(
+                nativeFailureDetail(value.result, value.errors),
+                "claude-code",
+              ) ??
               (value.subtype === "error_max_budget_usd" ? ("usage-limit" as const) : undefined));
         throw new RuntimePinError(
           reasonId

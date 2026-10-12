@@ -406,6 +406,50 @@ export class HostBridge {
       deployment?.ownerUserId !== ownerId
     )
       return false;
+    if (request.operation.op === "computer.terminal") {
+      const op = request.operation;
+      const action = op.action;
+      const [member, bot] = await Promise.all([
+        this.prisma.spaceMember.findFirst({
+          where: { spaceId: request.scope.spaceId, userId: ownerId },
+        }),
+        this.prisma.bot.findFirst({
+          where: {
+            id: request.scope.botId,
+            userId: ownerId,
+            spaceId: request.scope.spaceId,
+            archivedAt: null,
+          },
+          include: { computer: true },
+        }),
+      ]);
+      const computer = bot?.computer;
+      if (
+        !member ||
+        !computer ||
+        !computerRunsOnHost(computer) ||
+        computer.spaceId !== request.scope.spaceId ||
+        computer.homeKey !== op.homeKey ||
+        (computer.scope === "team"
+          ? computer.scopeKey !== `team:${request.scope.spaceId}`
+          : computer.scope !== "dedicated" || computer.userId !== ownerId) ||
+        this.hub.health?.capabilities?.hostTerminal?.generation !== action.hostGeneration
+      )
+        return false;
+      // Cleanup must remain possible after lease loss, sleep, or a changed control fence.
+      if (action.type === "close" || action.type === "revoke") return true;
+      return (
+        computer.controlHolder === "user" &&
+        computer.state === "running" &&
+        !computer.maintenanceId &&
+        computer.controlBotId === bot.id &&
+        computer.controlLeaseId === action.leaseId &&
+        computer.controlFence === action.fence &&
+        computer.providerRef === action.generation &&
+        action.expiresAt > Date.now() &&
+        action.expiresAt <= (computer.controlLeaseExpiresAt?.getTime() ?? 0)
+      );
+    }
     const owner = this.ownerFiles.get(request);
     const settingsRequest = this.settingsRequests.has(request);
     if (owner || settingsRequest) {

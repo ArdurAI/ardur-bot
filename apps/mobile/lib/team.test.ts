@@ -65,3 +65,15 @@ it("does not present unavailable presence as idle", () => {
   ).text;
   expect(text).toBe("Status unavailable");
 });
+it("translates blockerKey on blocked rows", () => {
+  const translate = (text: string) => `[${text}]`;
+  const blockedRow: TeamRow = {
+    ...row,
+    state: "blocked",
+    reason: "Connect Linear or grant a team member permission to read and write.",
+    blockerKey: "connect-linear",
+  };
+  expect(mobileTeamRow(blockedRow, translate).text).toBe(
+    "[Blocked] — [Connect Linear or grant a team member permission to read and write.]",
+  );
+});

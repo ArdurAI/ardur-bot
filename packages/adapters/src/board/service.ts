@@ -22,6 +22,7 @@ import { guardrailConfigFromEnv } from "@ardurbot/host-runtime/host-guardrails";
 import { getLogger } from "@ardurbot/logging";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import { BeadsBoardProvider } from "./beads.js";
+import { goalLinkForbidsItemClose } from "./goal-link-guard.js";
 import type { PendingCloseRow } from "./pending-close.js";
 import {
   closeNoticeOwner,
@@ -563,16 +564,19 @@ export class BoardService {
     return { ...workspace, initialized: true };
   }
   async assertBotMayClose(scope: BoardScope, workspaceId: string | undefined, ids: string[]) {
-    if (!scope.botId || !scope.runId) return;
+    if (!scope.botId || !scope.runId) return workspaceId;
+    const workspace = await this.workspace(scope, workspaceId);
+    if (await goalLinkForbidsItemClose(this.options.prisma, scope, workspace.id, ids))
+      throw new BoardError({ code: "forbidden", message: "Closing this item is a human action." });
     const run = await this.options.prisma.run.findFirst({
       where: { id: scope.runId, spaceId: scope.spaceId, userId: scope.userId, botId: scope.botId },
     });
-    if (!run?.boardItemId || !ids.includes(run.boardItemId)) return;
-    const workspace = await this.workspace(scope, workspaceId);
-    if (workspace.id !== run.boardWorkspaceId) return;
+    if (!run?.boardItemId || !ids.includes(run.boardItemId)) return workspace.id;
+    if (workspace.id !== run.boardWorkspaceId) return workspace.id;
     const item = await (await this.provider(scope, workspace.id)).show(run.boardItemId);
     if (!run.boardCloseWhenDone || !item.closeWhenDone)
       throw new BoardError({ code: "forbidden", message: "Closing this item is a human action." });
+    return workspace.id;
   }
   async upkeep(scope: BoardScope) {
     await this.actor(scope);

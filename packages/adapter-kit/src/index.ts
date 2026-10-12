@@ -6,5 +6,6 @@ export * from "./interfaces.js";
 export * from "./memory-documents.js";
 export * from "./registry.js";
 export * from "./terminal.js";
+export * from "./terminal-router.js";
 export * from "./types.js";
 export * from "./usage-collection.js";

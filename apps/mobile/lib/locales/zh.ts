@@ -150,6 +150,9 @@ export const ZH_MESSAGES: Record<string, string> = {
     "{botName} 的群组模型登录已过期。请重新连接，或更改群组模型。",
   "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
     "{botName} 无法使用为此群组设置的模型。请更改群组模型，或检查 Bot 设置。",
+  "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan.":
+    "{provider} 目前拒绝请求（请求频率或用量限制）。请稍后重试，或检查您的套餐。",
+  "This connection": "此连接",
   "{runtime}'s usage limit is reached. Try again after it resets.":
     "{runtime} 的用量已达上限。请在限额重置后重试。",
   "Sign in to {runtime} on this computer, then try again.":
@@ -1536,5 +1539,38 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Work is still active.": "工作仍在进行中。",
   "Please address the failing conditions.": "请解决未满足的条件。",
   "Final owner review": "所有者最终审核",
+  "Board item": "看板事项",
+  "Open board item": "打开看板事项",
+  "Board update pending": "看板更新待处理",
   "Could not review result. Try again.": "无法审核结果，请重试。",
+  "{runs} run": "{runs} 次运行",
+  "By bot": "按机器人",
+  "Hide bots": "收起机器人",
+  "Unknown bot": "未知机器人",
+  "Unattributed usage": "未归属的用量",
+  "Partial cost": "部分费用",
+  "{runs} runs": "{runs} 次运行",
+  "Choose connection": "选择连接",
+  "Connection settings": "连接设置",
+  "Local server": "本地服务器",
+  "Search models": "搜索模型",
+  "No matching models": "没有匹配的模型",
+  "Model options": "模型选项",
+  "May not be available on your plan": "你的套餐可能不支持此模型",
+  "Connect that model first.": "请先连接此模型。",
+  "Choose a model.": "请选择一个模型。",
+  "Connect that model server first.": "请先连接此模型的服务器。",
+  "This connection cannot serve that model.": "此连接无法提供此模型。",
+  "Unknown model for that provider": "此提供商的未知模型",
+  "Show all models": "显示所有模型",
+  "Got it — I’ll choose a team member to file this issue in Linear.":
+    "明白了——我会选择一名团队成员在Linear中提交此问题。",
+  "Got it — I’ll choose a team member to manage the GitHub repository.":
+    "明白了——我会选择一名团队成员来管理GitHub仓库。",
+  "Got it — this task needs you before I can assign it.": "收到 — 分配这项任务前需要你的帮助。",
+  "Connect Linear or grant a team member permission to read and write.":
+    "连接 Linear，或授予团队成员读写权限。",
+  "Connect GitHub or grant a team member permission to read and write.":
+    "连接 GitHub，或授予团队成员读写权限。",
+  "Needs you": "需要你",
 };

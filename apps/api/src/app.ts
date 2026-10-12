@@ -103,11 +103,12 @@ import { mountExportRoutes } from "./account-export.js";
 import { loadAppEnv } from "./app-env.js";
 import { warnAutoReviewConfiguration } from "./auto-review-status.js";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
-import { boardCloseRetry } from "./board.js";
+import { boardCloseRetry, boardOwnerRun } from "./board.js";
 import { deviceReadResponse } from "./device-read-response.js";
 import type { AppEnv } from "./env.js";
 import { mountEvidenceRoutes } from "./evidence.js";
 import { reconcileFleetSecretCleanup } from "./fleet.js";
+import { goalBoardDeliveryRetry } from "./goal-board.js";
 import { HostBridge } from "./host-bridge.js";
 import { mountHostMcpRoutes } from "./host-mcp-routes.js";
 import { sourceHostStatus } from "./host-status.js";
@@ -532,7 +533,12 @@ export async function createApp(
         // No worker runs beside the in-memory queue, so this reconciler also sweeps board closes.
         reconcileBoardOutcomes: (signal) =>
           reconcileBoardOutcomes(
-            { prisma, dataDir: env.dataDir, lockPool: created.lockPool },
+            {
+              prisma,
+              dataDir: env.dataDir,
+              lockPool: created.lockPool,
+              ownerRun: boardOwnerRun(hostBridge),
+            },
             { signal, pendingCloses: true },
           ),
         reconcileLocalImport: async () => {
@@ -558,6 +564,13 @@ export async function createApp(
     hostBridge,
   });
   boardCloses?.start();
+  const goalBoardDeliveries = goalBoardDeliveryRetry({
+    prisma,
+    dataDir: env.dataDir,
+    lockPool: created.lockPool,
+    hostBridge,
+  });
+  goalBoardDeliveries?.start();
   let fleetCleanupTask: Promise<void> | undefined;
   const sweepFleetSecrets = () => {
     if (fleetCleanupTask) return;
@@ -1184,6 +1197,7 @@ export async function createApp(
       await email?.drain?.();
       await reconciler?.stop();
       await boardCloses?.stop();
+      await goalBoardDeliveries?.stop();
       await settleWithTimeout(fleetCleanupTask, TEAM_CHAT_STARTUP_SHUTDOWN_MS);
       await settleWithTimeout(jobs.close(), 5_000);
       await realtime.close();

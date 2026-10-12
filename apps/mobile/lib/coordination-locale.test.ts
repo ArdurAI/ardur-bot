@@ -17,6 +17,29 @@ describe("mobile coordination failure line locales", () => {
     resetI18nForTests("en");
   });
 
+  it.each(["ru", "zh-CN"] as const)("shows a saved access blocker in %s", (locale) => {
+    resetI18nForTests(locale);
+    const dispatch = {
+      requestMessageId: "request",
+      revision: 1,
+      memberId: "chief",
+      memberName: "Chief",
+      state: "needs-owner" as const,
+      blockerKey: "connect-linear" as const,
+      reason: "access",
+    };
+    expect(chiefDispatchSummary(dispatch)).toBe(locale === "ru" ? "Нужна ваша помощь" : "需要你");
+    expect(chiefActivityText(dispatch)).toBe(
+      locale === "ru"
+        ? "Подключите Linear или разрешите участнику команды читать и записывать данные."
+        : "连接 Linear，或授予团队成员读写权限。",
+    );
+    expect(chiefReceiptText("needs-owner")).toBe(
+      locale === "ru"
+        ? "Понял — прежде чем поручить эту задачу, мне нужна ваша помощь."
+        : "收到 — 分配这项任务前需要你的帮助。",
+    );
+  });
   it.each(["ru", "zh-CN"] as const)("translates every activity and result in %s", (locale) => {
     resetI18nForTests(locale);
     for (const key of Object.keys(CHIEF_ACTIVITY_TEXT) as ChiefActivityKey[]) {

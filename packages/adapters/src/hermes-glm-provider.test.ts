@@ -1,4 +1,9 @@
-import { hermesProviderFailure } from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
+import {
+  hermesProviderFailure,
+  hermesProviderFailureCategory,
+} from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
+import { startHermesProviderRelay } from "@ardurbot/host-runtime/runtimes/hermes-provider-relay";
+import { createLogger, createTestSink } from "@ardurbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BrokerOptions } from "./hermes-provider-broker.js";
 import {
@@ -8,7 +13,7 @@ import {
   setHermesProviderStream,
 } from "./hermes-provider-broker.js";
 import { piTools } from "./hermes-provider-translation.js";
-import { catalogModels } from "./pi-runtime.js";
+import { catalogModels, reliableStreamOptions } from "./pi-runtime.js";
 
 const PROMPT = "Test: reply with exactly the words hermes works ok";
 const PRIVATE = "private fixture prompt, key and endpoint";
@@ -33,6 +38,7 @@ function fixture(
     models.streamSimple(model, context, options),
   );
   if (useDefaultFetch) vi.stubGlobal("fetch", fetch);
+  const maxTokens = purpose === "summary" ? 2_000 : 65_536;
   const tools =
     purpose === "main"
       ? Array.from({ length: 56 }, (_, index) => ({
@@ -80,7 +86,7 @@ function fixture(
       baseUrl: model.baseUrl,
       route: "provider-translated",
       contextWindow: model.contextWindow,
-      maxOutputTokens: 65536,
+      maxOutputTokens: maxTokens,
       acceptsImages: false,
       supportsDeveloperRole: false,
       effort: { field: "reasoning_effort", supported: ["high"] },
@@ -112,34 +118,38 @@ function fixture(
           })),
         }
       : {}),
-    max_tokens: 65536,
+    max_tokens: maxTokens,
     stream: true,
     stream_options: { include_usage: true },
   };
   const request = { grant: broker.grant, scope, path: "/v1/chat/completions", body };
-  return { broker, body, request, model, models, tools, records, scope };
+  return { broker, body, request, model, models, tools, records, scope, maxTokens };
 }
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Hermes GLM bundled-provider wire fixtures", () => {
   it.each(["main", "summary"] as const)(
-    "matches the built-in provider wire shape for %s",
+    "matches the built-in provider wire fields apart from MCP tool names for %s",
     async (purpose) => {
       const wires: unknown[] = [];
       const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
         expect(String(url)).toBe("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions");
+        expect(init?.method).toBe("POST");
+        expect(new Headers(init?.headers).get("authorization")).toBe("Bearer fixture-key");
         const wire = JSON.parse(String(init?.body));
         wires.push(wire);
         expect(wire).toMatchObject({
           model: "glm-5.3",
-          max_tokens: 65536,
+          max_tokens: purpose === "summary" ? 2_000 : 65_536,
           stream: true,
           stream_options: { include_usage: true },
           thinking: { type: "enabled", clear_thinking: false },
           reasoning_effort: "high",
         });
         expect(wire).not.toHaveProperty("store");
+        expect(wire).not.toHaveProperty("tool_choice");
+        expect(wire).not.toHaveProperty("parallel_tool_calls");
         expect(wire.messages.map((message: { role: string }) => message.role)).toEqual([
           "system",
           "user",
@@ -157,13 +167,32 @@ describe("Hermes GLM bundled-provider wire fixtures", () => {
         {
           systemPrompt: "Use only supplied tools.",
           messages: [{ role: "user", content: PROMPT, timestamp: 0 }],
-          tools: piTools(f.tools.map((tool) => ({ ...tool, name: hermesToolName(tool.name) }))),
+          tools: piTools(f.tools),
         },
-        { apiKey: "fixture-key", reasoning: "high", maxTokens: 65536, fetch },
+        reliableStreamOptions(
+          f.model,
+          { apiKey: "fixture-key", reasoning: "high", fetch },
+          f.maxTokens,
+        ),
       );
       expect(await stream.result()).toMatchObject({ stopReason: "stop" });
       expect(wires).toHaveLength(2);
-      expect(wires[0]).toEqual(wires[1]);
+      const nativeWire = wires[1] as { tools?: { function: { name: string } }[] };
+      expect(nativeWire.tools?.map((tool) => tool.function.name) ?? []).toEqual(
+        f.tools.map((tool) => tool.name),
+      );
+      // Hermes needs MCP routing names; compare every other recorded field unchanged.
+      expect(wires[0]).toEqual({
+        ...nativeWire,
+        ...(nativeWire.tools
+          ? {
+              tools: nativeWire.tools.map((tool) => ({
+                ...tool,
+                function: { ...tool.function, name: hermesToolName(tool.function.name) },
+              })),
+            }
+          : {}),
+      });
       expect(f.records.at(-1)).toMatchObject({
         request: { purpose, collection: { outcome: "success" } },
       });
@@ -260,4 +289,83 @@ describe("Hermes GLM bundled-provider wire fixtures", () => {
     expect(await response.text()).toContain("hermes works ok");
     expect(calls).toBe(2);
   });
+});
+
+it("keeps the upstream 429 code through broker, remote callback, relay and logger", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(
+    async () =>
+      new Response(
+        JSON.stringify({
+          error: { code: "1305", message: PRIVATE },
+        }),
+        { status: 429, headers: { "content-type": "application/json" } },
+      ),
+  );
+  const f = fixture("main", fetch);
+  const dispatcher = new HermesRelayDispatcher(
+    { broker: f.broker, scope: f.scope },
+    new AbortController().signal,
+  );
+  const failures: unknown[] = [];
+  const sink = createTestSink();
+  const relay = await startHermesProviderRelay(
+    { ...f.broker.grant, protocol: 1, hostGeneration: "fixture" },
+    async (method, args) => {
+      try {
+        return await dispatcher.dispatch(method, args);
+      } catch (error) {
+        throw new Error((error as Error).message);
+      }
+    },
+    (failure) => failures.push(failure),
+    createLogger({ service: "fixture", sinks: [sink], level: "info" }),
+  );
+  try {
+    const response = await globalThis.fetch(`${relay.url}/chat/completions`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${f.broker.grant.token}` },
+      body: JSON.stringify(f.body),
+    });
+    expect(response.status).toBe(502);
+    await response.text();
+    expect(failures).toEqual([
+      {
+        kind: "provider-http",
+        status: 429,
+        layer: "upstream",
+        reason: "http-rate-limit",
+        reasonCode: "1305",
+      },
+    ]);
+    expect(hermesProviderFailureCategory(failures[0] as never)).toBe("provider-rate-limit");
+    expect(fetch).toHaveBeenCalledOnce();
+    const logged = JSON.stringify(sink.events);
+    expect(logged).toContain("1305");
+    expect(logged).not.toContain(PRIVATE);
+    expect(logged).not.toContain("fixture-key");
+    expect(logged).not.toContain(f.broker.grant.token);
+  } finally {
+    relay.close();
+  }
+});
+
+it("keeps the allowlisted upstream code in a translated broker failure", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(
+    async () =>
+      new Response(JSON.stringify({ error: { code: 1305, message: PRIVATE } }), {
+        status: 429,
+        headers: { "content-type": "application/json" },
+      }),
+  );
+  const f = fixture("main", fetch);
+  await expect(f.broker.open(f.request)).rejects.toMatchObject({
+    failure: {
+      kind: "provider-http",
+      status: 429,
+      layer: "upstream",
+      reason: "http-rate-limit",
+      reasonCode: "1305",
+    },
+  });
+  expect(fetch).toHaveBeenCalledOnce();
 });

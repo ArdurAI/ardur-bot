@@ -10,6 +10,7 @@
     "./memory-conformance": "./src/memory-conformance.ts",
     "./memory-fakes": "./src/memory-fakes.ts",
     "./model-emulator": "./src/model-emulator.ts",
+    "./racy-git-fixture": "./src/racy-git-fixture.ts",
     "./semantic-memory-http-fake": "./src/semantic-memory-http-fake.ts",
     "./semantic-memory-conformance": "./src/semantic-memory-conformance.ts"
   },

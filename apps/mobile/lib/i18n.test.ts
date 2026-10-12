@@ -97,6 +97,8 @@ describe("mobile i18n", () => {
       "Resume at home",
       "Could not load team message controls",
       "Could not update team messages",
+      "Connect Linear or grant a team member permission to read and write.",
+      "Connect GitHub or grant a team member permission to read and write.",
     ];
     for (const locale of ["ru", "zh-CN"] as const) {
       resetI18nForTests(locale);

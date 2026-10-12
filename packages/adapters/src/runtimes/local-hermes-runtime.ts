@@ -20,6 +20,7 @@ import {
   summaryOperationHash,
   summaryOperationManifest,
 } from "../hermes-provider-broker.js";
+import { nameHermesProviderFailure } from "../hermes-provider-problem.js";
 import { buildHostTurn } from "../host-turn.js";
 
 export class LocalHermesRuntime implements AgentRuntime {
@@ -230,6 +231,8 @@ export class LocalHermesRuntime implements AgentRuntime {
         saveCheckpoint: request.saveCheckpoint,
       };
       yield* runtime.run(localRequest, context);
+    } catch (error) {
+      throw nameHermesProviderFailure(error);
     } finally {
       this.running.delete(request.runId);
       relay?.close();
