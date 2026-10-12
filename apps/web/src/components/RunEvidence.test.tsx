@@ -12,9 +12,21 @@ import RunEvidence, {
   EvidenceStatus,
 } from "./RunEvidence";
 
-const api = vi.hoisted(() => ({ summary: vi.fn() }));
+const api = vi.hoisted(() => ({
+  summary: vi.fn(),
+  keyHistory: vi.fn(),
+  replaceKey: vi.fn(),
+  revokeKey: vi.fn(),
+}));
 vi.mock("../lib/rpc", () => ({
-  rpc: { evidence: { runSummary: api.summary } },
+  rpc: {
+    evidence: {
+      runSummary: api.summary,
+      keyHistory: api.keyHistory,
+      replaceKey: api.replaceKey,
+      revokeKey: api.revokeKey,
+    },
+  },
   selectedSpaceId: () => "space",
 }));
 vi.mock("@lingui/core/macro", () => ({
@@ -74,6 +86,9 @@ function summary(
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   api.summary.mockReset();
+  api.keyHistory.mockReset();
+  api.replaceKey.mockReset();
+  api.revokeKey.mockReset();
   node = document.createElement("div");
   document.body.append(node);
   root = createRoot(node);
@@ -276,6 +291,38 @@ it.each(["expected_key", "different_key", "no_expected_key"] as const)(
     expect(node.querySelector('[role="status"]')).toBeNull();
   },
 );
+it("keeps the revoked key visible after an emergency revocation and replaces against its head", async () => {
+  api.keyHistory.mockResolvedValue({
+    canManage: true,
+    keys: [
+      {
+        keyId: fingerprint,
+        fingerprint,
+        version: 1,
+        state: "revoked",
+        createdAt: "2026-10-01T00:00:00.000Z",
+        replacedAt: null,
+        revokedAt: "2026-10-02T00:00:00.000Z",
+        revokedReason: "lost device",
+      },
+    ],
+  });
+  await openIdentity();
+  await act(async () => {
+    await Promise.resolve();
+  });
+  // The identity card keeps the revoked key's fingerprint and the history
+  // keeps its state, so the owner can authorize the replacement.
+  expect(node.textContent).toContain(fingerprint);
+  expect(node.textContent).toContain("Revoked");
+  await act(() => button("Replace key").click());
+  await act(() => button("Replace key").click());
+  expect(api.replaceKey).toHaveBeenCalledWith(
+    { expectedFingerprint: fingerprint },
+    { context: { spaceId: "space" } },
+  );
+});
+
 it("shows a failed comparison without a successful signer label", async () => {
   await openIdentity();
   api.summary.mockResolvedValue({ ...summary("failed"), signerMatch: null });

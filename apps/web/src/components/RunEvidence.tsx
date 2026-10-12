@@ -143,16 +143,18 @@ export function EvidenceIdentityDetails({
   if (summary.state === "off") return null;
   if (!identity && !summary.evidence) return <EvidenceStatus summary={summary} />;
   // Once loaded, the history is fresher than the run summary: after a
-  // replacement the new active key shows at once, after a revocation the
-  // card hides because there is no active key left.
+  // replacement the new active key shows at once. After an emergency
+  // revocation no key is active; keep showing the newest retained key — the
+  // head a replacement must match — so the fingerprint survives for recovery.
   const activeEntry = history?.keys.find((entry) => entry.state === "active") ?? null;
+  const headEntry = activeEntry ?? history?.keys.at(-1) ?? null;
   const scopeId = identity?.scope.id ?? spaceId;
   const shownIdentity = history
-    ? activeEntry && scopeId
+    ? headEntry && scopeId
       ? {
-          fingerprint: activeEntry.keyId,
+          fingerprint: headEntry.keyId,
           scope: { type: "space" as const, id: scopeId },
-          keyVersion: activeEntry.version,
+          keyVersion: headEntry.version,
         }
       : null
     : identity;

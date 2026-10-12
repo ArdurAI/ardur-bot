@@ -134,6 +134,49 @@ it.each(["expected_key", "different_key", "no_expected_key"] as const)(
     expect(node.textContent).not.toContain(label);
   },
 );
+it("keeps the revoked key visible after an emergency revocation and replaces against its head", async () => {
+  const revokedHistory = {
+    canManage: true,
+    keys: [
+      {
+        keyId: fingerprint,
+        fingerprint,
+        version: 1,
+        state: "revoked",
+        createdAt: "2026-10-01T00:00:00.000Z",
+        replacedAt: null,
+        revokedAt: "2026-10-02T00:00:00.000Z",
+        revokedReason: "lost device",
+      },
+    ],
+  };
+  mocks.rpc.mockImplementation(async (procedure: string) =>
+    procedure === "evidence/runSummary" ? summary : revokedHistory,
+  );
+  await act(async () =>
+    root.render(<EvidenceIdentityDetails summary={summary} spaceId="space" open paired={false} />),
+  );
+  await act(async () => {
+    await Promise.resolve();
+  });
+  // The identity keeps the revoked key's fingerprint and its status so the
+  // owner can authorize the replacing key.
+  expect(node.textContent).toContain(fingerprint);
+  expect(node.textContent).toContain("Revoked");
+  await act(() => button("Replace key").click());
+  const [, , buttons] = mocks.alert.mock.calls[0] as [
+    string,
+    string,
+    { text: string; onPress?: () => void }[],
+  ];
+  await act(() => buttons.find((item) => item.text === "Replace key")!.onPress!());
+  expect(mocks.rpc).toHaveBeenCalledWith(
+    "evidence/replaceKey",
+    { expectedFingerprint: fingerprint },
+    expect.anything(),
+  );
+});
+
 it("reports failed verification without a signer success", async () => {
   await act(() =>
     root.render(<EvidenceIdentityDetails summary={summary} spaceId="space" open paired={false} />),

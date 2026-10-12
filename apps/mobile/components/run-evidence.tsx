@@ -213,13 +213,16 @@ export function EvidenceIdentityDetails({
   }, [open]);
   const identity = summary.signingIdentity;
   const activeEntry = history?.keys.find((entry) => entry.state === "active") ?? null;
+  // After an emergency revocation no key is active; keep the newest retained
+  // key — the head a replacement must match — so recovery stays possible.
+  const headEntry = activeEntry ?? history?.keys.at(-1) ?? null;
   const scopeId = identity?.scope.id ?? spaceId;
   const shownIdentity = history
-    ? activeEntry && scopeId
+    ? headEntry && scopeId
       ? {
-          fingerprint: activeEntry.keyId,
+          fingerprint: headEntry.keyId,
           scope: { type: "space" as const, id: scopeId },
-          keyVersion: activeEntry.version,
+          keyVersion: headEntry.version,
         }
       : null
     : identity;
