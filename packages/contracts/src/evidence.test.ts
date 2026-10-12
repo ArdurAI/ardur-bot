@@ -36,3 +36,17 @@ it("accepts only a complete expected public fingerprint at the API boundary", ()
   expect(schema.parse({ runId: "run" })).toEqual({ runId: "run" });
   expect(() => schema.parse({ runId: "run", expectedFingerprint: "short" })).toThrow();
 });
+
+it("accepts only a single-line revocation reason of at most 200 characters", () => {
+  const schema = evidenceContract.revokeKey["~orpc"].inputSchema!;
+  for (const reason of ["lost device", "a".repeat(200)]) {
+    expect(schema.safeParse({ expectedFingerprint: identity.fingerprint, reason }).success).toBe(
+      true,
+    );
+  }
+  for (const reason of ["", "a".repeat(201), "a\nb", "a\rb", "a\r\nb", "a\u2028b", "a\u2029b"]) {
+    expect(schema.safeParse({ expectedFingerprint: identity.fingerprint, reason }).success).toBe(
+      false,
+    );
+  }
+});

@@ -15,6 +15,7 @@ import type {
   EvidenceKeyHistoryEntry,
   EvidenceRunSummary,
 } from "@ardurbot/contracts/evidence";
+import { EvidenceRevocationReasonSchema } from "@ardurbot/contracts/evidence";
 import { evidenceState } from "@ardurbot/contracts/evidence-states";
 import type { PrismaClient } from "@ardurbot/db";
 import {
@@ -174,15 +175,13 @@ type EvidenceKeyRow = {
   revokedReason: string | null;
 };
 
-const REVOCATION_REASON_MAX_LENGTH = 200;
-
 /**
- * The free-text reason is shared with every space member and paired device,
- * and an owner may paste a credential into it by mistake. Persist only
- * conservatively redacted, bounded text; over-masking is accepted here.
+ * An owner may paste a credential into the reason by mistake. Refuse multiline
+ * or oversized input before redaction; over-masking accepted text is intentional.
  */
 function sanitizeRevocationReason(reason: string): string {
-  return redactCommandOutput(redactCredentialText(reason)).slice(0, REVOCATION_REASON_MAX_LENGTH);
+  if (!EvidenceRevocationReasonSchema.safeParse(reason).success) throw new ORPCError("BAD_REQUEST");
+  return redactCommandOutput(redactCredentialText(reason)).slice(0, 200);
 }
 
 function keyHistoryEntry(row: EvidenceKeyRow, includeReason: boolean): EvidenceKeyHistoryEntry {

@@ -587,17 +587,10 @@ describe("evidence key management", () => {
     expect(JSON.stringify(history)).not.toContain("fixture-ciphertext");
     expect(JSON.stringify(history)).not.toContain("PRIVATE KEY");
   });
-  it("redacts credentials from the revocation reason before storing it", async () => {
+  it("redacts credentials from a single-line revocation reason before storing it", async () => {
     const f = keyFixture("owner");
-    const apiToken = "sk-live4eC39HqLyjWDartJzT1zdp7dc51Js";
-    const pemBody = "MIIEpAIBAAKCAQEA7d1fK7fG6vBQ8mY3xYzL9vN0pQrS2tT5uVwX8yZaBcD4eF7h";
-    const reason = [
-      `rotating after leak of ${apiToken}`,
-      "-----BEGIN RSA PRIVATE KEY-----",
-      pemBody,
-      "-----END RSA PRIVATE KEY-----",
-      "please review",
-    ].join("\n");
+    const apiToken = "sk-fixtureOnlyNotARealCredential1234";
+    const reason = `rotating after leak of ${apiToken}; please review`;
     const history = await revokeSpaceEvidenceKey(
       f.prisma,
       actor,
@@ -608,16 +601,52 @@ describe("evidence key management", () => {
     const stored = f.rows[0]?.revokedReason ?? "";
     // Boolean assertions keep any leaked material out of test output.
     expect(stored.includes(apiToken)).toBe(false);
-    expect(stored.includes(pemBody)).toBe(false);
-    expect(stored.includes("PRIVATE KEY")).toBe(false);
     expect(stored).toContain("[Redacted]");
     expect(stored).toContain("please review");
     expect(history.keys[0]?.revokedReason).toBe(stored);
   });
-  it("bounds the stored revocation reason length", async () => {
+  it("redacts a label-prefixed private-key block within a single-line reason", async () => {
     const f = keyFixture("owner");
-    await revokeSpaceEvidenceKey(f.prisma, actor, "session-1", f.rows[0]!.kid, "a".repeat(500));
+    const pemBody = Buffer.from("fixture-only-private-key-body").toString("base64");
+    const reason = `private_key: -----BEGIN PRIVATE KEY----- ${pemBody} -----END PRIVATE KEY-----`;
+    const history = await revokeSpaceEvidenceKey(
+      f.prisma,
+      actor,
+      "session-1",
+      f.rows[0]!.kid,
+      reason,
+    );
+    const stored = f.rows[0]?.revokedReason ?? "";
+    expect(stored.includes(pemBody)).toBe(false);
+    expect(stored.includes("PRIVATE KEY")).toBe(false);
+    expect(stored).toContain("[Redacted]");
+    expect(history.keys[0]?.revokedReason).toBe(stored);
+  });
+  it("accepts a single-line revocation reason at the 200-character limit", async () => {
+    const f = keyFixture("owner");
+    await revokeSpaceEvidenceKey(f.prisma, actor, "session-1", f.rows[0]!.kid, "a".repeat(200));
     expect(f.rows[0]?.revokedReason).toHaveLength(200);
+  });
+  it.each([
+    ["oversized", "a".repeat(201)],
+    ["oversized credential", `token=${"a".repeat(201)}`],
+    ["empty", ""],
+    ["LF", "lost device\nplease review"],
+    ["CR", "lost device\rplease review"],
+    ["CRLF", "lost device\r\nplease review"],
+    ["Unicode line separator", "lost device\u2028please review"],
+    ["Unicode paragraph separator", "lost device\u2029please review"],
+    [
+      "pasted PEM",
+      "key: -----BEGIN PRIVATE KEY-----\nfixture-only-body\n-----END PRIVATE KEY-----",
+    ],
+  ])("refuses a %s revocation reason before changing key history", async (_label, reason) => {
+    const f = keyFixture("owner");
+    await expect(
+      revokeSpaceEvidenceKey(f.prisma, actor, "session-1", f.rows[0]!.kid, reason!),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(f.rows[0]?.revokedReason).toBeNull();
+    expect(f.rows[0]?.revokedAt).toBeNull();
   });
   it("shows the free-text reason only to the owner with an authenticated session", async () => {
     const f = keyFixture("owner");

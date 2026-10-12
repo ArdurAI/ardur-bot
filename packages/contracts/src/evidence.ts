@@ -4,6 +4,11 @@ import { EVIDENCE_STATE_IDS } from "./evidence-states.js";
 import type { GovernanceSummary } from "./features.js";
 
 export const EvidenceFingerprintSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+export const EvidenceRevocationReasonSchema = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^[^\r\n\u2028\u2029]*$/);
 export const EvidenceSigningIdentitySchema = z.strictObject({
   fingerprint: EvidenceFingerprintSchema,
   scope: z.strictObject({ type: z.literal("space"), id: z.string().min(1) }),
@@ -93,7 +98,7 @@ export const evidenceContract = {
     .input(
       z.object({
         expectedFingerprint: EvidenceFingerprintSchema,
-        reason: z.string().min(1).max(200),
+        reason: EvidenceRevocationReasonSchema,
       }),
     )
     .output(EvidenceKeyHistorySchema),
