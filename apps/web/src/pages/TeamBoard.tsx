@@ -1,4 +1,5 @@
 import type { HostLabel, TeamRow } from "@ardurbot/contracts";
+import { GOAL_FREEZE_CANCELLED } from "@ardurbot/contracts";
 import {
   presenceFreshness,
   runtimeEffortLabel,
@@ -293,7 +294,13 @@ export function TeamBoardRow({
                       <li key={event.id}>
                         <time dateTime={event.at}>{new Date(event.at).toLocaleTimeString()}</time> ·{" "}
                         {event.kind}
-                        {event.text ? ` — ${event.text}` : ""}
+                        {event.text
+                          ? ` — ${
+                              event.text === GOAL_FREEZE_CANCELLED
+                                ? t`The goal reached owner review before this work started.`
+                                : event.text
+                            }`
+                          : ""}
                       </li>
                     ))}
                   </ol>

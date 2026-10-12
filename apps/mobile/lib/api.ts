@@ -18,7 +18,11 @@ import type {
   ThreadSnapshot,
   ToolResumedPayload,
 } from "@ardurbot/contracts";
-import { HERMES_CONTEXT_LIMIT_MESSAGE, RuntimeProblemSchema } from "@ardurbot/contracts";
+import {
+  goalDisplayText,
+  HERMES_CONTEXT_LIMIT_MESSAGE,
+  RuntimeProblemSchema,
+} from "@ardurbot/contracts";
 import type { ThreadHistory } from "@ardurbot/core";
 import {
   aiConsentTarget,
@@ -956,7 +960,10 @@ export function copyableMobileMessageText(message: MobileMessage): string {
         block.kind === "bot_message_sent" ||
         block.kind === "bot_message_received"
       )
-        return block.text;
+        return goalDisplayText(
+          block.text,
+          t("The goal reached owner review before this work started."),
+        );
       return "";
     })
     .filter(Boolean)
@@ -997,7 +1004,10 @@ export function blockText(
           .map((step) => `${step.label}${step.count > 1 ? ` ×${step.count}` : ""}`)
           .join(" · ");
       }
-      return ("text" in block ? block.text : "state" in block ? block.state : "") ?? "";
+      const text = ("text" in block ? block.text : "state" in block ? block.state : "") ?? "";
+      return typeof text === "string"
+        ? goalDisplayText(text, t("The goal reached owner review before this work started."))
+        : text;
     })
     .filter(Boolean)
     .join("\n");

@@ -131,8 +131,11 @@ import type { Pool } from "@ardurbot/db";
 import {
   acceptDelegation,
   admitChiefAction,
+  admitGoalRunEffect,
   appendEventInTransaction,
   type ClaimedSteeringMessage,
+  cancelRunHeldByFrozenGoal,
+  claimGoalRunEffect,
   claimQuietBotMessages,
   confirmDispatchStop,
   createEvidenceStore,
@@ -146,6 +149,7 @@ import {
   goalBotAuthorityFingerprint,
   goalExhaustionReason,
   InvalidSpaceNameError,
+  isGoalRunEffectFrozen,
   isSteeringContinuationClientNonce,
   isTooManyDatabaseConnections,
   listDelegations,
@@ -576,6 +580,8 @@ function priorToolCalls(events: readonly { type: string; payload: unknown }[]) {
 
 const modelCredentialLocks = new Map<string, Promise<void>>();
 const READ_ONLY_AGENT_TOOLS = new Set([
+  // Submission owns its revision/outbox transaction; it must not hold itself as an external effect.
+  "finish_goal",
   "board_ready",
   "board_show",
   "computer_observe",
@@ -1323,6 +1329,19 @@ export function createRunExecutor(deps: ExecutorDeps) {
           ),
         expiresAt: Date.now() + config.limits.timeoutMs,
         active,
+        admit: async () => {
+          const goal = await deps.prisma.teamGoal.findFirst({
+            where: {
+              spaceId: source.spaceId,
+              userId: source.userId,
+              ...(source.goalId
+                ? { id: source.goalId }
+                : { rootTaskId: source.delegationRootTaskId ?? source.taskId }),
+            },
+            select: { status: true },
+          });
+          return !goal || goal.status === "running";
+        },
         record: async (usage) => {
           await recordAndForwardBrokerUsage(
             deps,
@@ -1821,6 +1840,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
       }
+      // The admission freeze holds at resume, recovery and retry, not only at
+      // submission: a goal run that is queued, waiting, or holding an expired lease
+      // must not be claimed while the goal awaits owner review. In-flight leases
+      // survive and finish their call.
+      if (
+        (run.goalId || run.delegationRootTaskId) &&
+        (await cancelRunHeldByFrozenGoal(deps.prisma, run))
+      )
+        return;
       // A stop that lands while the run waits must hold, whatever startedAt says:
       // a retried run has started before, and claiming it again would re-lease it,
       // emit run.started and reach a provider call before the stop is confirmed.
@@ -2038,6 +2066,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
           throw error;
         });
 
+      let usageCollectionFailed = false;
+      const recordAttemptUsage = async (...args: Parameters<typeof recordRunUsage>) => {
+        try {
+          return await recordRunUsage(...args);
+        } catch (error) {
+          usageCollectionFailed = true;
+          throw error;
+        }
+      };
       let checkpointWrite: Promise<void> = Promise.resolve();
       let pendingCheckpointSaves = 0;
       let checkpointSavesAbandoned = false;
@@ -3836,6 +3873,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   executionId,
                   consumedEffectIds,
                 );
+          if (applied?.frozen) return { error: GOAL_FROZEN_EFFECT_ERROR };
 
           const runAutoReview = async () => {
             if (!injectedReview && !checker) return;
@@ -4042,7 +4080,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const recordingError = await recordEvidence(allowKind, allowRuleId, allowDecisionId);
             if (recordingError) return recordingError;
             const claim = from === "approved" ? claimApprovedEffect : claimIntendedEffect;
-            if (await claim(deps.prisma, applied!.effect.id)) {
+            const claimed =
+              run.goalId || run.delegationRootTaskId
+                ? await claimGoalRunEffect(deps.prisma, {
+                    spaceId: run.spaceId,
+                    userId: run.userId,
+                    goalId: run.goalId,
+                    rootTaskId: run.delegationRootTaskId,
+                    effectId: applied!.effect.id,
+                    from,
+                  })
+                : await claim(deps.prisma, applied!.effect.id);
+            if (claimed) {
               claimedEffect = true;
               return undefined;
             }
@@ -5122,6 +5171,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 }
               }
               const recordedEffect = await recordEffect(deps, run, name, effectKey, args);
+              if (recordedEffect.frozen) return { error: GOAL_FROZEN_EFFECT_ERROR };
               if (recordedEffect?.duplicate) {
                 const gate = resolveDuplicateEffectGate(recordedEffect.effect, name);
                 if (gate.action === "execute") {
@@ -5178,6 +5228,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               });
             }
             const recordedForAsk = await recordEffect(deps, run, name, effectKey, args);
+            if (recordedForAsk.frozen) return { error: GOAL_FROZEN_EFFECT_ERROR };
             const missingSecretAction = resolveMissingRunSecretAction(recordedForAsk.effect);
             if (missingSecretAction.action === "return") return missingSecretAction.result;
             const connectionId = args.connectionId ? String(args.connectionId) : undefined;
@@ -6791,7 +6842,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               priorToolCalls: resumeTurn?.effects.length,
               saveCheckpoint: async (state, usage = []) => {
                 for (const observation of usage) {
-                  const recorded = await recordRunUsage(deps, run, observation);
+                  const recorded = await recordAttemptUsage(deps, run, observation);
                   if (!comparisonRun && recorded) {
                     recordContextUsage(turnContext.snapshot, recorded);
                     await saveContextSnapshot();
@@ -6910,7 +6961,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 return recordedApplyTool(name, args, executionId, id);
               },
               recordHelperUsage: async (id, usage) => {
-                await recordRunUsage(deps, { ...run, delegationId: id }, usage);
+                await recordAttemptUsage(deps, { ...run, delegationId: id }, usage);
               },
               finishHelper: (id, status, result) =>
                 completeHelper(
@@ -6973,7 +7024,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   accounting: runtime.describe().capabilities.usageAccounting,
                   signal: context.signal,
                   record: async (event) => {
-                    const recorded = await recordRunUsage(
+                    const recorded = await recordAttemptUsage(
                       deps,
                       { ...run, delegationId: event.delegationId ?? run.delegationId },
                       event,
@@ -7326,7 +7377,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 },
               });
             } else if (event.type === "usage") {
-              const recorded = await recordRunUsage(
+              const recorded = await recordAttemptUsage(
                 deps,
                 { ...run, delegationId: event.delegationId ?? run.delegationId },
                 event,
@@ -7865,6 +7916,17 @@ export function createRunExecutor(deps: ExecutorDeps) {
         // Start lease cleanup even after the drain expired; bound the wait, not its start.
         const cleanup = (async () => {
           await controlWatcher;
+          // The async runtime iterator has returned (including its finally blocks),
+          // and every awaited usage callback finished. A terminal status alone is not
+          // this proof: acceptance checks this separate, per-attempt collection cut.
+          if ((run.goalId || run.delegationRootTaskId) && !usageCollectionFailed)
+            await deps.prisma.attempt
+              .updateMany({
+                where: { id: attempt.id, runId, fence },
+                data: { usageSettledAt: new Date() },
+              })
+              .catch(() => undefined);
+
           const stopping = await deps.prisma.run.findUnique({
             where: { id: runId },
             select: { cancelRequestedAt: true, status: true },
@@ -8505,15 +8567,58 @@ async function persistMessageInTransaction(
   return { message, eventSeq: event.seq };
 }
 
+const GOAL_FROZEN_EFFECT_ERROR =
+  "This goal is awaiting owner review or already accepted, so new side effects are frozen.";
+
+type RecordedEffect =
+  | { duplicate: true; effect: Prisma.ExternalEffectGetPayload<object>; frozen: boolean }
+  | { duplicate: false; effect: Prisma.ExternalEffectGetPayload<object>; frozen: false }
+  | { duplicate: false; effect: null; frozen: true };
+
+/**
+ * A replay of a dispatchable effect (approved or intended) is held while its goal is
+ * frozen: the freeze check below runs under the same root lock as the submission, so
+ * a replay cannot dispatch into a goal the owner just sent to review. The row is left
+ * untouched — held, not dropped — so rework can execute it. Returning a completed,
+ * denied or uncertain effect's saved result is always allowed.
+ */
+async function effectReplayFrozen(
+  deps: ExecutorDeps,
+  run: {
+    spaceId: string;
+    userId: string;
+    goalId: string | null;
+    delegationRootTaskId: string | null;
+  },
+  effect: { status: string },
+): Promise<boolean> {
+  if (effect.status !== "approved" && effect.status !== "intended") return false;
+  if (!run.goalId && !run.delegationRootTaskId) return false;
+  return isGoalRunEffectFrozen(deps.prisma, {
+    spaceId: run.spaceId,
+    userId: run.userId,
+    goalId: run.goalId,
+    rootTaskId: run.delegationRootTaskId,
+  });
+}
+
 async function recordEffect(
   deps: ExecutorDeps,
-  run: { id: string; spaceId: string; threadId: string; botId: string },
+  run: {
+    id: string;
+    spaceId: string;
+    userId: string;
+    threadId: string;
+    botId: string;
+    goalId: string | null;
+    delegationRootTaskId: string | null;
+  },
   kind: string,
   idempotencyKey: string,
   request: unknown,
   legacyIdempotencyKey?: string,
   consumedIds?: Set<string>,
-) {
+): Promise<RecordedEffect> {
   const existing = await deps.prisma.externalEffect.findUnique({
     where: { idempotencyKey },
   });
@@ -8527,7 +8632,9 @@ async function recordEffect(
       runId: run.id,
       payload: { executionId: idempotencyKey, kind },
     });
-    return { duplicate: true, effect: existing };
+    if (await effectReplayFrozen(deps, run, existing))
+      return { duplicate: false, effect: null, frozen: true };
+    return { duplicate: true, effect: existing, frozen: false };
   }
 
   // Pre-fix rows used bare provider ids or scoped keys that included the
@@ -8570,7 +8677,9 @@ async function recordEffect(
           runId: run.id,
           payload: { executionId: candidate, kind, legacy: true },
         });
-        return { duplicate: true, effect: sameIdLegacy };
+        if (await effectReplayFrozen(deps, run, sameIdLegacy))
+          return { duplicate: false, effect: null, frozen: true };
+        return { duplicate: true, effect: sameIdLegacy, frozen: false };
       }
     }
   }
@@ -8604,9 +8713,42 @@ async function recordEffect(
       runId: run.id,
       payload: { executionId: legacy.idempotencyKey, kind, legacy: true },
     });
-    return { duplicate: true, effect: legacy };
+    if (await effectReplayFrozen(deps, run, legacy))
+      return { duplicate: false, effect: null, frozen: true };
+    return { duplicate: true, effect: legacy, frozen: false };
   }
 
+  // Goal runs admit new effects through the root lock the freeze and the acceptance
+  // check also take, so an effect can never slip into a completed or accepted goal.
+  const linkedGoalId =
+    run.goalId ??
+    (run.delegationRootTaskId
+      ? (
+          await deps.prisma.teamGoal.findFirst({
+            where: {
+              rootTaskId: run.delegationRootTaskId,
+              spaceId: run.spaceId,
+              userId: run.userId,
+            },
+            select: { id: true },
+          })
+        )?.id
+      : null);
+  if (linkedGoalId && run.delegationRootTaskId) {
+    const admitted = await admitGoalRunEffect(deps.prisma, {
+      spaceId: run.spaceId,
+      userId: run.userId,
+      goalId: linkedGoalId,
+      rootTaskId: run.delegationRootTaskId,
+      runId: run.id,
+      kind,
+      idempotencyKey,
+      request,
+    });
+    if (!admitted.ok) return { duplicate: false, effect: null, frozen: true };
+    consumedIds?.add(admitted.effect.id);
+    return { duplicate: false, effect: admitted.effect, frozen: false };
+  }
   const effect = await deps.prisma.externalEffect.create({
     data: {
       spaceId: run.spaceId,
@@ -8618,7 +8760,7 @@ async function recordEffect(
     },
   });
   consumedIds?.add(effect.id);
-  return { duplicate: false, effect };
+  return { duplicate: false, effect, frozen: false };
 }
 
 async function completeEffect(

@@ -191,6 +191,7 @@ import {
 import { desktopBridge } from "../lib/desktop";
 import { countOwnerWaiting, openDockSnapshot, publishDockWaitingCount } from "../lib/dock-badge";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
+import { translatedGoalText } from "../lib/goal-display-text";
 import { INSIGHT_ACTION_EVENT, openInsightAction } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
 import {
@@ -7359,7 +7360,7 @@ const MessageView = memo(function MessageView({
                     ? t`${botName}'s sign-in for the group model expired. Reconnect it or change the group model.`
                     : block.notice?.id === "group-model-unavailable"
                       ? t`${botName} couldn't use the model set for this group. Change the group model or check this bot's settings.`
-                      : block.text;
+                      : translatedGoalText(block.text);
           return (
             <div key={i} className="flex w-fit max-w-full justify-start">
               <div

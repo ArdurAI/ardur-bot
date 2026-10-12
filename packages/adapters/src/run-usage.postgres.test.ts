@@ -2244,4 +2244,65 @@ postgres("request ledger on disposable PostgreSQL", () => {
     });
     expect(await db.prisma.delegation.count({ where: { rootTaskId: f.id } })).toBe(1);
   });
+
+  it("records late usage after a goal settlement as one visible discrepancy", async () => {
+    const f = await fixture();
+    // The owner accepted this goal while 150 tokens were used; settlement is durable.
+    const group = await db.prisma.chatGroup.create({
+      data: {
+        spaceId: f.id,
+        userId: f.run.userId,
+        name: "Late usage fixture",
+        coordinatorBotId: f.id,
+      },
+    });
+    const goal = await db.prisma.teamGoal.create({
+      data: {
+        spaceId: f.id,
+        userId: f.run.userId,
+        groupId: group.id,
+        threadId: f.id,
+        coordinatorBotId: f.id,
+        rootTaskId: f.id,
+        objective: "Synthetic accounting",
+        status: "accepted",
+        tokenLimit: 1_000,
+        perWorkerTokens: 100,
+        maxConcurrent: 1,
+        maxDescendants: 1,
+        untilAt: new Date("2030-01-01"),
+      },
+    });
+    await db.prisma.goalSettlement.create({
+      data: {
+        spaceId: f.id,
+        userId: f.run.userId,
+        goalId: goal.id,
+        revisionId: `revision-${f.id}`,
+        rootTaskId: f.id,
+        actorId: f.run.userId,
+        usedTokens: 150,
+        reservedTokens: 0,
+      },
+    });
+    await f.record();
+    expect((await f.root()).usedTokens).toBe(150);
+    const settlement = () =>
+      db.prisma.goalSettlement.findUniqueOrThrow({
+        where: { goalId: goal.id },
+        include: { discrepancies: true },
+      });
+    let marker = await settlement();
+    expect(marker.discrepancies).toHaveLength(1);
+    expect(marker.discrepancies[0]).toMatchObject({
+      tokens: 150,
+      usageRecordId: expect.any(String),
+    });
+
+    // A replayed receipt settles once: same ledger balance, no second discrepancy.
+    await f.record();
+    marker = await settlement();
+    expect(marker.discrepancies).toHaveLength(1);
+    expect((await f.root()).usedTokens).toBe(150);
+  });
 });

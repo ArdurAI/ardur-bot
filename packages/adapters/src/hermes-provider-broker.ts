@@ -196,6 +196,8 @@ export type BrokerOptions = {
   expiresAt: number;
   /** Rechecks cancellation, lease and connection revocation before each invocation. */
   active: () => Promise<boolean>;
+  /** Refuses new goal work while allowing already admitted receipts to drain. */
+  admit?: () => Promise<boolean>;
   /** A started observation must commit before the provider transport is called. */
   record: (usage: AgentUsage) => Promise<void>;
   observed?: (model: string | undefined, effort: string | undefined) => Promise<void>;
@@ -657,20 +659,34 @@ export class HermesProviderBroker {
         },
       });
       let finished = false;
+      let accounting = Promise.resolve();
+      let accountingError: unknown;
+      let accountingFailed = false;
+      const record = (usage: AgentUsage) => {
+        const write = accounting.then(() => this.options.record(usage));
+        accounting = write.catch((error: unknown) => {
+          accountingError = error;
+          accountingFailed = true;
+        });
+        return write;
+      };
       const finish = async (
         outcome: "success" | "failed" | "cancelled" | "timed-out" | "unknown",
       ) => {
         if (finished) return;
         finished = true;
-        await this.options.record(collector.finish(outcome));
+        await accounting;
+        if (accountingFailed) throw accountingError;
+        await record(collector.finish(outcome));
       };
       try {
-        await this.options.record(collector.start());
+        if (this.options.admit && !(await this.options.admit())) denied("run-budget");
+        await record(collector.start());
       } catch {
         denied("run-budget");
       }
       if (this.translated)
-        return await this.openTranslated(body, controller, collector, finish, live, active);
+        return await this.openTranslated(body, controller, collector, record, finish, live, active);
       let responseBody: ReadableStream<Uint8Array> | null = null;
       let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
       try {
@@ -712,7 +728,7 @@ export class HermesProviderBroker {
           const value = object(payload);
           if (!value) return;
           const counts = chatCompletionsUsage(payload);
-          if (counts) await this.options.record(collector.snapshot(counts));
+          if (counts) await record(collector.snapshot(counts));
           await active();
           if (object(value.error)) throw new Error("Provider reported an error.");
           if (value.model !== undefined && value.model !== connection.modelId) {
@@ -838,6 +854,7 @@ export class HermesProviderBroker {
     body: JsonObject,
     controller: AbortController,
     collector: RequestUsageCollector,
+    record: (usage: AgentUsage) => Promise<void>,
     finish: (
       outcome: "success" | "failed" | "cancelled" | "timed-out" | "unknown",
     ) => Promise<void>,
@@ -898,7 +915,7 @@ export class HermesProviderBroker {
         onUsage: (usage) => {
           // Feed the broker accounting with the provider layer's counts so run
           // caps and honest usage match the pass-through path.
-          void this.options.record(collector.snapshot(usage));
+          void record(collector.snapshot(usage)).catch(() => undefined);
         },
       });
       phase = "response-translation";

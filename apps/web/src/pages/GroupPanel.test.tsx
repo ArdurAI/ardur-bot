@@ -129,6 +129,8 @@ it.each([
   ["accept", "revision-changed", "Result changed; review again.", true],
   ["reject", "revision-changed", "Result changed; review again.", true],
   ["accept", "work-active", "Work is still active.", false],
+  ["accept", "lease-active", "Work is still active.", false],
+  ["accept", "effects-open", "Effects are still unsettled.", false],
   ["accept", "conditions-open", "Every condition must pass.", false],
   ["reject", null, "Could not review result. Try again.", false],
 ] as const)("shows a useful error for %s (%s)", async (action, reason, message, refresh) => {
@@ -158,6 +160,32 @@ it("surfaces a refresh failure after a saved decision", async () => {
     "Could not review result. Try again.",
   );
   expect(button("Accept result").disabled).toBe(false);
+});
+
+it("shows late usage as a discrepancy on an accepted goal", async () => {
+  const onRefresh = vi.fn(async () => undefined);
+  await act(async () =>
+    root.render(
+      <GroupGoalStrip
+        goal={{
+          ...goal,
+          status: "accepted",
+          settlement: {
+            revisionId: goal.currentRevision!.id,
+            usedTokens: 120,
+            reservedTokens: 0,
+            lateTokens: 15,
+            discrepancyCount: 1,
+            createdAt: "2030-01-01T00:00:00.000Z",
+          },
+        }}
+        onStop={vi.fn()}
+        onRefresh={onRefresh}
+      />,
+    ),
+  );
+  expect(node.textContent).toContain("Late usage arrived after acceptance.");
+  expect(node.textContent).toContain("15");
 });
 
 it("shows the board link and a pending update", async () => {

@@ -13,6 +13,11 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
+#. js-lingui-explicit-id
+#: src/lib/goal-display-text.ts
+msgid "The goal reached owner review before this work started."
+msgstr ""
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -4184,6 +4189,10 @@ msgstr ""
 msgid "Effective configuration"
 msgstr "Действующая конфигурация"
 
+#: src/pages/GroupPanel.tsx
+msgid "Effects are still unsettled."
+msgstr "Эффекты ещё не завершены."
+
 #: src/pages/TeamBoard.tsx
 msgid "Effort"
 msgstr ""
@@ -5415,6 +5424,10 @@ msgstr ""
 #: src/pages/DevicesSettings.tsx
 msgid "Last used"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Late usage arrived after acceptance."
+msgstr "После принятия поступило позднее использование."
 
 #: src/components/DesktopUpdates.tsx
 msgid "Later"
@@ -9405,6 +9418,10 @@ msgstr "Файл изменился. Откройте его снова пере
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."
 msgstr "Не удалось создать первого бота. Повторите попытку."
+
+#: src/pages/TeamBoard.tsx
+msgid "The goal reached owner review before this work started."
+msgstr "Цель дошла до проверки владельцем до начала этой работы."
 
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."

@@ -4,6 +4,7 @@ import {
   BOT_MESSAGE_BATCH_MAX_CHARACTERS,
   BOT_MESSAGE_PENDING_MAX,
   canAppendBotMessageToBatch,
+  isFrozenGoalStatus,
 } from "@ardurbot/contracts";
 import { buildBotMessageWakePrompt, parsePeerHoldRequest } from "@ardurbot/core";
 import {
@@ -1004,7 +1005,7 @@ export async function expireParkedBotMessageWakes(
     await withTransactionRetry(() =>
       prisma.$transaction(async (tx) => {
         const wake = await tx.botMessageWake.findUnique({ where: { id: candidate.id } });
-        if (!wake || wake.state !== "paused") return;
+        if (wake?.state !== "paused") return;
         const goal = wake.goalId
           ? await tx.teamGoal.findUnique({ where: { id: wake.goalId } })
           : null;
@@ -1429,9 +1430,12 @@ export async function claimQuietBotMessages(
           delivery.goalId && !delivery.sourceGroupId
             ? await tx.teamGoal.findUnique({
                 where: { id: delivery.goalId },
-                select: { groupId: true },
+                select: { groupId: true, status: true },
               })
             : null;
+        // A frozen goal admits no peer work: the delivery stays unread rather than
+        // entering a goal that is awaiting review or already accepted.
+        if (goal && isFrozenGoalStatus(goal.status)) continue;
         if (
           await peerTrafficPaused(tx, {
             ...claimant,

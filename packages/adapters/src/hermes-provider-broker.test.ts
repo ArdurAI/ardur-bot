@@ -93,6 +93,13 @@ function fixture(patch: Partial<BrokerOptions> = {}) {
 }
 
 describe("worker provider broker", () => {
+  it("refuses a fresh goal request at the broker boundary before recording or transport", async () => {
+    const f = fixture({ admit: async () => false });
+    await expect(f.broker.open(f.request())).rejects.toThrow();
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.records).toEqual([]);
+  });
+
   it.each([
     ["main", false],
     ["main", true],

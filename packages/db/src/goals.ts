@@ -15,6 +15,7 @@ import {
   GOAL_DEFAULT_PER_WORKER_TOKENS,
   GOAL_DEFAULT_TOKEN_LIMIT,
   GOAL_FINAL_REVIEW_DESCRIPTION,
+  GOAL_FREEZE_CANCELLED,
   GOAL_MAX_DEPTH,
   GOAL_MAX_HOPS,
   GoalConditionSchema,
@@ -24,6 +25,7 @@ import {
   GoalVerdictSchema,
   goalBudget,
   goalResultPath,
+  isFrozenGoalStatus,
   TaskCardSchema,
 } from "@ardurbot/contracts";
 import {
@@ -32,15 +34,24 @@ import {
   peerTrafficPaused,
   recordPeerTrafficBlock,
 } from "./bot-comms-policy.js";
+import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient, TeamGoal } from "./client.js";
 import { Prisma as PrismaNS } from "./client.js";
-import { requestCancel, requestCancelInTransaction } from "./delegation.js";
+import { finishDelegation, requestCancel, requestCancelInTransaction } from "./delegation.js";
 import { appendEventInTransaction } from "./events.js";
 import { IsolationError } from "./scope.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
+type GoalSettlementRow = Prisma.GoalSettlementGetPayload<object> & {
+  lateTokens: number;
+  discrepancyCount: number;
+};
+
 type GoalRow = Prisma.TeamGoalGetPayload<{ include: { revisions: true } }> &
-  ReturnType<typeof goalBudget> & { boardDelivery: GoalBoardDeliveryState | null };
+  ReturnType<typeof goalBudget> & {
+    settlement: GoalSettlementRow | null;
+    boardDelivery: GoalBoardDeliveryState | null;
+  };
 
 function boardDeliveryState(rows: { state: string }[]): GoalBoardDeliveryState | null {
   if (rows.some((row) => row.state === "needs-owner")) return "needs-owner";
@@ -83,6 +94,16 @@ function asGoal(row: GoalRow): Goal {
     createdAt: row.createdAt.toISOString(),
     stoppedAt: row.stoppedAt?.toISOString() ?? null,
     currentRevision: row.revisions[0] ? asRevision(row.revisions[0]) : null,
+    settlement: row.settlement
+      ? {
+          revisionId: row.settlement.revisionId,
+          usedTokens: row.settlement.usedTokens,
+          reservedTokens: row.settlement.reservedTokens,
+          lateTokens: row.settlement.lateTokens,
+          discrepancyCount: row.settlement.discrepancyCount,
+          createdAt: row.settlement.createdAt.toISOString(),
+        }
+      : null,
     boardWorkspaceId: row.boardWorkspaceId,
     boardItemId: row.boardItemId,
     boardDelivery: row.boardDelivery,
@@ -126,9 +147,25 @@ async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) 
           where: { goalId: row.id, spaceId: row.spaceId, userId: row.userId },
           select: { state: true },
         });
+        const settlement = await tx.goalSettlement.findUnique({ where: { goalId: row.id } });
+        const late = settlement
+          ? await tx.goalSettlementDiscrepancy.aggregate({
+              where: { settlementId: settlement.id },
+              _sum: { tokens: true },
+              _count: true,
+            })
+          : null;
         return asGoal({
           ...row,
           ...goalBudget(row.tokenLimit, root, !incomplete && !unmeasured),
+          settlement:
+            settlement && late
+              ? {
+                  ...settlement,
+                  lateTokens: late._sum.tokens ?? 0,
+                  discrepancyCount: late._count,
+                }
+              : null,
           boardDelivery: boardDeliveryState(deliveries),
         });
       },
@@ -445,7 +482,7 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
       if (!goal || goal.spaceId !== row.spaceId || goal.userId !== row.userId) return null;
       // A frozen goal still consumes the terminal delegation. Otherwise a stale
       // completion wakes the coordinator again after the owner sends the goal back.
-      if (["completed", "accepted"].includes(goal.status)) {
+      if (isFrozenGoalStatus(goal.status)) {
         await tx.delegation.update({
           where: { id: row.id },
           data: { coordinatorWokenAt: new Date() },
@@ -610,6 +647,30 @@ async function commitGoalSubmission(
   });
   if (updated.count === 0) throw new GoalReviewConflict("already-submitted");
 
+  // Never turn an executing replay into a frozen-run uncertainty while it is
+  // still in flight. Its completion must happen before the review snapshot.
+  const executingReplay = await tx.externalEffect.findFirst({
+    where: {
+      spaceId: goal.spaceId,
+      run: { is: { OR: [{ goalId: goal.id }, { delegationRootTaskId: goal.rootTaskId }] } },
+      status: "executing",
+    },
+    select: { id: true },
+  });
+  if (executingReplay) throw new GoalReviewConflict("effects-open");
+
+  const frozenRunIds = await freezeQueuedGoalRuns(tx, goal);
+  // Claims take the same root lock. Once queued work is settled, any remaining
+  // dispatchable or executing effect must finish before submission can commit.
+  const pendingEffect = await tx.externalEffect.findFirst({
+    where: {
+      spaceId: goal.spaceId,
+      run: { is: { OR: [{ goalId: goal.id }, { delegationRootTaskId: goal.rootTaskId }] } },
+      status: { in: ["intended", "approved", "executing"] },
+    },
+    select: { id: true },
+  });
+  if (pendingEffect) throw new GoalReviewConflict("effects-open");
   const previousAttempts = await tx.goalRevision.count({ where: { goalId: goal.id } });
   const root = await tx.delegationRoot.findUnique({ where: { rootTaskId: goal.rootTaskId } });
   const conditions =
@@ -635,10 +696,241 @@ async function commitGoalSubmission(
     threadId: goal.threadId,
     botId: goal.coordinatorBotId,
     type: "goal.submitted",
-    payload: { goalId: goal.id, revisionId: revision.id },
+    payload: {
+      goalId: goal.id,
+      revisionId: revision.id,
+      ...(frozenRunIds.length ? { frozenRunIds } : {}),
+    },
   });
   await queueGoalBoardDelivery(tx, goal, revision.id, "completed");
   return asRevision(revision);
+}
+
+/**
+ * The admission freeze: a queued turn for the goal can never resume after submission.
+ * Delegated runs finish their delegations first so reservations release and the room
+ * sees the cancellation instead of an orphaned assignment. A run leased concurrently
+ * survives: the cancellation below re-checked status "queued", and in-flight work may
+ * finish its call. Runs that were waiting or hold an expired lease are settled when a
+ * stale continue job next claims them — see cancelRunHeldByFrozenGoal.
+ */
+async function freezeQueuedGoalRuns(tx: Prisma.TransactionClient, goal: TeamGoal) {
+  const queued = await tx.run.findMany({
+    where: {
+      spaceId: goal.spaceId,
+      userId: goal.userId,
+      OR: [{ goalId: goal.id }, { delegationRootTaskId: goal.rootTaskId }],
+      status: "queued",
+    },
+    select: { id: true, taskId: true, delegationId: true },
+  });
+  const frozen: Array<{ id: string; taskId: string }> = [];
+  const now = new Date();
+  for (const run of queued) {
+    if (await settleFrozenGoalRun(tx, goal, run, { status: "queued" }, now))
+      frozen.push({ id: run.id, taskId: run.taskId });
+  }
+  return frozen.map((run) => run.id);
+}
+
+/**
+ * Cancel one goal run the freeze caught before it could run, and leave nothing
+ * half-applied: the delegation finishes (releasing its reservation), the attempt and
+ * task cancel with the run, and effects whose dispatch was prevented are denied.
+ * Effects that may already have executed stay uncertain instead. The conditional
+ * status guard mirrors the claim below it, so a run leased concurrently survives.
+ * Returns true when this call cancelled the run.
+ */
+async function settleFrozenGoalRun(
+  tx: Prisma.TransactionClient,
+  goal: { spaceId: string; userId: string; rootTaskId: string },
+  run: { id: string; taskId: string; delegationId: string | null },
+  claimable: Prisma.RunWhereInput,
+  now: Date,
+): Promise<boolean> {
+  const cancelled = await tx.run.updateMany({
+    where: { id: run.id, ...claimable },
+    data: {
+      status: "cancelled",
+      completedAt: now,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+    },
+  });
+  if (!cancelled.count) return false;
+  // Wake-bound runs carry no delegationId; their delegation names the run instead.
+  const delegationId =
+    run.delegationId ??
+    (
+      await tx.delegation.findFirst({
+        where: { runId: run.id, rootTaskId: goal.rootTaskId },
+        select: { id: true },
+      })
+    )?.id ??
+    null;
+  if (delegationId)
+    await finishDelegation(tx, delegationId, "cancelled", GOAL_FREEZE_CANCELLED, run.id);
+  await cancelRunsInTransaction(tx, [{ id: run.id, taskId: run.taskId }], now);
+  await settleFrozenRunEffects(tx, { spaceId: goal.spaceId, userId: goal.userId }, [run.id]);
+  return true;
+}
+
+/**
+ * Effects whose dispatch the freeze prevented can never settle later: the old answer
+ * path needs a waiting run, and acceptance refuses while they stay open. Deny them.
+ * An effect left "executing" may already have run; keep it uncertain for the owner.
+ */
+async function settleFrozenRunEffects(
+  tx: Prisma.TransactionClient,
+  scope: { spaceId: string; userId: string },
+  runIds: readonly string[],
+) {
+  if (!runIds.length) return;
+  await tx.externalEffect.updateMany({
+    where: {
+      spaceId: scope.spaceId,
+      runId: { in: [...runIds] },
+      status: { in: ["intended", "approved", "paused"] },
+    },
+    data: { status: "denied" },
+  });
+  await tx.externalEffect.updateMany({
+    where: { spaceId: scope.spaceId, runId: { in: [...runIds] }, status: "executing" },
+    data: { status: "uncertain" },
+  });
+}
+
+/**
+ * The resume freeze. A goal run that is not in flight — queued, waiting on an answer
+ * or a takeover, paused or ready for peer work, or holding an expired lease — must never
+ * be claimed while the goal is frozen; neither may a retry or a recovery of a dead lease.
+ * The run settles exactly like a queued run the submission freeze caught.
+ * Returns true when the freeze holds
+ * the run, so the caller must not claim it. A live in-flight lease survives, as at
+ * submission. The status re-check is conditional, like the claim's, so a concurrent
+ * claim that won the row first is left to finish its call.
+ */
+export async function cancelRunHeldByFrozenGoal(
+  prisma: PrismaClient,
+  run: {
+    id: string;
+    spaceId: string;
+    userId: string;
+    taskId: string;
+    delegationId: string | null;
+    goalId: string | null;
+    delegationRootTaskId: string | null;
+  },
+): Promise<boolean> {
+  if (!run.goalId && !run.delegationRootTaskId) return false;
+  const goal = await prisma.teamGoal.findFirst({
+    where: {
+      spaceId: run.spaceId,
+      userId: run.userId,
+      // The guard above leaves the fallback non-null: a run always names one or both.
+      ...(run.goalId ? { id: run.goalId } : { rootTaskId: run.delegationRootTaskId! }),
+    },
+    select: { status: true, threadId: true, rootTaskId: true, spaceId: true, userId: true },
+  });
+  if (!goal || !isFrozenGoalStatus(goal.status)) return false;
+  const now = new Date();
+  return prisma.$transaction(async (tx) => {
+    await lockGoalReview(tx, goal.threadId, goal.rootTaskId);
+    const current = await tx.teamGoal.findFirst({
+      where: { spaceId: run.spaceId, userId: run.userId, rootTaskId: goal.rootTaskId },
+      select: { status: true },
+    });
+    if (!current || !isFrozenGoalStatus(current.status)) return false;
+    return settleFrozenGoalRun(
+      tx,
+      goal,
+      run,
+      {
+        OR: [
+          {
+            status: {
+              in: ["queued", "waiting_input", "waiting_takeover", "peer_paused", "peer_ready"],
+            },
+          },
+          { status: { in: ["leased", "running"] }, leaseExpiresAt: { lte: now } },
+        ],
+      },
+      now,
+    );
+  });
+}
+
+/**
+ * Freeze check for replaying an already-recorded effect. Serialized on the same root
+ * lock as submission. This is an early refusal only; dispatch must also use
+ * claimGoalRunEffect, which claims under that lock. A missing goal holds too.
+ */
+export async function isGoalRunEffectFrozen(
+  prisma: PrismaClient,
+  input: { spaceId: string; userId: string; goalId: string | null; rootTaskId?: string | null },
+): Promise<boolean> {
+  const goal = await prisma.teamGoal.findFirst({
+    where: {
+      ...(input.goalId ? { id: input.goalId } : { rootTaskId: input.rootTaskId! }),
+      spaceId: input.spaceId,
+      userId: input.userId,
+    },
+    select: { rootTaskId: true },
+  });
+  if (!goal) return Boolean(input.goalId);
+  return withTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${goal.rootTaskId} FOR UPDATE`;
+      const current = await tx.teamGoal.findFirst({
+        where: { rootTaskId: goal.rootTaskId, spaceId: input.spaceId, userId: input.userId },
+        select: { status: true },
+      });
+      return !current || isFrozenGoalStatus(current.status);
+    }),
+  );
+}
+
+/** Claim and goal admission share submission's root lock; no boolean-check gap. */
+export async function claimGoalRunEffect(
+  prisma: PrismaClient,
+  input: {
+    spaceId: string;
+    userId: string;
+    goalId: string | null;
+    rootTaskId: string | null;
+    effectId: string;
+    from: "approved" | "intended";
+  },
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const goal = await tx.teamGoal.findFirst({
+      where: {
+        spaceId: input.spaceId,
+        userId: input.userId,
+        ...(input.goalId ? { id: input.goalId } : { rootTaskId: input.rootTaskId! }),
+      },
+      select: { rootTaskId: true },
+    });
+    if (!goal) {
+      if (input.goalId) return false;
+      const claimed = await tx.externalEffect.updateMany({
+        where: { id: input.effectId, spaceId: input.spaceId, status: input.from },
+        data: { status: "executing" },
+      });
+      return claimed.count === 1;
+    }
+    await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${goal.rootTaskId} FOR UPDATE`;
+    const current = await tx.teamGoal.findFirst({
+      where: { rootTaskId: goal.rootTaskId, spaceId: input.spaceId, userId: input.userId },
+      select: { status: true },
+    });
+    if (current?.status !== "running") return false;
+    const claimed = await tx.externalEffect.updateMany({
+      where: { id: input.effectId, spaceId: input.spaceId, status: input.from },
+      data: { status: "executing" },
+    });
+    return claimed.count === 1;
+  });
 }
 
 async function snapshotGoalEvidence(tx: Prisma.TransactionClient, goal: TeamGoal) {
@@ -727,6 +1019,8 @@ export class GoalReviewConflict extends Error {
     public readonly reason:
       | "revision-changed"
       | "work-active"
+      | "lease-active"
+      | "effects-open"
       | "conditions-open"
       | "already-reviewed"
       | "already-submitted"
@@ -737,13 +1031,17 @@ export class GoalReviewConflict extends Error {
         ? "Revision is not current"
         : reason === "work-active"
           ? "Unsettled reservations block acceptance"
-          : reason === "conditions-open"
-            ? "Every condition must pass"
-            : reason === "already-reviewed"
-              ? "Revision is already reviewed"
-              : reason === "already-submitted"
-                ? "Goal is not running or already submitted"
-                : "Goal is not awaiting review",
+          : reason === "lease-active"
+            ? "A live execution blocks acceptance"
+            : reason === "effects-open"
+              ? "Unsettled effects block acceptance"
+              : reason === "conditions-open"
+                ? "Every condition must pass"
+                : reason === "already-reviewed"
+                  ? "Revision is already reviewed"
+                  : reason === "already-submitted"
+                    ? "Goal is not running or already submitted"
+                    : "Goal is not awaiting review",
     );
   }
 }
@@ -785,6 +1083,66 @@ export async function acceptGoal(prisma: PrismaClient, actor: Actor, input: Goal
     if (root?.reservedTokens && root.reservedTokens > 0) {
       throw new GoalReviewConflict("work-active");
     }
+    const goalRuns = { OR: [{ goalId: goal.id }, { delegationRootTaskId: goal.rootTaskId }] };
+    const liveLease = await tx.run.findFirst({
+      where: {
+        spaceId: goal.spaceId,
+        userId: goal.userId,
+        ...goalRuns,
+        status: {
+          in: [
+            "queued",
+            "leased",
+            "running",
+            "waiting_input",
+            "waiting_takeover",
+            "peer_paused",
+            "peer_ready",
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    if (liveLease) throw new GoalReviewConflict("lease-active");
+    const unsettledEffect = await tx.externalEffect.findFirst({
+      where: {
+        spaceId: goal.spaceId,
+        run: { is: goalRuns },
+        status: { in: ["intended", "approved", "executing", "paused", "uncertain"] },
+      },
+      select: { id: true },
+    });
+    if (unsettledEffect) throw new GoalReviewConflict("effects-open");
+    const collectingAttempt = await tx.attempt.findFirst({
+      where: {
+        run: { is: { spaceId: goal.spaceId, userId: goal.userId, ...goalRuns } },
+        usageSettledAt: null,
+      },
+      select: { id: true },
+    });
+    const collectingRun = await tx.run.findFirst({
+      where: {
+        spaceId: goal.spaceId,
+        userId: goal.userId,
+        ...goalRuns,
+        startedAt: { not: null },
+        attempts: { none: {} },
+      },
+      select: { id: true },
+    });
+    const collectingRequest = await tx.usageRecord.findFirst({
+      where: {
+        spaceId: goal.spaceId,
+        userId: goal.userId,
+        rootTaskId: goal.rootTaskId,
+        requestKey: { not: null },
+        purpose: { not: "detached-learning" },
+        collectionFinishedAt: null,
+      },
+      select: { id: true },
+    });
+    if (collectingAttempt || collectingRun || collectingRequest)
+      throw new GoalReviewConflict("work-active");
     if (!conditionsPass(revision.conditions)) throw new GoalReviewConflict("conditions-open");
 
     const verdict = await tx.goalVerdict.create({
@@ -802,6 +1160,21 @@ export async function acceptGoal(prisma: PrismaClient, actor: Actor, input: Goal
       data: { status: "accepted" },
     });
 
+    // Durable final-settlement marker. Late usage is recorded against it as a
+    // discrepancy; it never reopens the accepted result.
+    await tx.goalSettlement.create({
+      data: {
+        spaceId: goal.spaceId,
+        userId: goal.userId,
+        goalId: goal.id,
+        revisionId: revision.id,
+        rootTaskId: goal.rootTaskId,
+        actorId: actor.userId,
+        usedTokens: root?.usedTokens ?? 0,
+        reservedTokens: root?.reservedTokens ?? 0,
+      },
+    });
+
     await appendEventInTransaction(tx, {
       spaceId: goal.spaceId,
       threadId: goal.threadId,
@@ -813,6 +1186,51 @@ export async function acceptGoal(prisma: PrismaClient, actor: Actor, input: Goal
 
     return asVerdict(verdict);
   });
+}
+
+/**
+ * Effect admission for a goal run, serialized on the root lock that the admission
+ * freeze and the acceptance check also take. An effect is therefore either visible
+ * to the acceptance check or refused by the freeze; there is no window between the
+ * two where a consequential action slips into a completed or accepted goal.
+ */
+export async function admitGoalRunEffect(
+  prisma: PrismaClient,
+  input: {
+    spaceId: string;
+    userId: string;
+    goalId: string;
+    rootTaskId: string;
+    runId: string;
+    kind: string;
+    idempotencyKey: string;
+    request: unknown;
+  },
+): Promise<
+  | { ok: true; effect: Prisma.ExternalEffectGetPayload<object> }
+  | { ok: false; reason: "goal-frozen" }
+> {
+  return withTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${input.rootTaskId} FOR UPDATE`;
+      const goal = await tx.teamGoal.findFirst({
+        where: { id: input.goalId, spaceId: input.spaceId, userId: input.userId },
+        select: { status: true },
+      });
+      if (!goal || isFrozenGoalStatus(goal.status)) return { ok: false, reason: "goal-frozen" };
+      const effect = await tx.externalEffect.create({
+        data: {
+          spaceId: input.spaceId,
+          runId: input.runId,
+          kind: input.kind,
+          idempotencyKey: input.idempotencyKey,
+          status: "intended",
+          request: input.request as Prisma.InputJsonValue,
+        },
+      });
+      return { ok: true, effect };
+    }),
+  );
 }
 
 function reworkPrompt(notes: string) {

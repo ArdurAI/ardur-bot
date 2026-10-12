@@ -4,6 +4,13 @@ import { fileURLToPath } from "node:url";
 import { runtimeLabels } from "@ardurbot/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("./dispatch", () => ({ dispatchClient: {}, deviceRpc: vi.fn() }));
+vi.mock("./ai-consent", () => ({ promptAiConsent: vi.fn() }));
+vi.mock("./live-notifications", () => ({
+  resumeLiveNotifications: vi.fn(),
+  stopLiveNotifications: vi.fn(),
+}));
+
 vi.mock("expo-localization", () => ({
   getLocales: vi.fn(() => [{ languageTag: "en-US" }]),
 }));
@@ -31,6 +38,31 @@ function collectSourceFiles(dir: string): string[] {
 }
 
 describe("mobile i18n", () => {
+  it.each(["ru", "zh-CN"] as const)(
+    "translates freeze cancellation in chat and copy text (%s)",
+    async (locale) => {
+      const { resetI18nForTests, t } = await import("./i18n");
+      const { blockText, copyableMobileMessageText } = await import("./api");
+      resetI18nForTests(locale);
+      const message = {
+        id: "summary",
+        threadId: "thread",
+        role: "bot",
+        blocks: [{ kind: "text", text: "Coordinator → Worker: cancelled.\ngoal.freeze-cancelled" }],
+      } as Parameters<typeof blockText>[0];
+      try {
+        for (const rendered of [blockText(message), copyableMobileMessageText(message)]) {
+          expect(rendered).toContain("Coordinator → Worker: cancelled.");
+          expect(rendered).toContain(t("The goal reached owner review before this work started."));
+          expect(rendered).not.toContain("goal.freeze-cancelled");
+          expect(rendered).not.toContain("The goal reached owner review before this work started.");
+        }
+      } finally {
+        resetI18nForTests("en");
+      }
+    },
+  );
+
   it("translates restart progress and fresh-session notices", async () => {
     const { resetI18nForTests, t } = await import("./i18n");
     for (const locale of ["ru", "zh-CN"] as const) {

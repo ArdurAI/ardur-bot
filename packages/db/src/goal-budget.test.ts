@@ -34,6 +34,7 @@ function snapshot(
     delegationRoot: { findFirst: vi.fn(async () => root) },
     usageRecord: { findFirst: vi.fn(async () => (incomplete ? { id: "partial" } : null)) },
     run: { findFirst: vi.fn(async () => (unmeasured ? { id: "unmeasured" } : null)) },
+    goalSettlement: { findUnique: vi.fn(async () => null) },
     goalBoardDelivery: { findMany: vi.fn(async () => []) },
   };
   const transaction = vi.fn(async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx));

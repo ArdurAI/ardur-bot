@@ -1605,6 +1605,10 @@ export const RU_MESSAGES: Record<string, string> = {
   "Reject result": "Отклонить результат",
   "Result changed; review again.": "Результат изменился. Проверьте его снова.",
   "Work is still active.": "Работа ещё продолжается.",
+  "The goal reached owner review before this work started.":
+    "Цель передана на проверку владельцу до начала этой работы.",
+  "Effects are still unsettled.": "Эффекты ещё не завершены.",
+  "Late usage arrived after acceptance.": "После принятия поступило позднее использование.",
   "Please address the failing conditions.": "Исправьте невыполненные условия.",
   "Final owner review": "Итоговая проверка владельцем",
   "Board item": "Пункт доски",

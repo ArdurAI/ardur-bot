@@ -578,11 +578,13 @@ export function GroupGoalStrip({
       setError(
         reason === "revision-changed"
           ? t`Result changed; review again.`
-          : reason === "work-active"
+          : reason === "work-active" || reason === "lease-active"
             ? t`Work is still active.`
-            : reason === "conditions-open"
-              ? t`Every condition must pass.`
-              : t`Could not review result. Try again.`,
+            : reason === "effects-open"
+              ? t`Effects are still unsettled.`
+              : reason === "conditions-open"
+                ? t`Every condition must pass.`
+                : t`Could not review result. Try again.`,
       );
       if (reason === "revision-changed") await onRefresh().catch(() => undefined);
     } finally {
@@ -721,6 +723,12 @@ export function GroupGoalStrip({
         {!goal.usageComplete ? (
           <p className="pb-2">
             <Trans>Usage incomplete</Trans>
+          </p>
+        ) : null}
+        {goal.settlement && goal.settlement.discrepancyCount > 0 ? (
+          <p className="pb-2 text-warning">
+            <Trans>Late usage arrived after acceptance.</Trans>{" "}
+            {goal.settlement.lateTokens.toLocaleString()} <Trans>tokens</Trans>
           </p>
         ) : null}
       </details>

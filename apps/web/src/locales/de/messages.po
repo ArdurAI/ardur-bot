@@ -13,6 +13,11 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: \n"
 
+#. js-lingui-explicit-id
+#: src/lib/goal-display-text.ts
+msgid "The goal reached owner review before this work started."
+msgstr ""
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -4184,6 +4189,10 @@ msgstr ""
 msgid "Effective configuration"
 msgstr "Effektive Konfiguration"
 
+#: src/pages/GroupPanel.tsx
+msgid "Effects are still unsettled."
+msgstr "Effekte sind noch nicht abgeschlossen."
+
 #: src/pages/TeamBoard.tsx
 msgid "Effort"
 msgstr ""
@@ -5415,6 +5424,10 @@ msgstr ""
 #: src/pages/DevicesSettings.tsx
 msgid "Last used"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Late usage arrived after acceptance."
+msgstr "Späte Nutzung ist nach der Annahme eingegangen."
 
 #: src/components/DesktopUpdates.tsx
 msgid "Later"
@@ -9405,6 +9418,10 @@ msgstr "Die Datei hat sich geändert. Öffne sie erneut, bevor du speicherst."
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."
 msgstr "Der erste Bot konnte nicht erstellt werden. Versuche es erneut."
+
+#: src/pages/TeamBoard.tsx
+msgid "The goal reached owner review before this work started."
+msgstr "Das Ziel erreichte die Prüfung durch den Eigentümer, bevor diese Arbeit begann."
 
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."
