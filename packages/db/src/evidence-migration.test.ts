@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (relative: string) =>
   readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
-const migration = read("../prisma/migrations/20261011000000_evidence_key_rotation/migration.sql");
+const migration = read("../prisma/migrations/20261012100000_evidence_key_rotation/migration.sql");
 const schema = read("../prisma/schema.prisma");
 const dbSource = read("./evidence.ts");
 
