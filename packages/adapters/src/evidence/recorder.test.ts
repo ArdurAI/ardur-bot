@@ -343,6 +343,28 @@ describe("evidence key rotation and revocation", () => {
     });
     expect(await store.gapCount(input.run.id)).toBe(1);
   });
+  it("counts a seal the revocation fence refused during insertion as a gap", async () => {
+    const { recorder, store, seals } = setup();
+    await recorder.recordDecision(input);
+    const active = await store.activeKey(input.run.spaceId);
+    if (!active) throw new Error("expected an active key");
+    // The revocation commits between the recorder's key check and the seal
+    // write; the transactional fence then refuses the insertion.
+    vi.spyOn(store, "insertSeal").mockImplementationOnce(async () => {
+      await store.revokeKey({
+        spaceId: input.run.spaceId,
+        expectedKid: active.kid,
+        reason: "compromised fixture",
+      });
+      throw new Error("Evidence key revoked");
+    });
+    expect(await recorder.sealRunEvidence(input.run.id)).toEqual({
+      ok: false,
+      reason: "sealing_failed",
+    });
+    expect(seals).toHaveLength(0);
+    expect(await store.gapCount(input.run.id)).toBe(1);
+  });
   it("never mints a key silently after an emergency revocation", async () => {
     const { recorder, store, deps, records, keys } = setup();
     await recorder.recordDecision(input);

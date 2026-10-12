@@ -382,6 +382,14 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
         });
         return { ok: true };
       } catch {
+        // The missed seal ends the run without its closing signature — including
+        // one the revocation fence refused — so count the gap honestly.
+        if (!signal.aborted) {
+          pendingGaps.set(runId, (pendingGaps.get(runId) ?? 0) + 1);
+          await flushGaps(runId).catch(() => {
+            /* Retry when storage recovers. */
+          });
+        }
         return { ok: false, reason: "sealing_failed" };
       } finally {
         // serial keeps later steps behind this thunk until cleanup has finished.
