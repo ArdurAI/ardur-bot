@@ -13,6 +13,11 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: \n"
 
+#. js-lingui-explicit-id
+#: src/lib/goal-display-text.ts
+msgid "The goal reached owner review before this work started."
+msgstr "이 작업이 시작되기 전에 목표가 소유자 검토에 도달했습니다."
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -9381,11 +9386,6 @@ msgstr "파일이 변경되었습니다. 저장하기 전에 다시 여세요."
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."
 msgstr "첫 번째 봇을 만들 수 없습니다. 다시 시도하세요."
-
-#: src/lib/goal-display-text.ts
-#: src/pages/TeamBoard.tsx
-msgid "The goal reached owner review before this work started."
-msgstr "이 작업이 시작되기 전에 목표가 소유자 검토에 도달했습니다."
 
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."

@@ -13,6 +13,11 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: \n"
 
+#. js-lingui-explicit-id
+#: src/lib/goal-display-text.ts
+msgid "The goal reached owner review before this work started."
+msgstr "The goal reached owner review before this work started."
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr " — May not be available on your plan"
@@ -9381,11 +9386,6 @@ msgstr "The file changed. Open it again before saving."
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."
 msgstr "The first bot could not be created. Try again."
-
-#: src/lib/goal-display-text.ts
-#: src/pages/TeamBoard.tsx
-msgid "The goal reached owner review before this work started."
-msgstr "The goal reached owner review before this work started."
 
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."

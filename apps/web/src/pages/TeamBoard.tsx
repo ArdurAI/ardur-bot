@@ -1,5 +1,4 @@
 import type { HostLabel, TeamRow } from "@ardurbot/contracts";
-import { GOAL_FREEZE_CANCELLED } from "@ardurbot/contracts";
 import {
   presenceFreshness,
   runtimeEffortLabel,
@@ -17,6 +16,7 @@ import {
   unknownProviderName,
   unknownRuntimeName,
 } from "../lib/failure-category-copy";
+import { translatedGoalText } from "../lib/goal-display-text";
 import { rpc } from "../lib/rpc";
 import { localizedTeamDeliveryText } from "../lib/team-delivery-text";
 import { ComparisonList } from "./ComparePanel";
@@ -294,13 +294,7 @@ export function TeamBoardRow({
                       <li key={event.id}>
                         <time dateTime={event.at}>{new Date(event.at).toLocaleTimeString()}</time> ·{" "}
                         {event.kind}
-                        {event.text
-                          ? ` — ${
-                              event.text === GOAL_FREEZE_CANCELLED
-                                ? t`The goal reached owner review before this work started.`
-                                : event.text
-                            }`
-                          : ""}
+                        {event.text ? ` — ${translatedGoalText(event.text)}` : ""}
                       </li>
                     ))}
                   </ol>
