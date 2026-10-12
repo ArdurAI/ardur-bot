@@ -600,7 +600,7 @@ msgstr ""
 #: src/components/RunEvidence.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
-msgstr ""
+msgstr "सक्रिय"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Active model"

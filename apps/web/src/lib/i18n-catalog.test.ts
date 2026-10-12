@@ -35,6 +35,19 @@ describe("lingui catalogs", () => {
     },
   );
   it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates the signing-key state label in the %s catalog",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      const entry = Object.values(catalog).find((value) => value.message === "Active");
+      expect(entry?.translation?.trim(), locale).toBeTruthy();
+    },
+  );
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     "preserves workspace and account entry point names in %s",
     async (locale) => {
       const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
