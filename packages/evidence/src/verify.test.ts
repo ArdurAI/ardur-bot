@@ -47,8 +47,45 @@ function signedPayload(payload: unknown, typ = "application/ardur.er+jwt") {
 }
 
 describe("chain and seal verification", () => {
+  it("compares the independently expected fingerprint without changing integrity results", () => {
+    const { records, seal } = run();
+    for (const [expected, match] of [
+      [undefined, "no_expected_key"],
+      [keys.kid, "expected_key"],
+      [`sha256:${"0".repeat(64)}`, "different_key"],
+    ] as const) {
+      expect(verifyChain(records, keys.publicKeyPem, expected)).toMatchObject({
+        ok: true,
+        signerMatch: match,
+      });
+      expect(verifySeal(seal, records, keys.publicKeyPem, expected)).toMatchObject({
+        ok: true,
+        signerMatch: match,
+      });
+    }
+    expect(verifySeal("corrupt", records, keys.publicKeyPem, keys.kid).signerMatch).toBeNull();
+    expect(verifyChain(["corrupt"], keys.publicKeyPem, keys.kid).signerMatch).toBeNull();
+  });
+  it("detects an entirely replaced chain, seal, and key through the expected fingerprint", () => {
+    const replacement = generateEvidenceKey();
+    const replacementKey = loadEvidencePrivateKey(replacement.privateKeyPem);
+    const records = [
+      createEvidenceChain(replacementKey, replacement.kid).append(receiptInput()).jws,
+    ];
+    const seal = sealRun(
+      { records, actor: "bot-test", grantId: "grant-test", iss: "ardur:space-test:evidence" },
+      replacementKey,
+      replacement.kid,
+    );
+    expect(verifySeal(seal, records, replacement.publicKeyPem, keys.kid)).toMatchObject({
+      ok: true,
+      signerMatch: "different_key",
+    });
+    expect(verifySeal(seal, records, replacement.publicKeyPem).signerMatch).toBe("no_expected_key");
+  });
   it("rejects an empty chain with a stable list-level failure", () => {
     expect(verifyChain([], keys.publicKeyPem)).toEqual({
+      signerMatch: null,
       ok: false,
       recordCount: 0,
       headReceiptId: null,
@@ -70,6 +107,7 @@ describe("chain and seal verification", () => {
     const { records, seal } = run();
     const last = decodeCompact(records[3]).payload as { receipt_id: string };
     expect(verifyChain(records, keys.publicKeyPem)).toEqual({
+      signerMatch: "no_expected_key",
       ok: true,
       recordCount: 4,
       headReceiptId: last.receipt_id,

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { selectCatalogModel } from "./catalog-model-picker";
 import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
 
 test("Ollama settings discover installed models without an API key or manual model id", async ({
@@ -27,8 +28,7 @@ test("Ollama settings discover installed models without an API key or manual mod
     route.fulfill({ json: { json: status } }),
   );
   await openUserSettings(page, "models");
-  await page.getByPlaceholder("Search providers").fill("ollama");
-  await page.getByRole("button", { name: /Ollama/ }).click();
+  await selectCatalogModel(page, "ollama");
   await expect(page.getByLabel("Ollama server URL")).toHaveValue(status.baseUrl);
   await page.getByRole("button", { name: "Test", exact: true }).click();
   await expect(page.getByText("Ollama test-version", { exact: true })).toBeVisible();

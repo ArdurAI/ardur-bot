@@ -92,6 +92,17 @@ export function dashboardFixture(botCount = 1) {
     externalConversations: [],
     botSections: [],
   };
+  const recordedUsage = {
+    records: 3,
+    runs: 1,
+    inputTokens: 120,
+    outputTokens: 1,
+    cost: null,
+    knownCost: 0.2,
+    costStatus: "partial",
+    incomplete: true,
+    pricingProvenance: [{ kind: "request-observations" }],
+  };
   let answered = false;
   let approvedInput: unknown;
   const snapshot = () => ({
@@ -260,29 +271,30 @@ export function dashboardFixture(botCount = 1) {
           observedAt: now,
         },
         "usage/summary": {
+          records: 3,
+          today: recordedUsage,
+          week: recordedUsage,
+          bots: [
+            {
+              botId: "bot",
+              name: "Reviewer",
+              today: recordedUsage,
+              week: recordedUsage,
+              providers: [{ provider: "anthropic", today: recordedUsage, week: recordedUsage }],
+            },
+          ],
           inputTokens: 120,
           outputTokens: 1,
-          runs: 1,
+          runs: 3,
+          runCount: 1,
           dayStart: "2026-09-24T00:00:00Z",
           weekStart: "2026-09-21T00:00:00Z",
           asOf: now,
           providers: [
             {
               provider: "anthropic",
-              today: {
-                records: 1,
-                inputTokens: 120,
-                outputTokens: 1,
-                cost: null,
-                incomplete: true,
-              },
-              week: {
-                records: 1,
-                inputTokens: 120,
-                outputTokens: 1,
-                cost: null,
-                incomplete: true,
-              },
+              today: recordedUsage,
+              week: recordedUsage,
               daily: [
                 { date: "2026-09-18", records: 0, tokens: 0 },
                 { date: "2026-09-19", records: 0, tokens: 0 },
@@ -290,7 +302,7 @@ export function dashboardFixture(botCount = 1) {
                 { date: "2026-09-21", records: 0, tokens: 0 },
                 { date: "2026-09-22", records: 0, tokens: 0 },
                 { date: "2026-09-23", records: 0, tokens: 0 },
-                { date: "2026-09-24", records: 1, tokens: 121 },
+                { date: "2026-09-24", records: 3, tokens: 121 },
               ],
             },
           ],

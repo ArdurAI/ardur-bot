@@ -8,6 +8,8 @@ import type {
   TaskType,
 } from "@ardurbot/contracts";
 
+import { CHIEF_ACTIVITY_TEXT } from "./chief-activity.js";
+
 export const CHIEF_POLICY_VERSION = 1;
 export const CHIEF_RECONCILIATION_POLICY: Readonly<{ orphanOutcomeAfterMs: number }> = {
   // Five minutes lets late receipts settle. A missing/terminal run with no live lease
@@ -22,6 +24,9 @@ export const CHIEF_RECEIPT_TEMPLATES: Readonly<Record<ChiefReceiptKey, string>> 
   greeting: "Hi everyone.",
   "exclude-member": "Got it — I’ll keep X off this task.",
   "change-task": "Got it — I’ll check this change before the next action.",
+  "create-issue": "Got it — I’ll choose a team member to file this issue in Linear.",
+  "manage-repository": "Got it — I’ll choose a team member to manage the GitHub repository.",
+  "needs-owner": "Got it — this task needs you before I can assign it.",
 };
 
 type RankingKey = "skill" | "role" | "slot" | "active" | "queued" | "id";
@@ -32,7 +37,7 @@ export type ChiefRule = {
   preferredSkills: readonly string[];
   preferredRoles: readonly string[];
   ranking: readonly RankingKey[];
-  onNoMatch: "queue" | "prepare-and-ask" | "chief-plan";
+  onNoMatch: "queue" | "prepare-and-ask" | "chief-plan" | "needs-owner";
   receipt: ChiefReceiptKey;
 };
 const ranking: readonly RankingKey[] = ["skill", "role", "slot", "active", "queued", "id"];
@@ -83,6 +88,26 @@ export const CHIEF_OPERATION_RULES: readonly ChiefRule[] = [
     onNoMatch: "chief-plan",
     receipt: "install-tool",
   },
+  {
+    operation: { taskType: "operations", purpose: "create-issue" },
+    requires: ["linear:read-back", "linear:write"],
+    effect: "approval-required",
+    preferredSkills: ["planning", "issue-tracking", "linear"],
+    preferredRoles: ["product", "operations"],
+    ranking,
+    onNoMatch: "needs-owner",
+    receipt: "create-issue",
+  },
+  {
+    operation: { taskType: "code-change", purpose: "manage-repository" },
+    requires: ["github:read-back", "github:write"],
+    effect: "approval-required",
+    preferredSkills: ["vcs", "git", "github"],
+    preferredRoles: ["developer", "operations"],
+    ranking,
+    onNoMatch: "needs-owner",
+    receipt: "manage-repository",
+  },
 ];
 export function chiefRule(operation: ChiefOperation): ChiefRule {
   return (
@@ -109,6 +134,18 @@ const INTENT_TEMPLATES: readonly {
     purpose: "install-tool",
     pattern: /^(?:please\s+)?install\s+(?:the\s+)?(?:missing\s+)?tool[.!]?$/iu,
   },
+  {
+    key: "create-issue",
+    purpose: "create-issue",
+    pattern:
+      /^(?:please\s+)?(?:create|file|open)\s+(?:an?\s+)?(?:issue|ticket)\s+(?:in|on)\s+linear[.!]?$/iu,
+  },
+  {
+    key: "manage-repository",
+    purpose: "manage-repository",
+    pattern:
+      /^(?:please\s+)?(?:push|manage)\s+(?:the\s+)?(?:code|repository|repo)\s+(?:to|on)\s+github[.!]?$/iu,
+  },
 ];
 export const CHIEF_INDIVIDUAL_REPLY_RULES: readonly RegExp[] = [
   /^everyone,?\s+each of you\s+(?:say hello|reply|answer)[.!]?$/iu,
@@ -133,7 +170,12 @@ export function chiefIntent(input: {
   return {
     key,
     operation: {
-      taskType: row && row.key !== "greeting" ? "operations" : input.taskType,
+      taskType:
+        row && row.key !== "greeting"
+          ? row.purpose === "manage-repository"
+            ? "code-change"
+            : "operations"
+          : input.taskType,
       purpose: row?.purpose ?? "general",
     },
     receiptOnly: greeting,
@@ -209,7 +251,18 @@ export function chooseChiefMember(input: {
   });
   // An equally skilled/role-fit ready member is preferred to queueing the busy one.
   const best = eligible[0];
-  if (!best) return { kind: "plan" };
+  if (!best) {
+    if (rule.onNoMatch === "needs-owner") {
+      const blockerKey =
+        input.operation.purpose === "create-issue" ? "connect-linear" : "connect-github";
+      return {
+        kind: "needs-owner",
+        blockerKey,
+        blocker: CHIEF_ACTIVITY_TEXT[blockerKey],
+      };
+    }
+    return { kind: "plan" };
+  }
   if (best.id === input.chiefId) return { kind: "self" };
   return {
     kind: ready(best) ? "delegate" : "queue",

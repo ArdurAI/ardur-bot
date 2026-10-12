@@ -93,6 +93,13 @@ function fixture(patch: Partial<BrokerOptions> = {}) {
 }
 
 describe("worker provider broker", () => {
+  it("refuses a fresh goal request at the broker boundary before recording or transport", async () => {
+    const f = fixture({ admit: async () => false });
+    await expect(f.broker.open(f.request())).rejects.toThrow();
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.records).toEqual([]);
+  });
+
   it.each([
     ["main", false],
     ["main", true],
@@ -643,5 +650,25 @@ describe("worker provider broker", () => {
     f.broker.revoke();
     await expect(pending).rejects.toThrow("Provider request failed");
     expect(f.records.at(-1)?.request?.collection?.outcome).toBe("cancelled");
+  });
+});
+
+it("keeps the allowlisted upstream code in a pass-through broker failure", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(
+    async () =>
+      new Response(
+        JSON.stringify({ error: { code: "insufficient_quota", message: "private fixture" } }),
+        { status: 429, headers: { "content-type": "application/json" } },
+      ),
+  );
+  const f = fixture({ fetch });
+  await expect(f.broker.open(f.request())).rejects.toMatchObject({
+    failure: {
+      kind: "provider-http",
+      status: 429,
+      layer: "upstream",
+      reason: "http-rate-limit",
+      reasonCode: "insufficient_quota",
+    },
   });
 });

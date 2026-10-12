@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { AgentUsage, RequestUsageObservation, UsagePurpose } from "@ardurbot/adapter-kit";
 import type { RuntimePin } from "@ardurbot/contracts";
+import { isFrozenGoalStatus } from "@ardurbot/contracts";
 import type { PrismaClient, ThreadEvents, UsageRecord } from "@ardurbot/db";
 import {
   appendEventInTransaction,
@@ -407,6 +408,9 @@ async function writeRequestObservation(
     cost: totals.cost,
     pricingProvenance: totals.cost === null ? Prisma.JsonNull : { kind: "request-observations" },
     lastSequence: Math.max(existing?.lastSequence ?? -1, request.counter.sequence),
+    collectionFinishedAt:
+      existing?.collectionFinishedAt ??
+      (request.collection?.outcome && request.collection.outcome !== "started" ? new Date() : null),
   };
   const record = existing
     ? await tx.usageRecord.update({ where: { id: existing.id }, data })
@@ -573,6 +577,11 @@ async function recordRequestUsage(
         );
         if (existing === "replay") return null;
         if (request.admission && !existing) {
+          const goal = await tx.teamGoal.findFirst({
+            where: { rootTaskId, spaceId: run.spaceId, userId: run.userId },
+            select: { status: true },
+          });
+          if (goal && isFrozenGoalStatus(goal.status)) throw new Error("Broker goal is frozen");
           if (
             !brokerFence ||
             request.counter.sequence !== 0 ||

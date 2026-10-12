@@ -1,5 +1,6 @@
 import { ChatMarkdown } from "@ardurbot/chat-ui/web";
 import type { MessageBlock } from "@ardurbot/contracts";
+import { translatedGoalText } from "../../lib/goal-display-text";
 import { replyMarkdownProps } from "../../lib/message-text";
 
 /**
@@ -18,7 +19,9 @@ export function NarrationBlocks({
     if (block.kind === "text" || block.kind === "progress") {
       return (
         <div key={i} data-quote-message-id={block.kind === "text" ? quoteMessageId : undefined}>
-          <ChatMarkdown {...replyMarkdownProps(block)}>{block.text}</ChatMarkdown>
+          <ChatMarkdown {...replyMarkdownProps(block)}>
+            {translatedGoalText(block.text)}
+          </ChatMarkdown>
         </div>
       );
     }

@@ -454,12 +454,18 @@ export class DesktopSandboxProvider implements SandboxProvider {
     const guarded = (await this.guardrail()).paths;
     const result = await observeHostGitChanges(root, {
       path: request.path,
-      readWorktreeFile: async (relative) => {
+      readWorktreeFile: async (relative, options) => {
         const target = await localWorkspaceTarget(root, relative, true, (candidate) =>
           this.assertNotGuarded(guarded, candidate),
         );
         this.assertNotGuarded(guarded, target);
-        return readContainedWorkspaceFile(root, target, GIT_OBSERVATION_TEXT_SIDE_BYTES + 1, true);
+        return readContainedWorkspaceFile(
+          root,
+          target,
+          GIT_OBSERVATION_TEXT_SIDE_BYTES + 1,
+          true,
+          options?.signal,
+        );
       },
     });
     return redactGitChanges(result);
@@ -632,7 +638,9 @@ async function readContainedWorkspaceFile(
   target: string,
   maxBytes: number,
   preview = false,
+  signal?: AbortSignal,
 ) {
+  signal?.throwIfAborted();
   const resolvedHome = home;
   const parent = await open(
     path.dirname(target),
@@ -652,6 +660,7 @@ async function readContainedWorkspaceFile(
     const buffer = Buffer.alloc(maxBytes + 1);
     let offset = 0;
     while (offset < buffer.length) {
+      signal?.throwIfAborted();
       const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset);
       if (!bytesRead) break;
       offset += bytesRead;

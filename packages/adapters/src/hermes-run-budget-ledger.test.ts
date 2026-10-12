@@ -145,3 +145,44 @@ it.each([
     expect(f.rows.size).toBe(1);
   },
 );
+
+// No executor continuation check can mask these durable-admission assertions.
+it.each([
+  ["completed", false],
+  ["accepted", false],
+  ["completed", true],
+  ["accepted", true],
+] as const)(
+  "refuses fresh broker admission to a %s goal (descendant %s) but settles the admitted request",
+  async (status, delegated) => {
+    const f = brokerLedgerFixture({ goal: !delegated, delegated });
+    const admitted = request({ reservedTokens: 100 });
+    await f.record(admitted.start());
+    f.tx.teamGoal.findFirst.mockResolvedValue({ status });
+    await expect(f.record(request({ reservedTokens: 100 }).start())).rejects.toThrow(
+      "Broker goal is frozen",
+    );
+    expect(f.rows.size).toBe(1);
+    await f.record(admitted.snapshot({ input: 12, output: 3 }));
+    await f.record(admitted.finish("success"));
+    // A worker retains its remaining run reservation until delegation completion.
+    expect(f.root.reservedTokens).toBe(delegated ? 36_864 - 15 : 0);
+    expect([...f.rows.values()][0]).toMatchObject({
+      inputTokens: 12,
+      outputTokens: 3,
+      collectionFinishedAt: expect.any(Date),
+    });
+  },
+);
+
+it("marks final collection even when a provider reports no counts", async () => {
+  const f = brokerLedgerFixture();
+  const collector = request({ reservedTokens: 100 });
+  await f.record(collector.start());
+  expect([...f.rows.values()][0]?.collectionFinishedAt).toBeNull();
+  await f.record(collector.finish("unknown"));
+  expect([...f.rows.values()][0]).toMatchObject({
+    collectionFinishedAt: expect.any(Date),
+    coverage: "partial",
+  });
+});

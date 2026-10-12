@@ -8,6 +8,7 @@ import { snapshot as delegationSnapshot } from "./delegation-test-fixture.js";
 import {
   acceptGoal,
   admitGoalRunEffect,
+  claimGoalRunEffect,
   rejectGoal,
   reviewGoalCondition,
   submitGoal,
@@ -467,29 +468,36 @@ describePostgres("Goal admission freeze and settlement (PostgreSQL)", () => {
         idempotencyKey: `race-effect-${goal.id}`,
         request: { round },
       });
-      const frozen = submit(goal.id);
-      const [effect] = await Promise.all([attemptEffect, frozen]);
+      const [effect, frozen] = await Promise.allSettled([attemptEffect, submit(goal.id)]);
+      expect(effect.status).toBe("fulfilled");
+      if (effect.status !== "fulfilled") throw effect.reason;
+      if (effect.value.ok) {
+        // Admission won the root lock. Submission cannot snapshot a pending dispatch.
+        expect(frozen.status).toBe("rejected");
+        if (frozen.status === "rejected")
+          expect(frozen.reason).toMatchObject({ reason: "effects-open" });
+        expect((await prisma.teamGoal.findUniqueOrThrow({ where: { id: goal.id } })).status).toBe(
+          "running",
+        );
+        expect(await prisma.goalRevision.count({ where: { goalId: goal.id } })).toBe(0);
+        await prisma.externalEffect.update({
+          where: { id: effect.value.effect.id },
+          data: { status: "completed", result: { ok: true } },
+        });
+        await submit(goal.id);
+      } else {
+        expect(frozen.status).toBe("fulfilled");
+      }
       const revision = await prisma.goalRevision.findFirstOrThrow({
         where: { goalId: goal.id },
         orderBy: { attempts: "desc" },
       });
       await passConditions(goal.id, revision.id);
-      if (effect.ok) {
-        // The effect landed before the freeze committed, so acceptance must see it.
-        await expect(
-          acceptGoal(prisma, actor, { goalId: goal.id, revisionId: revision.id }),
-        ).rejects.toThrow("Unsettled effects");
-        expect((await prisma.teamGoal.findUniqueOrThrow({ where: { id: goal.id } })).status).toBe(
-          "completed",
-        );
-      } else {
-        // The freeze won: dispatch refused, acceptance settles the goal once.
-        await acceptGoal(prisma, actor, { goalId: goal.id, revisionId: revision.id });
-        expect((await prisma.teamGoal.findUniqueOrThrow({ where: { id: goal.id } })).status).toBe(
-          "accepted",
-        );
-        expect(await prisma.goalSettlement.count({ where: { goalId: goal.id } })).toBe(1);
-      }
+      await acceptGoal(prisma, actor, { goalId: goal.id, revisionId: revision.id });
+      expect((await prisma.teamGoal.findUniqueOrThrow({ where: { id: goal.id } })).status).toBe(
+        "accepted",
+      );
+      expect(await prisma.goalSettlement.count({ where: { goalId: goal.id } })).toBe(1);
     }
   });
 
@@ -537,6 +545,153 @@ describePostgres("Goal admission freeze and settlement (PostgreSQL)", () => {
     expect(verdict.type).toBe("accept");
     expect((await prisma.teamGoal.findUniqueOrThrow({ where: { id: goal.id } })).status).toBe(
       "accepted",
+    );
+  });
+  it("blocks submission before and during an approved replay on a second client", async () => {
+    const goal = await createGoal();
+    const task = await prisma.task.create({
+      data: {
+        spaceId,
+        userId,
+        botId: coordinatorBotId,
+        threadId: goal.threadId,
+        prompt: "Replay fixture",
+        status: "running",
+      },
+    });
+    const run = await prisma.run.create({
+      data: {
+        spaceId,
+        userId,
+        botId: coordinatorBotId,
+        threadId: goal.threadId,
+        taskId: task.id,
+        status: "running",
+        trigger: "follow_up",
+        goalId: goal.id,
+        delegationRootTaskId: goal.rootTaskId,
+      },
+    });
+    const effect = await prisma.externalEffect.create({
+      data: {
+        spaceId,
+        runId: run.id,
+        kind: "fixture_effect",
+        idempotencyKey: `pending-replay-${goal.id}`,
+        status: "approved",
+        request: {},
+      },
+    });
+    const other = createDb(databaseUrl!);
+    let release!: () => void;
+    const pendingDispatch = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let dispatch: Promise<unknown> | undefined;
+    const trySubmit = () =>
+      submitGoal(other.prisma, actor, {
+        goalId: goal.id,
+        summary: "Candidate",
+        artifacts: [],
+        reports: [],
+      });
+    try {
+      await expect(trySubmit()).rejects.toMatchObject({ reason: "effects-open" });
+      expect(
+        await claimGoalRunEffect(prisma, {
+          spaceId,
+          userId,
+          goalId: goal.id,
+          rootTaskId: goal.rootTaskId,
+          effectId: effect.id,
+          from: "approved",
+        }),
+      ).toBe(true);
+      // The fake dispatch remains in flight after admission, across a second connection's submit.
+      dispatch = pendingDispatch.then(() =>
+        prisma.externalEffect.update({
+          where: { id: effect.id },
+          data: { status: "completed", result: { ok: true } },
+        }),
+      );
+      await expect(trySubmit()).rejects.toMatchObject({ reason: "effects-open" });
+      expect((await prisma.teamGoal.findUniqueOrThrow({ where: { id: goal.id } })).status).toBe(
+        "running",
+      );
+      expect(await prisma.goalRevision.count({ where: { goalId: goal.id } })).toBe(0);
+      release();
+      await dispatch;
+      await expect(trySubmit()).resolves.toMatchObject({ summary: "Candidate" });
+    } finally {
+      release();
+      await dispatch;
+      await other.prisma.$disconnect();
+      await other.pool.end();
+    }
+  });
+
+  it("requires terminal attempts and requests to finish collecting without inventing unknown counts", async () => {
+    const goal = await createGoal();
+    const task = await prisma.task.create({
+      data: {
+        spaceId,
+        userId,
+        botId: coordinatorBotId,
+        threadId: goal.threadId,
+        prompt: "Collection fixture",
+        status: "completed",
+      },
+    });
+    const run = await prisma.run.create({
+      data: {
+        spaceId,
+        userId,
+        botId: coordinatorBotId,
+        threadId: goal.threadId,
+        taskId: task.id,
+        status: "completed",
+        trigger: "follow_up",
+        goalId: goal.id,
+        delegationRootTaskId: goal.rootTaskId,
+        startedAt: new Date(),
+      },
+    });
+    const attempt = await prisma.attempt.create({
+      data: { runId: run.id, fence: 1, status: "completed", finishedAt: new Date() },
+    });
+    const usage = await prisma.usageRecord.create({
+      data: {
+        spaceId,
+        userId,
+        botId: coordinatorBotId,
+        runId: run.id,
+        threadId: goal.threadId,
+        rootTaskId: goal.rootTaskId,
+        provider: "fixture",
+        model: "fixture",
+        inputTokens: 0,
+        outputTokens: 0,
+        purpose: "main",
+        coverage: "partial",
+        requestKey: `unknown-request-${goal.id}`,
+      },
+    });
+    const revision = await submit(goal.id);
+    await passConditions(goal.id, revision.id);
+    const accept = () => acceptGoal(prisma, actor, { goalId: goal.id, revisionId: revision.id });
+    await expect(accept()).rejects.toMatchObject({ reason: "work-active" });
+    await prisma.attempt.update({
+      where: { id: attempt.id },
+      data: { usageSettledAt: new Date() },
+    });
+    await expect(accept()).rejects.toMatchObject({ reason: "work-active" });
+    await prisma.usageRecord.update({
+      where: { id: usage.id },
+      data: { collectionFinishedAt: new Date() },
+    });
+    await expect(accept()).resolves.toMatchObject({ type: "accept" });
+    expect((await prisma.usageRecord.findUniqueOrThrow({ where: { id: usage.id } })).coverage).toBe(
+      "partial",
     );
   });
 });

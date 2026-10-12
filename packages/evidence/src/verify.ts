@@ -19,7 +19,10 @@ export interface VerificationFailure {
   code: VerificationCode;
   message: string;
 }
+export type EvidenceSignerMatch = "expected_key" | "different_key" | "no_expected_key";
+
 export interface VerificationResult {
+  signerMatch: EvidenceSignerMatch | null;
   ok: boolean;
   recordCount: number;
   headReceiptId: string | null;
@@ -145,12 +148,13 @@ function verificationKey(publicKey: KeyObject | string): KeyObject {
   return key;
 }
 
-export function verifyChain(
+function verifyChainContents(
   jwsList: readonly string[],
   publicKey: KeyObject | string,
 ): VerificationResult {
   const failures: VerificationFailure[] = [];
   const result: VerificationResult = {
+    signerMatch: null,
     ok: false,
     recordCount: Array.isArray(jwsList) ? jwsList.length : 0,
     headReceiptId: null,
@@ -235,12 +239,12 @@ export function verifyChain(
   return result;
 }
 
-export function verifySeal(
+function verifySealContents(
   sealJwt: string,
   jwsList: readonly string[],
   publicKey: KeyObject | string,
 ): VerificationResult {
-  const result = verifyChain(jwsList, publicKey);
+  const result = verifyChainContents(jwsList, publicKey);
   const index = result.recordCount;
   const fail = (code: VerificationCode, message: string) => {
     result.failures.push({ index, code, message });
@@ -303,4 +307,40 @@ export function verifySeal(
   }
   result.ok = result.failures.length === 0;
   return result;
+}
+
+function withSignerMatch(
+  result: VerificationResult,
+  publicKey: KeyObject | string,
+  expectedFingerprint?: string,
+): VerificationResult {
+  if (result.ok) {
+    result.signerMatch = !expectedFingerprint?.trim()
+      ? "no_expected_key"
+      : evidenceKeyId(publicKey) === expectedFingerprint.trim()
+        ? "expected_key"
+        : "different_key";
+  }
+  return result;
+}
+
+export function verifyChain(
+  jwsList: readonly string[],
+  publicKey: KeyObject | string,
+  expectedFingerprint?: string,
+): VerificationResult {
+  return withSignerMatch(verifyChainContents(jwsList, publicKey), publicKey, expectedFingerprint);
+}
+
+export function verifySeal(
+  sealJwt: string,
+  jwsList: readonly string[],
+  publicKey: KeyObject | string,
+  expectedFingerprint?: string,
+): VerificationResult {
+  return withSignerMatch(
+    verifySealContents(sealJwt, jwsList, publicKey),
+    publicKey,
+    expectedFingerprint,
+  );
 }

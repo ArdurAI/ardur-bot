@@ -2,20 +2,32 @@ import { execFileSync } from "node:child_process";
 import {
   chmod,
   copyFile,
+  lstat,
   mkdir,
   mkdtemp,
+  open,
+  readdir,
+  readFile,
   realpath,
   rm,
   stat,
   symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
-import { afterEach, describe, expect, it } from "vitest";
+import { forceRacyGitEdit } from "@ardurbot/testkit/racy-git-fixture";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
-import { assertSafeGitMetadata, createGitRunner } from "./git-reader.js";
+import {
+  assertSafeGitMetadata,
+  copyPinnedFile,
+  createGitRunner,
+  observeHostGitChanges,
+} from "./git-reader.js";
 
 const context: AdapterContext = {
   operationId: "operation",
@@ -118,6 +130,43 @@ it("reports a plain folder as not a repository", async () => {
   expect(result).toEqual({ kind: "not-repository" });
 });
 
+it("detects a same-size edit whose mtime equals the index mtime", async () => {
+  const { provider, computer, home, git } = await fixture();
+  git(["init", "-q", "-b", "main"]);
+  git(["config", "index.version", "2"]);
+  const file = path.join(home, "race.txt");
+  await writeFile(file, "old\n");
+  git(["add", "race.txt"]);
+  git(["commit", "-q", "-m", "base"]);
+  const index = path.join(home, ".git", "index");
+  await forceRacyGitEdit(home, "race.txt", "new\n");
+  const timestamp = await stat(index);
+  const before = await readFile(index);
+
+  expect(await observe(provider, computer)).toMatchObject({
+    kind: "status",
+    entries: [{ path: "race.txt", unstaged: true }],
+  });
+  expect(await observe(provider, computer, { path: "race.txt" })).toMatchObject({
+    kind: "diff",
+    before: "old",
+    after: "new",
+  });
+  expect(await readFile(index)).toEqual(before);
+  expect((await stat(index)).mtimeMs).toBe(timestamp.mtimeMs);
+});
+
+it("does not leave a deadline timer for a plain folder", async () => {
+  const { home } = await fixture();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    expect(await observeHostGitChanges(home)).toEqual({ kind: "not-repository" });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("refuses a repository discovered above the bot folder", async () => {
   const { provider, computer, home, git } = await fixture();
   git(["init", "-q", "-b", "main"], path.dirname(home));
@@ -167,6 +216,17 @@ it("refuses symlinked metadata that could leak an outside file", async () => {
   } finally {
     await rm(outside, { force: true });
   }
+});
+
+it("returns unavailable promptly when a metadata entry is a FIFO", async () => {
+  if (process.platform === "win32") return;
+  const { provider, computer, home, git } = await fixture();
+  git(["init", "-q", "-b", "main"]);
+  await rm(path.join(home, ".git", "index"), { force: true });
+  execFileSync("mkfifo", [path.join(home, ".git", "index")]);
+  const started = Date.now();
+  expect(await observe(provider, computer)).toEqual({ kind: "unavailable" });
+  expect(Date.now() - started).toBeLessThan(1_000);
 });
 
 it("never executes repository configuration: fsmonitor, external diff and textconv stay silent", async () => {
@@ -508,6 +568,180 @@ it("honours the Team subfolder root so one bot cannot read a sibling's repositor
     scopedContext,
   );
   expect(["unavailable", "not-repository"]).toContain(escapeAttempt.kind);
+});
+
+it("stops the metadata copy when the deadline runs out, returns unavailable and removes the temporary view", async () => {
+  const { home, git } = await fixture();
+  git(["init", "-q", "-b", "main"]);
+  await writeFile(path.join(home, "app.txt"), "hello\n");
+  git(["add", "app.txt"]);
+  git(["commit", "-q", "-m", "init"]);
+
+  const initialTempViews = (await readdir(tmpdir())).filter((f) =>
+    f.startsWith("git-observation-"),
+  );
+
+  const dummyHandle = await open(path.join(home, ".git", "HEAD"));
+  const proto = Object.getPrototypeOf(dummyHandle);
+  const budgetMs = 60_000;
+  let chunksRead = 0;
+  const source = new Readable({
+    read() {
+      chunksRead++;
+      if (chunksRead === 1) {
+        this.push(Buffer.from("ref: refs/heads/main\n"));
+        // Expire the deadline only once copying has started. Without pipeline
+        // cancellation the stream reaches its second read and ends normally.
+        vi.advanceTimersByTime(budgetMs);
+      } else this.push(null);
+    },
+  });
+  const copy = vi.spyOn(proto, "createReadStream").mockReturnValue(source);
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+  try {
+    const deadlineMs = Date.now() + budgetMs;
+    const result = await observeHostGitChanges(home, { deadlineMs });
+    expect(result).toEqual({ kind: "unavailable" });
+    expect(chunksRead).toBe(1);
+    expect(copy).toHaveBeenCalledOnce();
+    expect(source.errored).toMatchObject({ name: "AbortError" });
+
+    const remainingTempViews = (await readdir(tmpdir())).filter((f) =>
+      f.startsWith("git-observation-"),
+    );
+    expect(remainingTempViews).toEqual(initialTempViews);
+  } finally {
+    copy.mockRestore();
+    vi.useRealTimers();
+    source.destroy();
+    await dummyHandle.close();
+  }
+}, 10_000);
+
+describe("copyPinnedFile", () => {
+  async function pinnedFixture() {
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), "git-pin-")));
+    roots.push(root);
+    const source = path.join(root, "index");
+    await writeFile(source, "real index\n");
+    const info = await lstat(source);
+    return { root, source, info };
+  }
+
+  it("copies a metadata file whose identity matches the earlier lstat", async () => {
+    const { root, source, info } = await pinnedFixture();
+    const destination = path.join(root, "view-index");
+    await copyPinnedFile(source, destination, info);
+    expect(await readFile(destination, "utf8")).toBe("real index\n");
+  });
+
+  it("preserves sub-millisecond source timestamps on the private copy", async () => {
+    const { root, source } = await pinnedFixture();
+    await utimes(source, 1_700_000_000.123456, 1_700_000_000.654321);
+    const info = await lstat(source);
+    const destination = path.join(root, "view-index");
+    await copyPinnedFile(source, destination, info);
+    const copied = await stat(destination);
+    // Allow filesystem rounding below a microsecond, not Date's millisecond loss.
+    expect(Math.abs(copied.atimeMs - info.atimeMs)).toBeLessThanOrEqual(0.001);
+    expect(Math.abs(copied.mtimeMs - info.mtimeMs)).toBeLessThanOrEqual(0.001);
+    expect(await readFile(destination, "utf8")).toBe("real index\n");
+  });
+
+  it("refuses a copy whose signal is already aborted", async () => {
+    const { root, source, info } = await pinnedFixture();
+    const destination = path.join(root, "view-index");
+    const controller = new AbortController();
+    controller.abort();
+    await expect(copyPinnedFile(source, destination, info, controller.signal)).rejects.toThrow();
+    await expect(readFile(destination, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("removes the destination when copying is aborted after the first chunk", async () => {
+    const { root, source } = await pinnedFixture();
+    await writeFile(source, Buffer.alloc(256 * 1024, "x"));
+    const info = await lstat(source);
+    const destination = path.join(root, "view-index");
+    const controller = new AbortController();
+    const handle = await open(source);
+    const proto = Object.getPrototypeOf(handle);
+    const original = proto.createReadStream;
+    let chunksRead = 0;
+    const copy = vi.spyOn(proto, "createReadStream").mockImplementation(function (
+      this: typeof handle,
+    ) {
+      const stream = original.call(this, { highWaterMark: 1024 });
+      stream.on("data", () => {
+        chunksRead++;
+        if (chunksRead === 1) controller.abort(new Error("Copy cancelled"));
+      });
+      return stream;
+    });
+    try {
+      await expect(
+        copyPinnedFile(source, destination, info, controller.signal),
+      ).rejects.toMatchObject({
+        name: "AbortError",
+      });
+      expect(chunksRead).toBe(1);
+      await expect(readFile(destination)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      copy.mockRestore();
+      await handle.close();
+    }
+  });
+
+  it("refuses a symlink swapped in between the lstat and the copy", async () => {
+    if (process.platform === "win32") return;
+    const { root, source, info } = await pinnedFixture();
+    const outside = path.join(root, "outside.md");
+    await writeFile(outside, "secret\n");
+    // The race: the check saw a regular file, then the entry became a link.
+    await rm(source);
+    await symlink(outside, source);
+    const destination = path.join(root, "view-index");
+    await expect(copyPinnedFile(source, destination, info)).rejects.toThrow();
+    await expect(readFile(destination, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("refuses a same-size file recreated in place even if the inode number is reused", async () => {
+    const { root, source, info } = await pinnedFixture();
+    // Same length as the fixture, so only the change time can reveal the swap.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await rm(source);
+    await writeFile(source, "fake index\n");
+    const destination = path.join(root, "view-index");
+    await expect(copyPinnedFile(source, destination, info)).rejects.toThrow(
+      /changed while it was being copied/,
+    );
+  });
+
+  it("refuses a different regular file swapped in between the lstat and the copy", async () => {
+    const { root, source, info } = await pinnedFixture();
+    await rm(source);
+    await writeFile(source, "imposter\n");
+    const destination = path.join(root, "view-index");
+    await expect(copyPinnedFile(source, destination, info)).rejects.toThrow(
+      /changed while it was being copied/,
+    );
+  });
+
+  it("refuses a FIFO swapped in for the metadata file without waiting for a writer", async () => {
+    if (process.platform === "win32") return;
+    const { root, source, info } = await pinnedFixture();
+    await rm(source);
+    // The race: the check saw a regular file, then the entry became a FIFO with
+    // no writer. A blocking open would wait here indefinitely; the copy must
+    // refuse promptly instead.
+    execFileSync("mkfifo", [source]);
+    const destination = path.join(root, "view-index");
+    const started = Date.now();
+    await expect(copyPinnedFile(source, destination, info)).rejects.toThrow(
+      /changed while it was being copied/,
+    );
+    expect(Date.now() - started).toBeLessThan(1_000);
+    await expect(readFile(destination, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
 });
 
 describe("assertSafeGitMetadata", () => {

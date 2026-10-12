@@ -159,6 +159,8 @@ describe("lingui catalogs", () => {
       });
       for (const message of [
         "Got it — I’ll choose a team member to put this in Notion.",
+        "Got it — I’ll choose a team member to file this issue in Linear.",
+        "Got it — I’ll choose a team member to manage the GitHub repository.",
         "Got it — I’ll check what’s missing and ask before installing it.",
         "Got it — I’ll check the request and choose the next step.",
         "Hi everyone.",
@@ -532,12 +534,36 @@ describe("lingui catalogs", () => {
     expect(catalog).toContain('msgid "Language"\nmsgstr "Язык"');
     expect(catalog).toContain('msgid "Cancel"\nmsgstr "Отмена"');
     expect(catalog).toContain(
-      'msgid "{0} runs · {1} tokens"\nmsgstr "Запусков: {0} · токенов: {1}"',
+      'msgid "{runs, plural, one {# run} other {# runs}}"\nmsgstr "{runs, plural, one {# запуск} few {# запуска} many {# запусков} other {# запуска}}"',
+    );
+    expect(catalog).toContain(
+      'msgid "{tokens, plural, one {# token} other {# tokens}}"\nmsgstr "{tokens, plural, one {# токен} few {# токена} many {# токенов} other {# токена}}"',
     );
     expect(catalog).toContain(
       'msgstr "{0, plural, one {# модель} few {# модели} many {# моделей} other {# модели}}"',
     );
   });
+
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates the current usage run and token plurals in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "{runs, plural, one {# run} other {# runs}}",
+        "{tokens, plural, one {# token} other {# tokens}}",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation?.trim(), `${locale}: ${message}`).toBeTruthy();
+        if (locale === "en") expect(entry?.translation).toBe(message);
+        else expect(entry?.translation).not.toBe(message);
+      }
+    },
+  );
 
   it.each(["de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     "translates credential classification controls in %s",
@@ -859,6 +885,8 @@ describe("lingui catalogs", () => {
     // The table's default sentences (packages/contracts/src/failure-categories.ts) plus
     // the blocked-card frame they render inside.
     const sentences = [
+      "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan.",
+      "This connection",
       "{runtime}'s usage limit is reached. Try again after it resets.",
       "Sign in to {runtime} on this computer, then try again.",
       "{runtime} reached this run's turn limit. Narrow the task and try again.",

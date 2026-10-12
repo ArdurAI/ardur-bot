@@ -32,7 +32,7 @@ export function brokerLedgerFixture(
     coordinatorThreadId: run.threadId,
     tokenLimit: DELEGATION_LIMITS.tokens as number,
     usedTokens: patch.used ?? 0,
-    reservedTokens: 0,
+    reservedTokens: patch.delegated ? 36_864 : 0,
     maxConcurrent: DELEGATION_LIMITS.concurrent as number,
     activeDescendants: 0,
     cancelRequestedAt: null as Date | null,
@@ -57,9 +57,13 @@ export function brokerLedgerFixture(
   };
   function updateRoot({ data }: { data: Record<string, unknown> }) {
     for (const [key, value] of Object.entries(data)) {
-      if (typeof value === "object" && value !== null && "increment" in value) {
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        ("increment" in value || "decrement" in value)
+      ) {
         const field = key as "usedTokens" | "reservedTokens";
-        root[field] += Number(value.increment);
+        root[field] += "increment" in value ? Number(value.increment) : -Number(value.decrement);
       } else Object.assign(root, { [key]: value });
     }
     return structuredClone(root);
@@ -71,7 +75,12 @@ export function brokerLedgerFixture(
       findUniqueOrThrow: vi.fn(async () => structuredClone(run)),
     },
     task: { findFirst: vi.fn(async () => ({ id: run.taskId })) },
-    teamGoal: { findUnique: vi.fn(async () => (run.goalId ? { id: run.goalId } : null)) },
+    teamGoal: {
+      findFirst: vi.fn(
+        async () => (patch.goal ? { status: "running" } : null) as { status: string } | null,
+      ),
+      findUnique: vi.fn(async () => (run.goalId ? { id: run.goalId } : null)),
+    },
     goalSettlement: { findFirst: vi.fn(async () => null) },
     goalSettlementDiscrepancy: { create: vi.fn(async () => ({})) },
     delegationRoot: {

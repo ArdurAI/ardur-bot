@@ -191,6 +191,7 @@ import {
 import { desktopBridge } from "../lib/desktop";
 import { countOwnerWaiting, openDockSnapshot, publishDockWaitingCount } from "../lib/dock-badge";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
+import { translatedGoalText } from "../lib/goal-display-text";
 import { INSIGHT_ACTION_EVENT, openInsightAction } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
 import {
@@ -411,6 +412,9 @@ const SlashPicker = lazy(() => import("../components/composer/SlashPicker"));
 const ViewControls = lazy(() =>
   import("./workspace/ViewControls").then((module) => ({ default: module.ViewControls })),
 );
+const GoalNamedResult = lazy(() =>
+  import("./GoalNamedResult").then((module) => ({ default: module.GoalNamedResult })),
+);
 
 const ATTACHMENT_ACCEPT = ATTACHMENT_ALLOWED_MIME_TYPES.join(",");
 /** Identity colour for bots the roster no longer knows about. */
@@ -548,27 +552,27 @@ export function ShellPage({
   const registerTerminalCloseGuard = useCallback((guard: (() => boolean) | null) => {
     terminalCloseGuard.current = guard;
   }, []);
-  const setPanel = useCallback((next: Panel | ((current: Panel) => Panel)) => {
-    const target = typeof next === "function" ? next(panelRef.current) : next;
-    if (target === null && panelRef.current === "computer") {
-      workspaceLayoutUpdateRef.current?.((layout) => ({
-        ...layout,
-        visible: false,
-        expanded: false,
-      }));
+  const setPanel = useCallback(
+    (next: Panel | ((current: Panel) => Panel)) => {
+      const target = typeof next === "function" ? next(panelRef.current) : next;
+      if (target !== panelRef.current) {
+        if (panelRef.current === "computer") {
+          const files = workspaceFilesSnapshot();
+          if (files.saving || (files.dirty && !window.confirm(t`Unsaved changes`))) return false;
+        }
+        if (terminalCloseGuard.current && !terminalCloseGuard.current()) return false;
+      }
+      panelRef.current = target;
+      setPanelUnchecked(target);
+      workspaceLayoutUpdateRef.current?.((layout) =>
+        target === "computer"
+          ? { ...(layout.open.length ? layout : openWorkspaceView(layout, "tasks")), visible: true }
+          : { ...layout, visible: false, expanded: false },
+      );
       return true;
-    }
-    if (target !== panelRef.current && terminalCloseGuard.current && !terminalCloseGuard.current())
-      return false;
-    panelRef.current = target;
-    setPanelUnchecked(target);
-    workspaceLayoutUpdateRef.current?.((layout) =>
-      target === "computer"
-        ? { ...(layout.open.length ? layout : openWorkspaceView(layout, "tasks")), visible: true }
-        : { ...layout, visible: false, expanded: false },
-    );
-    return true;
-  }, []);
+    },
+    [t],
+  );
   const paneReturnFocus = useRef<HTMLElement | null>(null);
   const workspaceVisibleRef = useRef(false);
   const workspaceScopeRef = useRef<string | null>(null);
@@ -904,6 +908,8 @@ export function ShellPage({
     inputTokens: number;
     outputTokens: number;
     runs: number;
+    records?: number;
+    runCount?: number;
   } | null>(null);
   // Owned here so the menu survives the DashboardPage remount when bootstrap resolves its space.
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -3973,7 +3979,15 @@ export function ShellPage({
             </div>
           </div>
           <div ref={setWorkspaceControlsHost} />
-          {inGroup && goal && goal.groupId === groupId ? (
+          {inGroup && groupId && searchParams.get("goal") && searchParams.get("revision") ? (
+            <Suspense fallback={null}>
+              <GoalNamedResult
+                groupId={groupId}
+                goalId={searchParams.get("goal")!}
+                revisionId={searchParams.get("revision")!}
+              />
+            </Suspense>
+          ) : inGroup && goal && goal.groupId === groupId ? (
             <GroupGoalStrip
               goal={goal}
               onRefresh={async () => {
@@ -4267,6 +4281,10 @@ export function ShellPage({
                     expanded={workspaceExpanded}
                     onExpand={() => setWorkspaceExpanded((value) => !value)}
                     onClose={closeWorkspace}
+                    onClosePanel={() => {
+                      if (!setPanel(null)) return;
+                      setWorkspaceFocusRequest({ scope: workspaceKey, view: null });
+                    }}
                     onRetry={() => {
                       setWorkspaceRevision((value) => value + 1);
                       void refreshThread(active.id).catch(() => undefined);
@@ -7095,6 +7113,8 @@ const MessageView = memo(function MessageView({
           );
         }
         if (block.kind === "chief_receipt") {
+          if (block.chiefDispatch)
+            return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;
           return (
             <div
               key={i}
@@ -7340,7 +7360,7 @@ const MessageView = memo(function MessageView({
                     ? t`${botName}'s sign-in for the group model expired. Reconnect it or change the group model.`
                     : block.notice?.id === "group-model-unavailable"
                       ? t`${botName} couldn't use the model set for this group. Change the group model or check this bot's settings.`
-                      : block.text;
+                      : translatedGoalText(block.text);
           return (
             <div key={i} className="flex w-fit max-w-full justify-start">
               <div

@@ -170,6 +170,24 @@ function fixture(
 }
 
 describe("Hermes run and root budget separation", () => {
+  it.each(["completed", "accepted"])(
+    "refuses a %s goal before either provider transport starts",
+    async (status) => {
+      for (const translated of [false, true]) {
+        const f = fixture({ goal: true, translated });
+        // Plenty of budget keeps its unrelated ceiling from masking freeze admission.
+        f.ledger.root.tokenLimit = runAllowance;
+        f.ledger.tx.teamGoal.findFirst.mockResolvedValue({ status });
+        await expect(f.broker.open(f.request())).rejects.toMatchObject({
+          failure: { kind: "grant-refused", category: "run-budget" },
+        });
+        expect(f.fetch).not.toHaveBeenCalled();
+        expect(f.streamSimple).not.toHaveBeenCalled();
+        expect(f.ledger.rows.size).toBe(0);
+      }
+    },
+  );
+
   it("completes a real 56-tool host request without treating the default delegation ceiling as its run limit", async () => {
     expect(tools).toHaveLength(56);
     expect(Buffer.byteLength(requiredContext)).toBeLessThanOrEqual(16_384);

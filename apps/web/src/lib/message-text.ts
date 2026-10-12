@@ -4,8 +4,8 @@ import {
   isReasoningSummaryBlock,
   isStreamingTextBlock,
   isToolActivityBlock,
-  workRecordEntries,
 } from "@ardurbot/core";
+import { translatedGoalText } from "./goal-display-text";
 import { messageProviderLabel } from "./messaging";
 
 /**
@@ -34,7 +34,7 @@ export function copyableMessageText(message: ThreadMessage): string {
         return `${messageProviderLabel(block.provider, block.transport)} · ${block.fromLabel}: ${block.text}`;
       }
       if (block.kind === "text" || block.kind === "progress" || block.kind === "ask") {
-        return block.text;
+        return translatedGoalText(block.text);
       }
       return "";
     })

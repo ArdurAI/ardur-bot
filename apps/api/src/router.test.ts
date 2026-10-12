@@ -4,10 +4,11 @@ import { join } from "node:path";
 import {
   COMPUTER_SCREEN_UNAVAILABLE,
   ComputerScreenUnavailableError,
+  defaultCatalogModelId,
   NATIVE_HOST_OWNER_MESSAGE,
 } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
-import { REPLY_QUOTE_MAX_LENGTH } from "@ardurbot/contracts";
+import { MODEL_ID_MAX_LENGTH, REPLY_QUOTE_MAX_LENGTH } from "@ardurbot/contracts";
 import { openScreenCapability } from "@ardurbot/core/node/screen-capability";
 import type { PrismaClient } from "@ardurbot/db";
 import {
@@ -1179,7 +1180,10 @@ describe("model credential persistence", () => {
           updatedAt: new Date(0),
         })),
       },
-      secret: { create: vi.fn().mockResolvedValue({}) },
+      secret: {
+        create: vi.fn().mockResolvedValue({}),
+        findFirst: vi.fn().mockResolvedValue({ ciphertext: "cipher" }),
+      },
       spaceModelPreference: {
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
         upsert,
@@ -1193,6 +1197,14 @@ describe("model credential persistence", () => {
       },
       secrets: {
         put: vi.fn().mockResolvedValue({ id: "secret-1", ciphertext: "cipher" }),
+        load: vi.fn().mockReturnValue(
+          JSON.stringify({
+            type: "oauth",
+            access: "fixture-access",
+            refresh: "fixture-refresh",
+            expires: 0,
+          }),
+        ),
       },
       oauthLogins: {
         begin,
@@ -1222,17 +1234,17 @@ describe("model credential persistence", () => {
     return response;
   }
 
-  it.each([undefined, "gpt-5.3-codex-spark", "gpt-6-sol"])(
-    "recommends only for an omitted Codex connection choice %s",
+  it.each([undefined, "gpt-4.1", "gpt-4.1-mini"])(
+    "chooses a default only for an omitted API-key model choice %s",
     async (modelId) => {
       const { upsert, handler } = persistDeps();
       const response = await call(handler, "models/connect", {
-        provider: "openai-codex",
+        provider: "openai",
         apiKey: "test-credential",
         modelId,
       });
       expect(response.status).toBe(200);
-      const expected = modelId ?? "gpt-6-astra";
+      const expected = modelId ?? defaultCatalogModelId("openai");
       expect(upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           create: expect.objectContaining({ modelId: expected }),
@@ -1279,7 +1291,12 @@ describe("model credential persistence", () => {
     "sets a default without replacing explicit choice %s",
     async (modelId) => {
       const { tx, upsert, handler } = persistDeps();
-      tx.userModelCredential.findFirst.mockResolvedValue({ id: "cred-1" } as never);
+      tx.userModelCredential.findFirst.mockResolvedValue({
+        id: "cred-1",
+        provider: "openai-codex",
+        label: "Connection",
+        secretId: "secret-1",
+      } as never);
       const response = await call(handler, "models/setDefault", {
         provider: "openai-codex",
         modelId,
@@ -1290,6 +1307,240 @@ describe("model credential persistence", () => {
           create: expect.objectContaining({ modelId: modelId || "gpt-6-astra" }),
         }),
       );
+    },
+  );
+
+  it("saves the explicitly chosen connection instead of the newest one", async () => {
+    const { tx, upsert, handler } = persistDeps();
+    tx.userModelCredential.findFirst.mockResolvedValue({
+      id: "chosen",
+      provider: "openai-codex",
+      label: "Connection",
+      secretId: "secret-1",
+    } as never);
+    const response = await call(handler, "models/setDefault", {
+      provider: "openai-codex",
+      modelId: "gpt-6-sol",
+      credentialId: "chosen",
+    });
+    expect(response.status).toBe(200);
+    expect(tx.userModelCredential.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: actor.userId, provider: "openai-codex", id: "chosen" },
+      }),
+    );
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ credentialId: "chosen", modelId: "gpt-6-sol" }),
+      }),
+    );
+  });
+
+  it("refuses a foreign connection without falling back to another credential", async () => {
+    const { tx, upsert, handler } = persistDeps();
+    const response = await call(handler, "models/setDefault", {
+      provider: "openai-codex",
+      modelId: "gpt-6-sol",
+      credentialId: "foreign",
+    });
+    expect(response.status).toBe(404);
+    expect(tx.userModelCredential.findFirst).toHaveBeenCalledOnce();
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unknown model before changing the default", async () => {
+    const { tx, upsert, handler } = persistDeps();
+    tx.userModelCredential.findFirst.mockResolvedValue({
+      id: "cred-1",
+      provider: "openai-codex",
+      label: "Connection",
+      secretId: "secret-1",
+    } as never);
+    const response = await call(handler, "models/setDefault", {
+      provider: "openai-codex",
+      modelId: "unknown",
+      credentialId: "cred-1",
+    });
+    expect(response.status).toBe(400);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it.each(["copy-provider", "provider-a", "openai", "openrouter"])(
+    "connects uncatalogued API model ids for %s",
+    async (provider) => {
+      const { handler, upsert } = persistDeps();
+      const response = await call(handler, "models/connect", {
+        provider,
+        modelId: "vendor/custom-model",
+        apiKey: "fake-model-key",
+      });
+      expect(response.status).toBe(200);
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ modelId: "vendor/custom-model" }),
+        }),
+      );
+    },
+  );
+  it("sets an uncatalogued default on the chosen API-key connection", async () => {
+    const { deps, tx, upsert } = persistDeps();
+    tx.userModelCredential.findFirst.mockResolvedValue({
+      id: "chosen",
+      provider: "duplicate-provider",
+      secretId: "secret-1",
+      label: "Chosen",
+    } as never);
+    vi.mocked(deps.secrets.load).mockReturnValue("fake-model-key");
+    const response = await call(new RPCHandler(createRouter(deps)), "models/setDefault", {
+      provider: "duplicate-provider",
+      modelId: "newer/selected",
+      credentialId: "chosen",
+    });
+    expect(response.status).toBe(200);
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ credentialId: "chosen", modelId: "newer/selected" }),
+      }),
+    );
+  });
+  describe.each(["connect", "setDefault", "beginOAuth"])("models/%s id validation", (route) => {
+    it.each([
+      { name: "over-long", modelId: "m".repeat(MODEL_ID_MAX_LENGTH + 1) },
+      { name: "NUL", modelId: "vendor/\u0000model" },
+      { name: "tab", modelId: "vendor/\tmodel" },
+      { name: "line break", modelId: "vendor/\nmodel" },
+      { name: "leading line break", modelId: "\nmodel" },
+      { name: "trailing carriage return", modelId: "model\r" },
+      { name: "delete", modelId: "vendor/\u007fmodel" },
+      { name: "C1 control", modelId: "vendor/\u0085model" },
+    ])("refuses $name ids before side effects", async ({ modelId }) => {
+      const { deps, tx, upsert, begin } = persistDeps();
+      tx.userModelCredential.findFirst.mockResolvedValue({
+        id: "chosen",
+        provider: "copy-provider",
+        secretId: "secret-1",
+        label: "Chosen",
+      } as never);
+      vi.mocked(deps.secrets.load).mockReturnValue("fake-model-key");
+      const response = await call(new RPCHandler(createRouter(deps)), `models/${route}`, {
+        provider: "copy-provider",
+        modelId,
+        apiKey: "fake-model-key",
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ json: { message: "Choose a model." } });
+      expect(upsert).not.toHaveBeenCalled();
+      expect(tx.userModelCredential.create).not.toHaveBeenCalled();
+      expect(deps.secrets.put).not.toHaveBeenCalled();
+      expect(deps.prisma.$transaction).not.toHaveBeenCalled();
+      expect(begin).not.toHaveBeenCalled();
+    });
+  });
+  it("refuses unreadable credentials with a friendly message before changing defaults", async () => {
+    const { deps, tx, upsert } = persistDeps();
+    tx.userModelCredential.findFirst.mockResolvedValue({
+      id: "chosen",
+      provider: "openai",
+      secretId: "secret-1",
+      label: "Chosen",
+    } as never);
+    vi.mocked(deps.secrets.load).mockImplementation(() => {
+      throw new Error("unreadable fixture");
+    });
+    const response = await call(new RPCHandler(createRouter(deps)), "models/setDefault", {
+      provider: "openai",
+      modelId: "gpt-4.1",
+      credentialId: "chosen",
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ json: { message: "Connect that model first." } });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it("edits only the explicitly chosen API-key connection", async () => {
+    const { handler, deps, tx } = persistDeps();
+    const chosen = {
+      id: "chosen",
+      provider: "openai",
+      label: "Chosen",
+      secretId: "old-secret",
+      userId: actor.userId,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    };
+    deps.prisma.userModelCredential.findFirst = vi.fn().mockResolvedValue(chosen);
+    tx.userModelCredential.findFirst.mockResolvedValue(chosen);
+    const update = vi.fn().mockResolvedValue({ ...chosen, secretId: "secret-1" });
+    Object.assign(tx.userModelCredential, { update, count: vi.fn().mockResolvedValue(0) });
+    Object.assign(tx, { userVoiceCredential: { count: vi.fn().mockResolvedValue(0) } });
+    Object.assign(tx.secret, { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) });
+    const response = await call(handler, "models/connect", {
+      provider: "openai",
+      modelId: "gpt-4.1",
+      apiKey: "test-credential",
+      credentialId: "chosen",
+      label: "Chosen",
+    });
+    expect(response.status).toBe(200);
+    expect(tx.userModelCredential.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: actor.userId, provider: "openai", id: "chosen" },
+      }),
+    );
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "chosen" } }));
+  });
+
+  it("rejects a raw API key for a sign-in-only model before persistence", async () => {
+    const { handler, deps, upsert } = persistDeps();
+    const response = await call(handler, "models/connect", {
+      provider: "openai-codex",
+      modelId: "gpt-6-sol",
+      apiKey: "test-credential",
+    });
+    expect(response.status).toBe(400);
+    expect(upsert).not.toHaveBeenCalled();
+    expect(deps.secrets.put).not.toHaveBeenCalled();
+  });
+
+  it("rejects a foreign connection edit before encrypting a replacement key", async () => {
+    const { handler, deps, upsert } = persistDeps();
+    const response = await call(handler, "models/connect", {
+      provider: "openai",
+      modelId: "gpt-4.1",
+      apiKey: "test-credential",
+      credentialId: "foreign",
+    });
+    expect(response.status).toBe(404);
+    expect(upsert).not.toHaveBeenCalled();
+    expect(deps.secrets.put).not.toHaveBeenCalled();
+  });
+
+  it.each(["missing", "unreadable"])(
+    "does not advertise a %s stored credential as ready",
+    async (state) => {
+      const { deps } = persistDeps();
+      deps.prisma.userModelCredential = {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "connection",
+            provider: "openai",
+            label: "Connection",
+            secretId: "secret-1",
+            preferences: [],
+          },
+        ]),
+      } as never;
+      deps.prisma.secret = {
+        findMany: vi
+          .fn()
+          .mockResolvedValue(state === "missing" ? [] : [{ id: "secret-1", ciphertext: "cipher" }]),
+      } as never;
+      deps.secrets.load = vi.fn().mockImplementation(() => {
+        throw new Error("Cannot decrypt fixture");
+      });
+      const response = await call(new RPCHandler(createRouter(deps)), "models/credentials", {});
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ json: [{ id: "connection", hasKey: false }] });
     },
   );
 
@@ -1448,7 +1699,7 @@ describe("model credential persistence", () => {
     });
   });
 
-  it("does not persist a missing model id as the string null", async () => {
+  it("rejects an unknown provider and missing model instead of storing null", async () => {
     const { upsert, handler } = persistDeps({ envDefaultModel: "null" });
 
     const response = await call(handler, "models/connect", {
@@ -1456,12 +1707,7 @@ describe("model credential persistence", () => {
       apiKey: "sk-test-key-123",
       modelId: undefined,
     });
-    expect(response.status).toBe(200);
-    expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({ modelId: null }),
-        update: expect.objectContaining({ modelId: null }),
-      }),
-    );
+    expect(response.status).toBe(400);
+    expect(upsert).not.toHaveBeenCalled();
   });
 });

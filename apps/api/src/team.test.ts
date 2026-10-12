@@ -1,5 +1,6 @@
 import type { Actor, TaskCard } from "@ardurbot/contracts";
 import { TaskCardSchema, TeamBoardSchema } from "@ardurbot/contracts";
+import { failureCategoryMessage } from "@ardurbot/contracts/failure-categories";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { acceptTeamTask, teamBoard, teamState } from "./team.js";
@@ -133,6 +134,7 @@ function fixture(runStatus = "running", delegationStatus = "running") {
         },
       ]),
     },
+    chiefPlan: { findMany: scoped([]) },
     event: { findMany: vi.fn(async () => []) },
     botMessageDelivery: { findMany: scoped([]), groupBy: scoped([]) },
     botCommunicationPolicy: { findMany: scoped([]) },
@@ -146,6 +148,89 @@ function fixture(runStatus = "running", delegationStatus = "running") {
   return { db, prisma: db as unknown as PrismaClient, delegation, run };
 }
 describe("team.board", () => {
+  it("shows a saved chief access blocker without a delegation or model reply", async () => {
+    const f = fixture("completed");
+    f.db.delegation.findMany.mockResolvedValue([]);
+    f.db.chiefPlan.findMany.mockResolvedValue([
+      {
+        sourceRunId: f.run.id,
+        decision: { kind: "needs-owner", blocker: "access" },
+        control: null,
+        dispatch: {
+          requestMessageId: "request",
+          revision: 1,
+          memberId: "worker",
+          memberName: "Chief",
+          state: "needs-owner",
+          blockerKey: "connect-linear",
+          reason: "Connect Linear or grant a team member permission to read and write.",
+        },
+      },
+    ]);
+    const board = await teamBoard(f.prisma, actor);
+    expect(board.rows.find((row) => row.botId === "worker")).toMatchObject({
+      state: "blocked",
+      reason: "Connect Linear or grant a team member permission to read and write.",
+      blockerKey: "connect-linear",
+      action: "Open conversation",
+    });
+    expect(f.db.chiefPlan.findMany).toHaveBeenCalledWith({
+      where: { spaceId: actor.spaceId, userId: actor.userId, sourceRunId: { in: [f.run.id] } },
+      orderBy: { createdAt: "desc" },
+      select: { sourceRunId: true, decision: true, dispatch: true, control: true },
+    });
+    // A later selection must not inherit the old blocked display after access is fixed.
+    f.db.chiefPlan.findMany.mockResolvedValue([
+      {
+        sourceRunId: f.run.id,
+        control: null,
+        decision: { kind: "delegate", memberId: "worker" },
+        dispatch: {
+          requestMessageId: "request",
+          revision: 1,
+          memberId: "worker",
+          memberName: "Chief",
+          state: "needs-owner",
+          reason: "old blocker",
+        },
+      },
+    ]);
+    expect(
+      (await teamBoard(f.prisma, actor)).rows.find((row) => row.botId === "worker"),
+    ).toMatchObject({ state: "idle", reason: null });
+  });
+  it.each([
+    ["Stored provider refusal", snapshot.pin.provider],
+    [
+      failureCategoryMessage("provider-rate-limit", { provider: "Fixture Connection" }),
+      "Fixture Connection",
+    ],
+  ])("keeps the provider on a blocked card for reason %s", async (reason, provider) => {
+    const f = fixture("failed", "failed");
+    f.db.event.findMany.mockResolvedValue([
+      {
+        runId: f.run.id,
+        payload: {
+          message: reason,
+          runtimeProblem: {
+            kind: "problem",
+            pin: snapshot.pin,
+            code: "runtime-unavailable",
+            reasonId: "provider-rate-limit",
+            reason,
+            actions: ["retry"],
+          },
+        },
+      },
+    ]);
+    const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+    expect(row).toMatchObject({
+      state: "blocked",
+      reasonCategory: "provider-rate-limit",
+      reasonProvider: provider,
+    });
+  });
+
   it("projects the run's effort evidence without changing its saved pin", async () => {
     const f = fixture();
     const runtimeInfo = {

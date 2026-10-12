@@ -58,6 +58,7 @@ export function activityRowPreview(run: RunActivityRow): string {
     return `${failureCategoryText(run.failureCategory, {
       runtime: run.failureRuntime ?? undefined,
       bot: run.botName,
+      provider: run.failureProvider ?? undefined,
     })} · ${status}`;
   return run.promptSnippet ? `${run.promptSnippet} · ${status}` : status;
 }

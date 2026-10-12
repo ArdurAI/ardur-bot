@@ -15,10 +15,14 @@ it.each([RU_MESSAGES, ZH_MESSAGES])(
       "Result changed; review again.",
       "Work is still active.",
       "Effects are still unsettled.",
+      "The goal reached owner review before this work started.",
       "Late usage arrived after acceptance.",
       "Please address the failing conditions.",
       "Final owner review",
       "Could not review result. Try again.",
+      "Board item",
+      "Open board item",
+      "Board update pending",
     ]) {
       expect(messages[key]).toBeTruthy();
       expect(messages[key]).not.toBe(key);

@@ -58,6 +58,8 @@ vi.mock("@lingui/react/macro", async () => {
 
 const usageLimit = "{runtime}'s usage limit is reached. Try again after it resets.";
 const unknownRuntime = "This runtime";
+const connectLinear = "Connect Linear or grant a team member permission to read and write.";
+const connectGithub = "Connect GitHub or grant a team member permission to read and write.";
 
 /** The catalog's own translation of a message, read from the file a release ships. */
 function russian(message: string): string {
@@ -112,6 +114,8 @@ beforeEach(() => {
     [usageLimit]: russian(usageLimit),
     [unknownRuntime]: russian(unknownRuntime),
     [freezeText]: russian(freezeText),
+    [connectLinear]: russian(connectLinear),
+    [connectGithub]: russian(connectGithub),
   });
   i18n.activate("ru");
 });
@@ -205,3 +209,19 @@ it("translates the goal-review freeze cancellation on a card timeline", async ()
   expect(rendered).not.toContain(GOAL_FREEZE_CANCELLED);
   expect(rendered).not.toContain(freezeText);
 });
+it.each([
+  ["connect-linear", connectLinear],
+  ["connect-github", connectGithub],
+] as const)(
+  "writes a chief blocker key reason in the reader's language (%s)",
+  async (blockerKey, sentence) => {
+    const rendered = await text(
+      blocked({
+        blockerKey,
+        reason: sentence,
+      }),
+    );
+    expect(rendered).toContain(russian(sentence));
+    expect(rendered).not.toContain(sentence);
+  },
+);

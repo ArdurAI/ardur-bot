@@ -1413,14 +1413,7 @@ export async function sendThreadMessage(
         },
       });
       if (chiefSend && chiefBotId && firstRun) {
-        const { receipt, eventSeq } = await createChiefReceipt(tx, {
-          ...actor,
-          threadId: target.threadId,
-          chiefBotId,
-          requestMessageId: message.id,
-          key: intent.key,
-        });
-        await saveChiefSelection(tx, {
+        const selection = await saveChiefSelection(tx, {
           spaceId: actor.spaceId,
           userId: actor.userId,
           groupId: target.groupId,
@@ -1430,6 +1423,14 @@ export async function sendThreadMessage(
           sourceRunId: firstRun.id,
           taskId: firstRun.taskId,
           operation: intent.operation,
+        });
+        const { receipt, eventSeq } = await createChiefReceipt(tx, {
+          ...actor,
+          threadId: target.threadId,
+          chiefBotId,
+          requestMessageId: message.id,
+          key: intent.key,
+          selection,
         });
         return { message, runs, eventSeq, receipt };
       }

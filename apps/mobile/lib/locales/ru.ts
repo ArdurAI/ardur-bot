@@ -1,4 +1,17 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Signing identity": "Идентификатор подписи",
+  Fingerprint: "Отпечаток",
+  "Copy fingerprint": "Копировать отпечаток",
+  "Export identity card": "Экспортировать карточку идентификатора",
+  "Expected fingerprint": "Ожидаемый отпечаток",
+  "Check key": "Проверить ключ",
+  "Signed by the expected key": "Подписано ожидаемым ключом",
+  "Signed by a different key": "Подписано другим ключом",
+  "No expected key given; self-consistent only":
+    "Ожидаемый ключ не указан; подтверждена только внутренняя согласованность",
+  "Key version": "Версия ключа",
+  "Share fingerprint": "Поделиться отпечатком",
+
   "To {names}": "Кому: {names}",
   "Queued: {queued}": "В очереди: {queued}",
 
@@ -128,6 +141,9 @@ export const RU_MESSAGES: Record<string, string> = {
     "Срок входа {botName} для модели группы истёк. Восстановите подключение или измените модель группы.",
   "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
     "{botName} не смог использовать модель, выбранную для этой группы. Измените модель группы или проверьте настройки бота.",
+  "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan.":
+    "{provider} сейчас отклоняет запросы (лимит частоты или использования). Повторите попытку позже или проверьте свой тариф.",
+  "This connection": "Это подключение",
   "{runtime}'s usage limit is reached. Try again after it resets.":
     "Лимит использования {runtime} исчерпан. Повторите попытку после его сброса.",
   "Sign in to {runtime} on this computer, then try again.":
@@ -1577,9 +1593,45 @@ export const RU_MESSAGES: Record<string, string> = {
   "Reject result": "Отклонить результат",
   "Result changed; review again.": "Результат изменился. Проверьте его снова.",
   "Work is still active.": "Работа ещё продолжается.",
+  "The goal reached owner review before this work started.":
+    "Цель передана на проверку владельцу до начала этой работы.",
   "Effects are still unsettled.": "Эффекты ещё не завершены.",
   "Late usage arrived after acceptance.": "После принятия поступило позднее использование.",
   "Please address the failing conditions.": "Исправьте невыполненные условия.",
   "Final owner review": "Итоговая проверка владельцем",
+  "Board item": "Пункт доски",
+  "Open board item": "Открыть пункт доски",
+  "Board update pending": "Обновление доски ожидается",
   "Could not review result. Try again.": "Не удалось проверить результат. Попробуйте снова.",
+  "{runs} run": "{runs} запуск",
+  "By bot": "По ботам",
+  "Hide bots": "Скрыть ботов",
+  "Unknown bot": "Неизвестный бот",
+  "Unattributed usage": "Использование без привязки",
+  "Partial cost": "Частичная стоимость",
+  "{runs} runs": "Запусков: {runs}",
+  "Choose connection": "Выбрать подключение",
+  "Connection settings": "Настройки подключения",
+  "Local server": "Локальный сервер",
+  "Search models": "Поиск моделей",
+  "No matching models": "Подходящих моделей нет",
+  "Model options": "Варианты моделей",
+  "May not be available on your plan": "Может быть недоступно на вашем тарифе",
+  "Connect that model first.": "Сначала подключите эту модель.",
+  "Choose a model.": "Выберите модель.",
+  "Connect that model server first.": "Сначала подключите сервер этой модели.",
+  "This connection cannot serve that model.": "Это подключение не поддерживает эту модель.",
+  "Unknown model for that provider": "Неизвестная модель для этого провайдера",
+  "Show all models": "Показать все модели",
+  "Got it — I’ll choose a team member to file this issue in Linear.":
+    "Понял — выберу участника команды, который создаст эту задачу в Linear.",
+  "Got it — I’ll choose a team member to manage the GitHub repository.":
+    "Понял — выберу участника команды для управления репозиторием GitHub.",
+  "Got it — this task needs you before I can assign it.":
+    "Понял — прежде чем поручить эту задачу, мне нужна ваша помощь.",
+  "Connect Linear or grant a team member permission to read and write.":
+    "Подключите Linear или разрешите участнику команды читать и записывать данные.",
+  "Connect GitHub or grant a team member permission to read and write.":
+    "Подключите GitHub или разрешите участнику команды читать и записывать данные.",
+  "Needs you": "Нужна ваша помощь",
 };

@@ -3,7 +3,34 @@ import { z } from "zod";
 import { EVIDENCE_STATE_IDS } from "./evidence-states.js";
 import type { GovernanceSummary } from "./features.js";
 
+export const EvidenceFingerprintSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+export const EvidenceSigningIdentitySchema = z.strictObject({
+  fingerprint: EvidenceFingerprintSchema,
+  scope: z.strictObject({ type: z.literal("space"), id: z.string().min(1) }),
+  keyVersion: z.literal(1),
+});
+export type EvidenceSigningIdentity = z.infer<typeof EvidenceSigningIdentitySchema>;
+export const EvidenceSignerMatchSchema = z.enum([
+  "expected_key",
+  "different_key",
+  "no_expected_key",
+]);
+export type EvidenceSignerMatch = z.infer<typeof EvidenceSignerMatchSchema>;
+
+export const EVIDENCE_SIGNER_LABELS = {
+  expected_key: "Signed by the expected key",
+  different_key: "Signed by a different key",
+  no_expected_key: "No expected key given; self-consistent only",
+} as const satisfies Record<EvidenceSignerMatch, string>;
+
+export function evidenceIdentityCard(identity: EvidenceSigningIdentity): string {
+  // Reject extra properties so exported cards cannot carry private fields.
+  return JSON.stringify(EvidenceSigningIdentitySchema.parse(identity), null, 2);
+}
+
 export const EvidenceRunSummarySchema = z.object({
+  signingIdentity: EvidenceSigningIdentitySchema.nullable().optional(),
+  signerMatch: EvidenceSignerMatchSchema.nullable().optional(),
   sessionId: z.string(),
   recordedAt: z.string(),
   decisions: z.object({
@@ -32,6 +59,11 @@ export const EvidenceRunSummarySchema = z.object({
 export type EvidenceRunSummary = z.infer<typeof EvidenceRunSummarySchema> & GovernanceSummary;
 export const evidenceContract = {
   runSummary: oc
-    .input(z.object({ runId: z.string().min(1).max(200) }))
+    .input(
+      z.object({
+        runId: z.string().min(1).max(200),
+        expectedFingerprint: EvidenceFingerprintSchema.optional(),
+      }),
+    )
     .output(EvidenceRunSummarySchema),
 };

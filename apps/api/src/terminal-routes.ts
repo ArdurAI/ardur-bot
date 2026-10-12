@@ -49,12 +49,23 @@ export function createTerminalRoutes(deps: {
     return computer;
   }
   const provider = deps.sandbox.terminal;
-  const availableOn = (computer: { kind: string; connectionId?: string | null }) =>
-    Boolean(
+  const availableOn = async (computer: Awaited<ReturnType<typeof owned>>, actor: Actor) => {
+    if (!provider) return false;
+    if (computer.kind === "desktop" && !computer.connectionId) {
+      return (
+        (await provider.available?.(toComputerRef(computer), {
+          ...actor,
+          operationId: "terminal-available",
+          traceId: "terminal.available",
+          signal: new AbortController().signal,
+        })) ?? false
+      );
+    }
+    return Boolean(
       computerCapabilities(computer.kind).interactiveTerminal &&
-        provider &&
         (computer.connectionId || deps.sandbox.describe().capabilities.interactiveTerminal),
     );
+  };
   const gateway = provider
     ? new TerminalGateway({
         provider,
@@ -74,7 +85,7 @@ export function createTerminalRoutes(deps: {
           if (
             !session ||
             computer.screenGeneration !== grant.computerGeneration ||
-            !availableOn(computer) ||
+            !(await availableOn(computer, grant.actor)) ||
             computer.state !== "running" ||
             computer.maintenanceId ||
             !hasActiveComputerControl(computer) ||
@@ -111,7 +122,7 @@ export function createTerminalRoutes(deps: {
     async available(actor: Actor, input: { botId: string; computerId: string }) {
       const computer = await owned(actor, input.botId, input.computerId);
       return {
-        available: availableOn(computer),
+        available: await availableOn(computer, actor),
       };
     },
     async ticket(
@@ -130,7 +141,7 @@ export function createTerminalRoutes(deps: {
       try {
         if (!gateway) throw new Error(TERMINAL_UNAVAILABLE);
         if (!authSessionId || !origin || !deps.trustedOrigin(origin)) throw new IsolationError();
-        if (!availableOn(await owned(actor, input.botId, input.computerId)))
+        if (!(await availableOn(await owned(actor, input.botId, input.computerId), actor)))
           throw new Error(TERMINAL_UNAVAILABLE);
         return await withComputerAdmission(
           deps.prisma,
@@ -139,7 +150,7 @@ export function createTerminalRoutes(deps: {
             let computer = await owned(actor, input.botId, input.computerId);
             if (
               !computer.providerRef ||
-              !availableOn(computer) ||
+              !(await availableOn(computer, actor)) ||
               !hasActiveComputerControl(computer) ||
               computer.controlBotId !== input.botId
             )

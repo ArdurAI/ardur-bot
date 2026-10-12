@@ -23,6 +23,7 @@ import { wsWire } from "./bridge-wire.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { HostAgent } from "./host-agent.js";
 import { HostMcpServers } from "./host-mcp.js";
+import type { GuardedHostTerminalFactory } from "./host-terminal.js";
 import { createLocalImportScanner, LocalImportScanner } from "./import/scanner.js";
 import { nativeEnvironment } from "./runtimes/native-process.js";
 
@@ -64,7 +65,7 @@ vi.mock("./import/scanner.js", async (original) => ({
 }));
 const agents: HostAgent[] = [];
 afterEach(async () => {
-  for (const agent of agents.splice(0)) agent.close();
+  await Promise.all(agents.splice(0).map((agent) => agent.close()));
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
@@ -210,7 +211,12 @@ const turn: HostOperation = {
     },
   },
 };
-async function fixture(runtime?: AgentRuntime, acknowledge = false, wire?: HostWire) {
+async function fixture(
+  runtime?: AgentRuntime,
+  acknowledge = false,
+  wire?: HostWire,
+  terminalFactory?: GuardedHostTerminalFactory,
+) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "host-agent-")));
   roots.push(root);
   const frames: HostFrame[] = [];
@@ -236,6 +242,7 @@ async function fixture(runtime?: AgentRuntime, acknowledge = false, wire?: HostW
       close: vi.fn(),
     },
     runtime ? { "claude-code": runtime, "codex-app-server": runtime } : undefined,
+    terminalFactory,
   );
   agents.push(agent);
   await agent.initialize();
@@ -256,6 +263,88 @@ function fakeRuntime(events: number): AgentRuntime {
   };
 }
 describe("host process operations", () => {
+  it("advertises only an injected terminal, forwards owner operations and kills on disconnect", async () => {
+    const ordinary = await fixture();
+    expect((await ordinary.agent.health()).capabilities?.hostTerminal).toBeUndefined();
+    const process = {
+      write: vi.fn(),
+      resize: vi.fn(),
+      killTree: vi.fn(async () => {}),
+      onData: () => () => {},
+      onExit: () => () => {},
+    };
+    const spawn = vi.fn(async () => process);
+    const f = await fixture(undefined, true, undefined, () => ({ spawn }));
+    const health = await f.agent.health();
+    const hostGeneration = health.capabilities!.hostTerminal!.generation;
+    const grant = {
+      hostGeneration,
+      leaseId: "lease",
+      fence: 1,
+      generation: "host:bot",
+      expiresAt: Date.now() + 60000,
+    };
+    const operation: HostOperation = {
+      op: "computer.terminal",
+      homeKey: "bot",
+      action: { type: "cwd", ...grant },
+    };
+    await f.agent.receive({ ...request(operation), id: "cwd" });
+    await f.completed("cwd");
+    const cwd = f.frames.find(
+      (frame) => frame.type === "stream" && frame.id === "cwd" && frame.channel === "result",
+    );
+    expect(cwd).toBeDefined();
+    if (cwd?.type !== "stream") throw new Error("Missing cwd");
+    await f.agent.receive({
+      ...request({
+        op: "computer.terminal",
+        homeKey: "bot",
+        action: {
+          type: "open",
+          ...grant,
+          workingRoot: String(cwd.data),
+          cols: 80,
+          rows: 24,
+          shellProfileId: "default",
+        },
+      }),
+      id: "open",
+    });
+    await f.completed("open");
+    const result = f.frames.find(
+      (frame) => frame.type === "stream" && frame.id === "open" && frame.channel === "result",
+    );
+    if (result?.type !== "stream") throw new Error("Missing terminal");
+    const sessionId = (result.data as { id: string }).id;
+    await f.agent.receive({
+      ...request({
+        op: "computer.terminal",
+        homeKey: "bot",
+        action: { type: "write", ...grant, sessionId, content: "AQ==" },
+      }),
+      id: "write",
+    });
+    await f.completed("write");
+    expect(process.write).toHaveBeenCalledWith(Buffer.from([1]));
+    await f.agent.receive({
+      ...request({
+        op: "computer.terminal",
+        homeKey: "bot",
+        action: { type: "resize", ...grant, sessionId, cols: 100, rows: 30 },
+      }),
+      id: "resize",
+    });
+    await f.completed("resize");
+    expect(process.resize).toHaveBeenCalledWith(100, 30);
+    expect(spawn).toHaveBeenCalledOnce();
+    await f.agent.close();
+    expect(process.killTree).toHaveBeenCalledOnce();
+    const replacement = await fixture(undefined, false, undefined, () => ({ spawn }));
+    expect((await replacement.agent.health()).capabilities!.hostTerminal!.generation).not.toBe(
+      hostGeneration,
+    );
+  });
   it("rejects a forged B12 manifest before any provider or tool callback", async () => {
     const { agent, frames, completed } = await fixture();
     const envelope = HermesExecutionEnvelopeSchema.parse(profileFixture);

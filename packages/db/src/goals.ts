@@ -2,7 +2,9 @@ import type {
   Actor,
   Goal,
   GoalAcceptInput,
+  GoalBoardDeliveryState,
   GoalConditionReviewInput,
+  GoalLinkInput,
   GoalRejectInput,
   GoalStartInput,
   GoalSubmitInput,
@@ -17,10 +19,12 @@ import {
   GOAL_MAX_DEPTH,
   GOAL_MAX_HOPS,
   GoalConditionSchema,
+  GoalLinkInputSchema,
   GoalRevisionSchema,
   GoalStartInputSchema,
   GoalVerdictSchema,
   goalBudget,
+  goalResultPath,
   isFrozenGoalStatus,
   TaskCardSchema,
 } from "@ardurbot/contracts";
@@ -32,6 +36,7 @@ import {
 } from "./bot-comms-policy.js";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient, TeamGoal } from "./client.js";
+import { Prisma as PrismaNS } from "./client.js";
 import { finishDelegation, requestCancel, requestCancelInTransaction } from "./delegation.js";
 import { appendEventInTransaction } from "./events.js";
 import { IsolationError } from "./scope.js";
@@ -43,7 +48,18 @@ type GoalSettlementRow = Prisma.GoalSettlementGetPayload<object> & {
 };
 
 type GoalRow = Prisma.TeamGoalGetPayload<{ include: { revisions: true } }> &
-  ReturnType<typeof goalBudget> & { settlement: GoalSettlementRow | null };
+  ReturnType<typeof goalBudget> & {
+    settlement: GoalSettlementRow | null;
+    boardDelivery: GoalBoardDeliveryState | null;
+  };
+
+function boardDeliveryState(rows: { state: string }[]): GoalBoardDeliveryState | null {
+  if (rows.some((row) => row.state === "needs-owner")) return "needs-owner";
+  if (rows.some((row) => row.state === "paused")) return "paused";
+  if (rows.some((row) => row.state === "pending")) return "pending";
+  if (rows.some((row) => row.state === "delivered")) return "delivered";
+  return null;
+}
 
 function asRevision(row: Prisma.GoalRevisionGetPayload<object>) {
   return GoalRevisionSchema.parse({ ...row, createdAt: row.createdAt.toISOString() });
@@ -88,6 +104,9 @@ function asGoal(row: GoalRow): Goal {
           createdAt: row.settlement.createdAt.toISOString(),
         }
       : null,
+    boardWorkspaceId: row.boardWorkspaceId,
+    boardItemId: row.boardItemId,
+    boardDelivery: row.boardDelivery,
   };
 }
 
@@ -124,6 +143,10 @@ async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) 
           },
           select: { id: true },
         });
+        const deliveries = await tx.goalBoardDelivery.findMany({
+          where: { goalId: row.id, spaceId: row.spaceId, userId: row.userId },
+          select: { state: true },
+        });
         const settlement = await tx.goalSettlement.findUnique({ where: { goalId: row.id } });
         const late = settlement
           ? await tx.goalSettlementDiscrepancy.aggregate({
@@ -143,6 +166,7 @@ async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) 
                   discrepancyCount: late._count,
                 }
               : null,
+          boardDelivery: boardDeliveryState(deliveries),
         });
       },
       { isolationLevel: "RepeatableRead" },
@@ -202,6 +226,65 @@ export async function reconcileGoalExhaustion(prisma: PrismaClient, goalId: stri
   );
 }
 
+async function goalBoardLink(
+  tx: Prisma.TransactionClient,
+  actor: Actor,
+  workspaceId: string | undefined,
+  itemId: string | undefined,
+) {
+  if (!workspaceId && !itemId) return null;
+  if (!workspaceId || !itemId) throw new Error("Board link needs a workspace and an item");
+  const workspace = await tx.boardWorkspace.findFirst({
+    where: {
+      id: workspaceId,
+      spaceId: actor.spaceId,
+      ownerUserId: actor.userId,
+      enabled: true,
+    },
+    select: { id: true },
+  });
+  if (!workspace) throw new IsolationError();
+  return { workspaceId: workspace.id, itemId };
+}
+
+async function queueGoalBoardDelivery(
+  tx: Prisma.TransactionClient,
+  goal: TeamGoal,
+  revisionId: string,
+  transition: "completed" | "accepted",
+) {
+  if (!goal.boardWorkspaceId || !goal.boardItemId) return null;
+  const label = transition === "accepted" ? "Goal accepted" : "Goal completed";
+  const commentText = `${label}\n${goalResultPath(goal.groupId, goal.id, revisionId)}`.slice(
+    0,
+    500,
+  );
+  try {
+    return await tx.goalBoardDelivery.create({
+      data: {
+        goalId: goal.id,
+        revisionId,
+        transition,
+        spaceId: goal.spaceId,
+        userId: goal.userId,
+        workspaceId: goal.boardWorkspaceId,
+        itemId: goal.boardItemId,
+        commentText,
+        state: "pending",
+      },
+    });
+  } catch (error) {
+    if (error instanceof PrismaNS.PrismaClientKnownRequestError && error.code === "P2002") {
+      return tx.goalBoardDelivery.findUnique({
+        where: {
+          goalId_revisionId_transition: { goalId: goal.id, revisionId, transition },
+        },
+      });
+    }
+    throw error;
+  }
+}
+
 export async function startGoal(prisma: PrismaClient, actor: Actor, raw: GoalStartInput) {
   if (!actor.isDeploymentOwner) throw new IsolationError();
   const input = GoalStartInputSchema.parse(raw);
@@ -240,6 +323,7 @@ export async function startGoal(prisma: PrismaClient, actor: Actor, raw: GoalSta
         (member) => member.botId === group.coordinatorBotId && !member.bot.archivedAt,
       );
       if (!coordinator) throw new IsolationError();
+      const boardLink = await goalBoardLink(tx, actor, input.boardWorkspaceId, input.boardItemId);
       const existing = await tx.teamGoal.findFirst({
         where: {
           groupId: group.id,
@@ -273,6 +357,8 @@ export async function startGoal(prisma: PrismaClient, actor: Actor, raw: GoalSta
           maxConcurrent,
           maxDescendants: input.maxDescendants ?? GOAL_DEFAULT_MAX_DESCENDANTS,
           untilAt,
+          boardWorkspaceId: boardLink?.workspaceId ?? null,
+          boardItemId: boardLink?.itemId ?? null,
         },
       });
       await tx.delegationRoot.create({
@@ -561,7 +647,30 @@ async function commitGoalSubmission(
   });
   if (updated.count === 0) throw new GoalReviewConflict("already-submitted");
 
+  // Never turn an executing replay into a frozen-run uncertainty while it is
+  // still in flight. Its completion must happen before the review snapshot.
+  const executingReplay = await tx.externalEffect.findFirst({
+    where: {
+      spaceId: goal.spaceId,
+      run: { is: { OR: [{ goalId: goal.id }, { delegationRootTaskId: goal.rootTaskId }] } },
+      status: "executing",
+    },
+    select: { id: true },
+  });
+  if (executingReplay) throw new GoalReviewConflict("effects-open");
+
   const frozenRunIds = await freezeQueuedGoalRuns(tx, goal);
+  // Claims take the same root lock. Once queued work is settled, any remaining
+  // dispatchable or executing effect must finish before submission can commit.
+  const pendingEffect = await tx.externalEffect.findFirst({
+    where: {
+      spaceId: goal.spaceId,
+      run: { is: { OR: [{ goalId: goal.id }, { delegationRootTaskId: goal.rootTaskId }] } },
+      status: { in: ["intended", "approved", "executing"] },
+    },
+    select: { id: true },
+  });
+  if (pendingEffect) throw new GoalReviewConflict("effects-open");
   const previousAttempts = await tx.goalRevision.count({ where: { goalId: goal.id } });
   const root = await tx.delegationRoot.findUnique({ where: { rootTaskId: goal.rootTaskId } });
   const conditions =
@@ -593,6 +702,7 @@ async function commitGoalSubmission(
       ...(frozenRunIds.length ? { frozenRunIds } : {}),
     },
   });
+  await queueGoalBoardDelivery(tx, goal, revision.id, "completed");
   return asRevision(revision);
 }
 
@@ -719,12 +829,18 @@ export async function cancelRunHeldByFrozenGoal(
       // The guard above leaves the fallback non-null: a run always names one or both.
       ...(run.goalId ? { id: run.goalId } : { rootTaskId: run.delegationRootTaskId! }),
     },
-    select: { status: true, rootTaskId: true, spaceId: true, userId: true },
+    select: { status: true, threadId: true, rootTaskId: true, spaceId: true, userId: true },
   });
   if (!goal || !isFrozenGoalStatus(goal.status)) return false;
   const now = new Date();
-  return prisma.$transaction(async (tx) =>
-    settleFrozenGoalRun(
+  return prisma.$transaction(async (tx) => {
+    await lockGoalReview(tx, goal.threadId, goal.rootTaskId);
+    const current = await tx.teamGoal.findFirst({
+      where: { spaceId: run.spaceId, userId: run.userId, rootTaskId: goal.rootTaskId },
+      select: { status: true },
+    });
+    if (!current || !isFrozenGoalStatus(current.status)) return false;
+    return settleFrozenGoalRun(
       tx,
       goal,
       run,
@@ -735,35 +851,81 @@ export async function cancelRunHeldByFrozenGoal(
         ],
       },
       now,
-    ),
-  );
+    );
+  });
 }
 
 /**
  * Freeze check for replaying an already-recorded effect. Serialized on the same root
- * lock as the admission freeze and the acceptance check, so a replay either sees the
- * goal running or is held; there is no window where an approved replay dispatches
- * into a goal the submission just froze. A missing goal holds too, like admission.
+ * lock as submission. This is an early refusal only; dispatch must also use
+ * claimGoalRunEffect, which claims under that lock. A missing goal holds too.
  */
 export async function isGoalRunEffectFrozen(
   prisma: PrismaClient,
-  input: { spaceId: string; userId: string; goalId: string },
+  input: { spaceId: string; userId: string; goalId: string | null; rootTaskId?: string | null },
 ): Promise<boolean> {
   const goal = await prisma.teamGoal.findFirst({
-    where: { id: input.goalId, spaceId: input.spaceId, userId: input.userId },
+    where: {
+      ...(input.goalId ? { id: input.goalId } : { rootTaskId: input.rootTaskId! }),
+      spaceId: input.spaceId,
+      userId: input.userId,
+    },
     select: { rootTaskId: true },
   });
-  if (!goal) return true;
+  if (!goal) return Boolean(input.goalId);
   return withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${goal.rootTaskId} FOR UPDATE`;
       const current = await tx.teamGoal.findFirst({
-        where: { id: input.goalId },
+        where: { rootTaskId: goal.rootTaskId, spaceId: input.spaceId, userId: input.userId },
         select: { status: true },
       });
       return !current || isFrozenGoalStatus(current.status);
     }),
   );
+}
+
+/** Claim and goal admission share submission's root lock; no boolean-check gap. */
+export async function claimGoalRunEffect(
+  prisma: PrismaClient,
+  input: {
+    spaceId: string;
+    userId: string;
+    goalId: string | null;
+    rootTaskId: string | null;
+    effectId: string;
+    from: "approved" | "intended";
+  },
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const goal = await tx.teamGoal.findFirst({
+      where: {
+        spaceId: input.spaceId,
+        userId: input.userId,
+        ...(input.goalId ? { id: input.goalId } : { rootTaskId: input.rootTaskId! }),
+      },
+      select: { rootTaskId: true },
+    });
+    if (!goal) {
+      if (input.goalId) return false;
+      const claimed = await tx.externalEffect.updateMany({
+        where: { id: input.effectId, spaceId: input.spaceId, status: input.from },
+        data: { status: "executing" },
+      });
+      return claimed.count === 1;
+    }
+    await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${goal.rootTaskId} FOR UPDATE`;
+    const current = await tx.teamGoal.findFirst({
+      where: { rootTaskId: goal.rootTaskId, spaceId: input.spaceId, userId: input.userId },
+      select: { status: true },
+    });
+    if (current?.status !== "running") return false;
+    const claimed = await tx.externalEffect.updateMany({
+      where: { id: input.effectId, spaceId: input.spaceId, status: input.from },
+      data: { status: "executing" },
+    });
+    return claimed.count === 1;
+  });
 }
 
 async function snapshotGoalEvidence(tx: Prisma.TransactionClient, goal: TeamGoal) {
@@ -916,23 +1078,23 @@ export async function acceptGoal(prisma: PrismaClient, actor: Actor, input: Goal
     if (root?.reservedTokens && root.reservedTokens > 0) {
       throw new GoalReviewConflict("work-active");
     }
-    const now = new Date();
     const goalRuns = { OR: [{ goalId: goal.id }, { delegationRootTaskId: goal.rootTaskId }] };
     const liveLease = await tx.run.findFirst({
       where: {
         spaceId: goal.spaceId,
         userId: goal.userId,
-        AND: [
-          goalRuns,
-          {
-            OR: [
-              {
-                status: { in: ["waiting_input", "waiting_takeover", "peer_paused", "peer_ready"] },
-              },
-              { status: { in: ["leased", "running"] }, leaseExpiresAt: { gt: now } },
-            ],
-          },
-        ],
+        ...goalRuns,
+        status: {
+          in: [
+            "queued",
+            "leased",
+            "running",
+            "waiting_input",
+            "waiting_takeover",
+            "peer_paused",
+            "peer_ready",
+          ],
+        },
       },
       select: { id: true },
     });
@@ -946,6 +1108,36 @@ export async function acceptGoal(prisma: PrismaClient, actor: Actor, input: Goal
       select: { id: true },
     });
     if (unsettledEffect) throw new GoalReviewConflict("effects-open");
+    const collectingAttempt = await tx.attempt.findFirst({
+      where: {
+        run: { is: { spaceId: goal.spaceId, userId: goal.userId, ...goalRuns } },
+        usageSettledAt: null,
+      },
+      select: { id: true },
+    });
+    const collectingRun = await tx.run.findFirst({
+      where: {
+        spaceId: goal.spaceId,
+        userId: goal.userId,
+        ...goalRuns,
+        startedAt: { not: null },
+        attempts: { none: {} },
+      },
+      select: { id: true },
+    });
+    const collectingRequest = await tx.usageRecord.findFirst({
+      where: {
+        spaceId: goal.spaceId,
+        userId: goal.userId,
+        rootTaskId: goal.rootTaskId,
+        requestKey: { not: null },
+        purpose: { not: "detached-learning" },
+        collectionFinishedAt: null,
+      },
+      select: { id: true },
+    });
+    if (collectingAttempt || collectingRun || collectingRequest)
+      throw new GoalReviewConflict("work-active");
     if (!conditionsPass(revision.conditions)) throw new GoalReviewConflict("conditions-open");
 
     const verdict = await tx.goalVerdict.create({
@@ -985,6 +1177,7 @@ export async function acceptGoal(prisma: PrismaClient, actor: Actor, input: Goal
       type: "goal.accepted",
       payload: { goalId: goal.id, revisionId: revision.id },
     });
+    await queueGoalBoardDelivery(tx, currentGoal, revision.id, "accepted");
 
     return asVerdict(verdict);
   });
@@ -1200,4 +1393,108 @@ export async function reviewGoalCondition(
     });
     return asRevision(updated);
   });
+}
+
+/** Owner only. Workers have no path here. A link cannot move after a delivery exists. */
+export async function linkGoal(prisma: PrismaClient, actor: Actor, raw: GoalLinkInput) {
+  if (!actor.isDeploymentOwner) throw new IsolationError();
+  const input = GoalLinkInputSchema.parse(raw);
+  const saved = await withTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const goal = await tx.teamGoal.findFirst({
+        where: { id: input.goalId, spaceId: actor.spaceId, userId: actor.userId },
+      });
+      if (!goal) throw new IsolationError();
+      if (["accepted", "stopped", "exhausted"].includes(goal.status)) throw new IsolationError();
+      const queued = await tx.goalBoardDelivery.count({ where: { goalId: goal.id } });
+      if (queued) throw new IsolationError();
+      const link = await goalBoardLink(
+        tx,
+        actor,
+        input.boardWorkspaceId ?? undefined,
+        input.boardItemId ?? undefined,
+      );
+      await tx.teamGoal.update({
+        where: { id: goal.id },
+        data: {
+          boardWorkspaceId: link?.workspaceId ?? null,
+          boardItemId: link?.itemId ?? null,
+        },
+      });
+      return goal.id;
+    }),
+  );
+  const loaded = await loadGoal(prisma, {
+    id: saved,
+    spaceId: actor.spaceId,
+    userId: actor.userId,
+  });
+  if (!loaded) throw new IsolationError();
+  return loaded;
+}
+
+/** The goal and revision a result link names, not the newest row in the group. */
+export async function getGoalRevision(
+  prisma: PrismaClient,
+  actor: Actor,
+  input: { groupId: string; goalId: string; revisionId: string },
+) {
+  if (!actor.isDeploymentOwner) throw new IsolationError();
+  const revision = await prisma.goalRevision.findFirst({
+    where: {
+      id: input.revisionId,
+      goalId: input.goalId,
+      goal: {
+        id: input.goalId,
+        groupId: input.groupId,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+      },
+    },
+  });
+  if (!revision) return null;
+  const goal = await loadGoal(prisma, {
+    id: input.goalId,
+    groupId: input.groupId,
+    spaceId: actor.spaceId,
+    userId: actor.userId,
+  });
+  if (!goal) return null;
+  return {
+    goal: { ...goal, currentRevision: asRevision(revision) },
+    current: goal.currentRevision?.id === revision.id,
+  };
+}
+
+export async function goalBoardResult(
+  prisma: PrismaClient,
+  actor: Actor,
+  workspaceId: string,
+  itemId: string,
+) {
+  if (!actor.isDeploymentOwner) throw new IsolationError();
+  const goal = await prisma.teamGoal.findFirst({
+    where: {
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      boardWorkspaceId: workspaceId,
+      boardItemId: itemId,
+    },
+    orderBy: { createdAt: "desc" },
+    include: { revisions: { orderBy: { attempts: "desc" }, take: 1 } },
+  });
+  if (!goal) return null;
+  const loaded = await loadGoal(prisma, { id: goal.id });
+  const revision = goal.revisions[0];
+  return {
+    goalId: goal.id,
+    groupId: goal.groupId,
+    revisionId: revision?.id ?? null,
+    summary: revision?.summary ?? null,
+    status: goal.status as Goal["status"],
+    delivery: loaded?.boardDelivery ?? null,
+    path: revision
+      ? goalResultPath(goal.groupId, goal.id, revision.id)
+      : goalResultPath(goal.groupId, goal.id, goal.id),
+  };
 }

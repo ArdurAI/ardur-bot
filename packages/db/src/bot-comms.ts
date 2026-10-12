@@ -1005,7 +1005,7 @@ export async function expireParkedBotMessageWakes(
     await withTransactionRetry(() =>
       prisma.$transaction(async (tx) => {
         const wake = await tx.botMessageWake.findUnique({ where: { id: candidate.id } });
-        if (!wake || wake.state !== "paused") return;
+        if (wake?.state !== "paused") return;
         const goal = wake.goalId
           ? await tx.teamGoal.findUnique({ where: { id: wake.goalId } })
           : null;

@@ -11,6 +11,7 @@ const decisions = vi.hoisted(() => ({
   accept: vi.fn(),
   reject: vi.fn(),
   reviewCondition: vi.fn(),
+  revision: vi.fn(),
 }));
 vi.mock("../lib/rpc", () => ({ rpc: { goals: decisions } }));
 vi.mock("@lingui/core/macro", () => ({
@@ -36,6 +37,7 @@ vi.mock("@ardurbot/ui-web", () => ({
 }));
 vi.mock("./group-model-control", () => ({ GroupModelControl: () => null }));
 
+import { GoalNamedResult } from "./GoalNamedResult";
 import { GroupGoalStrip } from "./GroupPanel";
 
 const goal = {
@@ -184,4 +186,52 @@ it("shows late usage as a discrepancy on an accepted goal", async () => {
   );
   expect(node.textContent).toContain("Late usage arrived after acceptance.");
   expect(node.textContent).toContain("15");
+});
+
+it("shows the board link and a pending update", async () => {
+  await act(async () =>
+    root.render(
+      <GroupGoalStrip
+        goal={{
+          ...goal,
+          boardWorkspaceId: "workspace",
+          boardItemId: "board-a",
+          boardDelivery: "pending",
+        }}
+        onStop={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    ),
+  );
+  await act(() => vi.dynamicImportSettled());
+  expect(node.textContent).toContain("Board item");
+  expect(node.textContent).toContain("Open board item");
+  expect(node.textContent).toContain("Board update pending");
+  expect(node.querySelector("a")?.getAttribute("href")).toBe(
+    "/app/board?workspace=workspace&item=board-a",
+  );
+});
+
+it("shows the named accepted result and keeps owner decision controls disabled", async () => {
+  decisions.revision.mockResolvedValue({
+    current: true,
+    goal: {
+      ...goal,
+      status: "accepted",
+      currentRevision: { ...goal.currentRevision, summary: "Accepted result" },
+    },
+  });
+  await act(async () =>
+    root.render(<GoalNamedResult groupId="group-1" goalId="goal-1" revisionId="revision-1" />),
+  );
+  expect(decisions.revision).toHaveBeenCalledWith({
+    groupId: "group-1",
+    goalId: "goal-1",
+    revisionId: "revision-1",
+  });
+  expect(node.textContent).toContain("Accepted result");
+  expect(node.querySelector("details")?.open).toBe(true);
+  expect(node.textContent).not.toContain("Accept result");
+  expect(node.textContent).not.toContain("Reject result");
+  expect(node.querySelectorAll("button")).toHaveLength(0);
 });

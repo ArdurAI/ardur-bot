@@ -1,5 +1,10 @@
 import type { FailureCategoryId, FailureCategoryParams, RuntimeProblem } from "@ardurbot/contracts";
-import { FailureCategoryIdSchema, failureCategory, runtimeNames } from "@ardurbot/contracts";
+import {
+  FailureCategoryIdSchema,
+  failureCategory,
+  failureCategoryFromText,
+  runtimeNames,
+} from "@ardurbot/contracts";
 import { t } from "./i18n";
 
 /**
@@ -17,6 +22,7 @@ export function failureCategoryText(
     ...params,
     runtime: params.runtime ?? t("This runtime"),
     bot: params.bot ?? t("This bot"),
+    provider: params.provider ?? t("This connection"),
   });
 }
 
@@ -29,6 +35,10 @@ export function runtimeProblemText(problem: RuntimeProblem, botName?: string): s
   return category.success
     ? failureCategoryText(category.data, {
         runtime: runtimeNames[problem.pin.runtimeKind],
+        provider:
+          failureCategoryFromText(problem.reason)?.params.provider ??
+          problem.pin.provider ??
+          undefined,
         ...(botName ? { bot: botName } : {}),
       })
     : problem.reason;

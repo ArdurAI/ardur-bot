@@ -282,9 +282,11 @@ function translatedFixture(
     },
     catalog,
     streamSimple,
-    record: async (usage) => {
-      records.push(usage);
-    },
+    record:
+      patch.record ??
+      (async (usage) => {
+        records.push(usage);
+      }),
   };
   const broker = new HermesProviderBroker(options);
   const body = { model: modelId, messages: [{ role: "user", content: "hello" }], stream: false };
@@ -1188,4 +1190,59 @@ describe("worker provider broker translated route", () => {
     expect(sent).not.toHaveProperty("reasoning_effort");
     expect(f.records.at(-1)?.request?.collection?.outcome).toBe("success");
   });
+});
+
+it("waits for translated usage writes before the final collection receipt", async () => {
+  let release!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let observed!: () => void;
+  const measurementStarted = new Promise<void>((resolve) => {
+    observed = resolve;
+  });
+  const records: AgentUsage[] = [];
+  const f = translatedFixture(
+    [startEvent, ...textDeltaEvents("Hello"), doneEvent([text("Hello")])],
+    {
+      record: async (usage) => {
+        if (usage.request?.counter.sequence === 1) {
+          observed();
+          await blocked;
+        }
+        records.push(usage);
+      },
+    },
+  );
+  const opened = f.broker.open(f.request());
+  try {
+    await measurementStarted;
+    // Let the fake stream finish while its measurement write remains blocked.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(records).toHaveLength(1);
+    expect(records[0]?.request?.collection?.outcome).toBe("started");
+    release();
+    await opened;
+    expect(records.map((usage) => usage.request?.counter.sequence)).toEqual([0, 1, 2]);
+    expect(records.at(-1)?.request?.collection?.outcome).toBe("success");
+  } finally {
+    release();
+    await opened.catch(() => undefined);
+  }
+});
+
+it("leaves final collection open if a translated usage write rejects without an error object", async () => {
+  const records: AgentUsage[] = [];
+  const f = translatedFixture(
+    [startEvent, ...textDeltaEvents("Hello"), doneEvent([text("Hello")])],
+    {
+      record: async (usage) => {
+        if (usage.request?.counter.sequence === 1) throw undefined;
+        records.push(usage);
+      },
+    },
+  );
+  await expect(f.broker.open(f.request())).rejects.toThrow();
+  expect(records).toHaveLength(1);
+  expect(records[0]?.request?.collection?.outcome).toBe("started");
 });

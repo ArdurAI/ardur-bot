@@ -20,6 +20,12 @@ describe("evidence keys", () => {
     );
     expect(evidenceKeyId(loadEvidencePublicKey(publicVector))).toBe(evidenceKeyId(publicVector));
   });
+  it("keeps the fingerprint stable across PEM line endings and repeated reads", () => {
+    const first = evidenceKeyId(publicVector);
+    expect(evidenceKeyId(publicVector.replaceAll("\n", "\r\n"))).toBe(first);
+    expect(evidenceKeyId(loadEvidencePublicKey(publicVector))).toBe(first);
+    expect(evidenceKeyId(publicVector)).toBe(first);
+  });
   it("generates loadable SPKI and PKCS#8 keys", () => {
     const keys = generateEvidenceKey();
     expect(keys.publicKeyPem).toContain("BEGIN PUBLIC KEY");

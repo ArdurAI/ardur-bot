@@ -224,6 +224,7 @@ function fixture(
         coordinatorBotId: "bot-1",
       })),
     },
+    teamGoal: { findFirst: vi.fn(async () => null) },
     delegation: {
       findMany: vi.fn(async () => []),
       findFirst: vi.fn(async () => null),
@@ -349,7 +350,6 @@ function fixture(
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
     deviceApprovalBinding: { findUnique: vi.fn(async () => null) },
-    teamGoal: { findFirst: vi.fn(async () => null) },
     connection: { findMany: vi.fn(async () => []) },
     spaceModelPreference: {
       findFirst: vi.fn(async () => ({
@@ -3138,6 +3138,83 @@ describe("goal review freeze through the executor", () => {
       expect(f.runRecord.status).toBe("cancelled");
     },
   );
+
+  it("writes the final goal usage cut after runtime callbacks drain", async () => {
+    const f = goalRun();
+    freezeGoal(f, "running");
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let observed!: () => void;
+    const observedUsage = new Promise<void>((resolve) => {
+      observed = resolve;
+    });
+    vi.mocked(recordRunUsage).mockImplementationOnce(async () => {
+      observed();
+      await pending;
+      return null;
+    });
+    f.runtimeRun.mockImplementation(async function* () {
+      yield {
+        type: "usage" as const,
+        provider: "fixture",
+        model: "fixture",
+        inputTokens: 12,
+        outputTokens: 3,
+      };
+      yield { type: "done" as const, text: "Done" };
+    });
+    const running = f.executor.continueRun(f.runRecord.id, "worker-1");
+    try {
+      await observedUsage;
+      expect(f.prisma.attempt.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: { usageSettledAt: expect.any(Date) } }),
+      );
+      release();
+      await running;
+      expect(f.prisma.attempt.updateMany).toHaveBeenCalledWith({
+        where: { id: "attempt-1", runId: f.runRecord.id, fence: f.runRecord.leaseFence },
+        data: { usageSettledAt: expect.any(Date) },
+      });
+    } finally {
+      release();
+      await running;
+    }
+  });
+
+  it("does not mark goal accounting final when a usage write fails", async () => {
+    const f = goalRun();
+    freezeGoal(f, "running");
+    vi.mocked(recordRunUsage).mockRejectedValueOnce(new Error("fixture accounting unavailable"));
+    f.runtimeRun.mockImplementation(async function* () {
+      yield {
+        type: "usage" as const,
+        provider: "fixture",
+        model: "fixture",
+        inputTokens: 12,
+        outputTokens: 3,
+      };
+      yield { type: "done" as const, text: "Done" };
+    });
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.prisma.attempt.updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: { usageSettledAt: expect.any(Date) } }),
+    );
+  });
+
+  it("keeps finish_goal out of the external-effect queue so submission cannot block itself", async () => {
+    const f = goalRun();
+    freezeGoal(f, "running");
+    f.setCalls([
+      { name: "finish_goal", args: { summary: "Candidate" }, executionId: "submit-call" },
+    ]);
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.prisma.externalEffect.create).not.toHaveBeenCalled();
+    // This fixture has no group room; reaching the submission handler still proves
+    // that effect admission did not create a self-blocking intended effect first.
+    expect(f.results[0]).toEqual({ error: "finish_goal requires an active group goal" });
+  });
 
   it("starts the runtime normally while the goal is running", async () => {
     const f = goalRun();

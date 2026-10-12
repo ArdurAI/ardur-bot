@@ -6,6 +6,7 @@ import {
   acceptGoal,
   admitGoalRunEffect,
   cancelRunHeldByFrozenGoal,
+  claimGoalRunEffect,
   getGoal,
   goalExhaustionReason,
   isGoalRunEffectFrozen,
@@ -95,6 +96,7 @@ describe("goal scheduling", () => {
       usageRecord: { findFirst: vi.fn(async () => null) },
       goalSettlement: { findUnique: vi.fn(async () => null) },
       run: { create: runCreate, findFirst: vi.fn(async () => null) },
+      goalBoardDelivery: { findMany: vi.fn(async () => []) },
       thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
       event: { create: vi.fn(async () => ({ seq: 1 })) },
     };
@@ -278,6 +280,8 @@ function reviewFixture() {
     untilAt: new Date("2030-01-02T00:00:00.000Z"),
     createdAt: now,
     stoppedAt: null,
+    boardWorkspaceId: null as string | null,
+    boardItemId: null as string | null,
   };
   const revisions: Array<{
     id: string;
@@ -379,15 +383,15 @@ function reviewFixture() {
       updateMany: vi.fn(async () => ({})),
     },
     usageRecord: { findFirst: vi.fn(async () => null) },
-    attempt: { updateMany: vi.fn(async () => ({})) },
+    attempt: { updateMany: vi.fn(async () => ({})), findFirst: vi.fn(async () => null as unknown) },
     run: {
       findMany: vi.fn(async (): Promise<unknown[]> => []),
-      findFirst: vi.fn(async () => null as unknown),
+      findFirst: vi.fn(async (..._args: unknown[]) => null as unknown),
       updateMany: vi.fn(async () => ({ count: 0 })),
       create: vi.fn(async () => ({ id: "run-rework" })),
     },
     externalEffect: {
-      findFirst: vi.fn(async () => null as unknown),
+      findFirst: vi.fn(async (_args: { where: { status: unknown } }) => null as unknown),
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
     goalSettlement: {
@@ -403,12 +407,27 @@ function reviewFixture() {
     goalSettlementDiscrepancy: {
       aggregate: vi.fn(async () => ({ _sum: { tokens: 0 }, _count: 0 })),
     },
+    goalBoardDelivery: {
+      findMany: vi.fn(async () => []),
+      create: vi.fn(),
+      count: vi.fn(async () => 0),
+    },
     thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
     event: { create: vi.fn(async () => ({ seq: 1 })) },
   };
   const prisma = {
     teamGoal: tx.teamGoal,
-    $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+    $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => {
+      const before = structuredClone({ goal, revisions, verdicts });
+      try {
+        return await fn(tx);
+      } catch (error) {
+        Object.assign(goal, before.goal);
+        revisions.splice(0, revisions.length, ...before.revisions);
+        verdicts.splice(0, verdicts.length, ...before.verdicts);
+        throw error;
+      }
+    },
   } as unknown as PrismaClient;
   const submit = () =>
     submitGoal(prisma, owner, {
@@ -441,6 +460,27 @@ describe("goal owner review", () => {
     expect(fixture.tx.goalRevision.create).not.toHaveBeenCalled();
     expect(fixture.tx.teamGoal.updateMany).not.toHaveBeenCalled();
     expect(fixture.tx.event.create).not.toHaveBeenCalled();
+  });
+  it("queues one board comment with the result and does not close on submit", async () => {
+    const fixture = reviewFixture();
+    fixture.goal.boardWorkspaceId = "workspace";
+    fixture.goal.boardItemId = "board-a";
+    const revision = await fixture.submit();
+    expect(fixture.tx.goalBoardDelivery.create).toHaveBeenCalledTimes(1);
+    expect(fixture.tx.goalBoardDelivery.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        transition: "completed",
+        workspaceId: "workspace",
+        itemId: "board-a",
+        state: "pending",
+        revisionId: revision.id,
+      }),
+    });
+    const payload = fixture.tx.goalBoardDelivery.create.mock.calls[0]?.[0].data
+      .commentText as string;
+    expect(payload).toContain("Goal completed");
+    expect(payload).toContain(revision.id);
+    expect(payload).not.toContain("Goal accepted");
   });
   it.each(["accept", "reject"] as const)(
     "refuses %s by a non-owner or an owner outside the goal scope",
@@ -699,6 +739,72 @@ describe("goal owner review", () => {
     });
   });
 
+  it.each(["approved", "executing"])(
+    "refuses submission while a %s replay is pending or in flight",
+    async (status) => {
+      const f = reviewFixture();
+      f.tx.externalEffect.findFirst.mockImplementation(
+        async ({ where }: { where: { status: unknown } }) =>
+          where.status === "executing" && status === "approved" ? null : { id: "replay", status },
+      );
+      await expect(f.submit()).rejects.toMatchObject({ reason: "effects-open" });
+      expect(f.goal.status).toBe("running");
+      expect(f.revisions).toHaveLength(0);
+      expect(f.tx.goalBoardDelivery.create).not.toHaveBeenCalled();
+      expect(f.tx.externalEffect.findFirst).toHaveBeenCalledWith({
+        where: {
+          spaceId: f.goal.spaceId,
+          run: { is: { OR: [{ goalId: f.goal.id }, { delegationRootTaskId: f.goal.rootTaskId }] } },
+          status:
+            status === "executing" ? "executing" : { in: ["intended", "approved", "executing"] },
+        },
+        select: { id: true },
+      });
+      f.tx.externalEffect.findFirst.mockResolvedValue(null);
+      await expect(f.submit()).resolves.toMatchObject({ id: "revision-1" });
+    },
+  );
+
+  it.each(["attempt", "request"])(
+    "refuses acceptance until the final %s collection cut",
+    async (kind) => {
+      const f = reviewFixture();
+      const revision = await f.submit();
+      const input = { goalId: f.goal.id, revisionId: revision.id };
+      await reviewGoalCondition(f.prisma, owner, {
+        ...input,
+        conditionId: "cond-final",
+        status: "pass",
+      });
+      if (kind === "attempt")
+        f.tx.attempt.findFirst.mockResolvedValue({ id: "terminal-but-collecting" });
+      else
+        f.tx.usageRecord.findFirst.mockResolvedValue({ id: "unreported-but-collecting" } as never);
+      await expect(acceptGoal(f.prisma, owner, input)).rejects.toMatchObject({
+        reason: "work-active",
+      });
+      expect(f.tx.goalVerdict.create).not.toHaveBeenCalled();
+      expect(f.tx.goalSettlement.create).not.toHaveBeenCalled();
+      expect(f.goal.status).toBe("completed");
+      expect(f.tx.attempt.findFirst).toHaveBeenCalledWith({
+        where: {
+          run: {
+            is: {
+              spaceId: f.goal.spaceId,
+              userId: f.goal.userId,
+              OR: [{ goalId: f.goal.id }, { delegationRootTaskId: f.goal.rootTaskId }],
+            },
+          },
+          usageSettledAt: null,
+        },
+        select: { id: true },
+      });
+      f.tx.attempt.findFirst.mockResolvedValue(null);
+      f.tx.usageRecord.findFirst.mockResolvedValue(null);
+      await expect(acceptGoal(f.prisma, owner, input)).resolves.toMatchObject({ type: "accept" });
+    },
+  );
+
   it("refuses acceptance while an execution lease is live", async () => {
     const fixture = reviewFixture();
     const revision = await fixture.submit();
@@ -716,6 +822,28 @@ describe("goal owner review", () => {
     expect(fixture.tx.goalSettlement.create).not.toHaveBeenCalled();
     expect(fixture.goal.status).toBe("completed");
   });
+
+  it.each(["queued", "leased", "running"])(
+    "refuses acceptance for %s work even without a live lease",
+    async (status) => {
+      const f = reviewFixture();
+      const revision = await f.submit();
+      await reviewGoalCondition(f.prisma, owner, {
+        goalId: f.goal.id,
+        revisionId: revision.id,
+        conditionId: "cond-final",
+        status: "pass",
+      });
+      f.tx.run.findFirst.mockImplementation(async (...args: unknown[]) => {
+        const where = (args[0] as { where: { status?: { in: string[] } } }).where;
+        return where.status?.in.includes(status) ? { id: "unsettled-run" } : null;
+      });
+      await expect(
+        acceptGoal(f.prisma, owner, { goalId: f.goal.id, revisionId: revision.id }),
+      ).rejects.toMatchObject({ reason: "lease-active" });
+      expect(f.tx.goalSettlement.create).not.toHaveBeenCalled();
+    },
+  );
 
   it("refuses acceptance while an effect is unsettled", async () => {
     const fixture = reviewFixture();
@@ -984,6 +1112,65 @@ describe("goal freeze at resume and replay", () => {
     expect(inFlight.effectUpdates).toEqual([]);
   });
 
+  it("rereads the freeze under the review lock when rework reopens after its initial read", async () => {
+    const f = frozenRunFixture("queued", "completed");
+    f.tx.$queryRaw.mockImplementation(async () => {
+      f.state.goalStatus = "running";
+      return [];
+    });
+    await expect(cancelRunHeldByFrozenGoal(f.prisma, f.state.run)).resolves.toBe(false);
+    expect(f.state.run.status).toBe("queued");
+    expect(f.effectUpdates).toEqual([]);
+    expect(f.tx.run.updateMany).not.toHaveBeenCalled();
+  });
+
+  it.each(["approved", "intended"] as const)(
+    "claims a %s effect only under the root lock and current goal state",
+    async (from) => {
+      const f = frozenRunFixture("running", "running");
+      const input = {
+        spaceId: owner.spaceId,
+        userId: owner.userId,
+        goalId: "goal-1",
+        rootTaskId: "task-root",
+        effectId: "effect-1",
+        from,
+      };
+      // Freeze wins between the lookup and claim, even if an earlier check admitted replay.
+      f.tx.$queryRaw.mockImplementation(async () => {
+        f.state.goalStatus = "completed";
+        return [];
+      });
+      await expect(claimGoalRunEffect(f.prisma, input)).resolves.toBe(false);
+      expect(f.tx.externalEffect.updateMany).not.toHaveBeenCalled();
+      f.state.goalStatus = "running";
+      f.tx.$queryRaw.mockImplementation(async () => []);
+      await expect(claimGoalRunEffect(f.prisma, input)).resolves.toBe(true);
+      expect(f.effectUpdates).toEqual([
+        {
+          where: { id: "effect-1", spaceId: owner.spaceId, status: from },
+          data: { status: "executing" },
+        },
+      ]);
+    },
+  );
+
+  it("keeps ordinary delegated effect claims working without a goal", async () => {
+    const f = frozenRunFixture("running", "running");
+    f.tx.teamGoal.findFirst.mockResolvedValue(null as never);
+    await expect(
+      claimGoalRunEffect(f.prisma, {
+        spaceId: owner.spaceId,
+        userId: owner.userId,
+        goalId: null,
+        rootTaskId: "ordinary-root",
+        effectId: "effect-1",
+        from: "approved",
+      }),
+    ).resolves.toBe(true);
+    expect(f.effectUpdates).toHaveLength(1);
+  });
+
   it("does not hold a run while the goal is running or after send-back unfreezes it", async () => {
     const running = frozenRunFixture("queued", "running");
     await expect(cancelRunHeldByFrozenGoal(running.prisma, running.state.run)).resolves.toBe(false);
@@ -1011,11 +1198,9 @@ describe("goal freeze at resume and replay", () => {
       $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
     } as unknown as PrismaClient;
     const input = { spaceId: owner.spaceId, userId: owner.userId, goalId: "goal-1" };
-    // The root lock is taken before the goal state is read, so a replay cannot slip
-    // into a goal the submission froze a moment earlier.
+    // Early refusal reads under the root lock. Dispatch also claims under that lock.
     await expect(isGoalRunEffectFrozen(prisma, input)).resolves.toBe(true);
-    // The root lock is taken between the rootTaskId lookup and the status read that
-    // decides, so a replay cannot slip into a goal the submission froze a moment earlier.
+    // The status lookup happens after locking, rather than using the earlier read.
     const reads = tx.teamGoal.findFirst.mock.invocationCallOrder;
     expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeGreaterThan(reads[0]!);
     expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(reads[reads.length - 1]!);
