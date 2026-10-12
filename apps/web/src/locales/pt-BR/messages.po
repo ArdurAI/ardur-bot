@@ -16,7 +16,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/lib/goal-display-text.ts
 msgid "The goal reached owner review before this work started."
-msgstr ""
+msgstr "A meta chegou à revisão do proprietário antes deste trabalho começar."
 
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
@@ -9418,10 +9418,6 @@ msgstr "O arquivo mudou. Abra de novo antes de salvar."
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."
 msgstr "Não foi possível criar o primeiro bot. Tente novamente."
-
-#: src/pages/TeamBoard.tsx
-msgid "The goal reached owner review before this work started."
-msgstr "A meta chegou à revisão do proprietário antes deste trabalho começar."
 
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."
