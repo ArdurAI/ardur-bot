@@ -12,7 +12,11 @@ export const RuntimeReliabilityRowSchema = /* @__PURE__ */ (() =>
     firstReplyMedianMs: z.number().nonnegative().nullable(),
     measuredRuns: z.number().int().nonnegative(),
     lastFailure: z
-      .object({ category: FailureCategoryIdSchema, at: z.string().datetime() })
+      .object({
+        category: FailureCategoryIdSchema,
+        at: z.string().datetime(),
+        provider: z.string().optional(),
+      })
       .nullable(),
   }))();
 export type RuntimeReliabilityRow = z.infer<typeof RuntimeReliabilityRowSchema>;

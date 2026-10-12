@@ -170,3 +170,32 @@ it("selects the next three routines and last three actual results within the act
     }),
   );
 });
+it("retains the provider name in the most recent reliability failure", () => {
+  const result = runtimeReliabilityRows(
+    [
+      {
+        id: "run",
+        status: "failed",
+        runtimePin: {
+          runtimeKind: "hermes",
+          provider: "zai-coding-cn",
+          modelId: "glm-5.3",
+          effort: "high",
+          credentialId: "fixture",
+          revision: 1,
+        },
+        startedAt: now,
+        firstReplyAt: null,
+        completedAt: now,
+        error:
+          "Z.AI Coding CN is refusing requests right now (rate or usage limit). Try again later or check your plan.",
+      },
+    ],
+    now,
+  );
+  expect(result.runtimes.find((row) => row.runtimeKind === "hermes")?.lastFailure).toEqual({
+    category: "provider-rate-limit",
+    provider: "Z.AI Coding CN",
+    at: now.toISOString(),
+  });
+});

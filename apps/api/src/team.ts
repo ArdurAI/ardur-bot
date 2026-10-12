@@ -250,12 +250,20 @@ export async function teamBoard(
         ? problemCategory.success
           ? {
               category: problemCategory.data,
+              provider: runtimeProblem
+                ? (failureCategoryFromText(runtimeProblem.reason)?.params.provider ??
+                  runtimeProblem.pin.provider)
+                : undefined,
               runtime: runtimeProblem
                 ? (runtimeNames[runtimeProblem.pin.runtimeKind] ?? null)
                 : null,
             }
           : legacyCategory
-            ? { category: legacyCategory.id, runtime: legacyCategory.params.runtime ?? null }
+            ? {
+                category: legacyCategory.id,
+                runtime: legacyCategory.params.runtime ?? null,
+                provider: legacyCategory.params.provider,
+              }
             : undefined
         : undefined;
     const executing = run?.startedAt
@@ -325,7 +333,11 @@ export async function teamBoard(
                       : "The task needs attention"
           : null,
       ...(reasonCategory
-        ? { reasonCategory: reasonCategory.category, reasonRuntime: reasonCategory.runtime }
+        ? {
+            reasonCategory: reasonCategory.category,
+            reasonRuntime: reasonCategory.runtime,
+            ...(reasonCategory.provider ? { reasonProvider: reasonCategory.provider } : {}),
+          }
         : {}),
       ...(state === "blocked" && chiefBlockerKey ? { blockerKey: chiefBlockerKey } : {}),
       action:

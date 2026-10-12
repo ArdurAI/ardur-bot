@@ -645,3 +645,23 @@ describe("worker provider broker", () => {
     expect(f.records.at(-1)?.request?.collection?.outcome).toBe("cancelled");
   });
 });
+
+it("keeps the allowlisted upstream code in a pass-through broker failure", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(
+    async () =>
+      new Response(
+        JSON.stringify({ error: { code: "insufficient_quota", message: "private fixture" } }),
+        { status: 429, headers: { "content-type": "application/json" } },
+      ),
+  );
+  const f = fixture({ fetch });
+  await expect(f.broker.open(f.request())).rejects.toMatchObject({
+    failure: {
+      kind: "provider-http",
+      status: 429,
+      layer: "upstream",
+      reason: "http-rate-limit",
+      reasonCode: "insufficient_quota",
+    },
+  });
+});

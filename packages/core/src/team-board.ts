@@ -60,6 +60,9 @@ export function teamRowText(
         : row.reasonCategory
           ? t(failureCategory(row.reasonCategory).message, {
               runtime: row.reasonRuntime ?? t("This runtime"),
+              ...(row.reasonCategory === "provider-rate-limit"
+                ? { provider: row.reasonProvider ?? t("This connection") }
+                : {}),
             })
           : (row.reason ?? t("The task needs attention"));
       return `${t("Blocked")} — ${reason}`;

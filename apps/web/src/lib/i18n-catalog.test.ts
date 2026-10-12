@@ -885,6 +885,8 @@ describe("lingui catalogs", () => {
     // The table's default sentences (packages/contracts/src/failure-categories.ts) plus
     // the blocked-card frame they render inside.
     const sentences = [
+      "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan.",
+      "This connection",
       "{runtime}'s usage limit is reached. Try again after it resets.",
       "Sign in to {runtime} on this computer, then try again.",
       "{runtime} reached this run's turn limit. Narrow the task and try again.",

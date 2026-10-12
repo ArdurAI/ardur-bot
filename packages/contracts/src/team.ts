@@ -52,6 +52,8 @@ export const TeamRowSchema = z.object({
   reasonRuntime: z.string().nullable().optional(),
   /** Known pre-dispatch capability blocker key translated by clients. */
   blockerKey: ChiefBlockerKeySchema.optional(),
+  /** Public catalog connection name for provider refusals. */
+  reasonProvider: z.string().nullable().optional(),
   action: z.string().nullable(),
   rootTaskId: z.string().nullable(),
   delegationId: z.string().nullable(),

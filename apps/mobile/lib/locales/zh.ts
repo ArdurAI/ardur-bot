@@ -138,6 +138,9 @@ export const ZH_MESSAGES: Record<string, string> = {
     "{botName} 的群组模型登录已过期。请重新连接，或更改群组模型。",
   "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
     "{botName} 无法使用为此群组设置的模型。请更改群组模型，或检查 Bot 设置。",
+  "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan.":
+    "{provider} 目前拒绝请求（请求频率或用量限制）。请稍后重试，或检查您的套餐。",
+  "This connection": "此连接",
   "{runtime}'s usage limit is reached. Try again after it resets.":
     "{runtime} 的用量已达上限。请在限额重置后重试。",
   "Sign in to {runtime} on this computer, then try again.":

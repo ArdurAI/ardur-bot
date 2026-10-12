@@ -81,7 +81,10 @@ function codexFailureProblem(
   error: CodexFailure,
   runId?: string,
 ) {
-  const category = nativeFailureCategory(`${error.detail.errorClass}\n${error.detail.message}`);
+  const category = nativeFailureCategory(
+    `${error.detail.errorClass}\n${error.detail.message}`,
+    "codex-app-server",
+  );
   const problem = nativeFailureProblem(
     pin,
     category ??
