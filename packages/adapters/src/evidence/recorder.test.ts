@@ -327,6 +327,22 @@ describe("evidence key rotation and revocation", () => {
       ).ok,
     ).toBe(true);
   });
+  it("counts a seal refused for an emergency-revoked key as a gap", async () => {
+    const { recorder, store } = setup();
+    await recorder.recordDecision(input);
+    const active = await store.activeKey(input.run.spaceId);
+    if (!active) throw new Error("expected an active key");
+    await store.revokeKey({
+      spaceId: input.run.spaceId,
+      expectedKid: active.kid,
+      reason: "compromised fixture",
+    });
+    expect(await recorder.sealRunEvidence(input.run.id)).toEqual({
+      ok: false,
+      reason: "key_revoked",
+    });
+    expect(await store.gapCount(input.run.id)).toBe(1);
+  });
   it("never mints a key silently after an emergency revocation", async () => {
     const { recorder, store, deps, records, keys } = setup();
     await recorder.recordDecision(input);

@@ -342,7 +342,14 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
         signal.throwIfAborted();
         if (!row || row.spaceId !== first.spaceId) throw new Error("Missing evidence key");
         // A seal is a signature too: never seal with an emergency-revoked key.
-        if (emergencyRevoked(row)) return { ok: false, reason: "key_revoked" };
+        // The missed seal ends the run without its closing signature; count it.
+        if (emergencyRevoked(row)) {
+          pendingGaps.set(runId, (pendingGaps.get(runId) ?? 0) + 1);
+          await flushGaps(runId).catch(() => {
+            /* Retry when storage recovers. */
+          });
+          return { ok: false, reason: "key_revoked" };
+        }
         const journal = records.map((record) => record.jws);
         const verification = verifyChain(journal, row.publicKeyPem);
         if (!verification.ok) {
