@@ -203,6 +203,22 @@ describePostgres("append-only evidence (PostgreSQL)", () => {
     });
     expect(next.version).toBe(active.version + 1);
   });
+  it("lets the revocation transitions set their metadata and rejects metadata-only edits", async () => {
+    // Replacement and emergency revocation already ran above against the real
+    // guard: both set revokedAt, plus replacedAt or revokedReason respectively.
+    const history = await store.keysForSpace(spaceId);
+    expect(history.find((row) => row.replacedAt)?.revokedAt).toBeTruthy();
+    expect(history.find((row) => row.revokedReason)?.replacedAt).toBeNull();
+    // Metadata alone never satisfies the guard.
+    const active = (await store.activeKey(spaceId))!;
+    await expect(
+      prisma.evidenceKey.update({ where: { id: active.id }, data: { replacedAt: new Date() } }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.evidenceKey.update({ where: { id: active.id }, data: { revokedReason: "sneaky" } }),
+    ).rejects.toThrow();
+    expect((await store.activeKey(spaceId))?.kid).toBe(active.kid);
+  });
   it("rejects key field edits, un-revoke and delete even with the deletion flag", async () => {
     const rows = await store.keysForSpace(spaceId);
     expect(rows.length).toBeGreaterThan(0);
