@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { describe, expect, it } from "vitest";
 import {
@@ -8,6 +9,49 @@ import {
 } from "./redaction.js";
 
 describe("redaction", () => {
+  it.each([
+    "PRIVATE KEY",
+    "RSA PRIVATE KEY",
+    "EC PRIVATE KEY",
+    "OPENSSH PRIVATE KEY",
+    "ENCRYPTED PRIVATE KEY",
+  ])("removes %s blocks before scanning assignments in every shared redactor", (keyType) => {
+    // Generate disposable key material; assertions never print it.
+    const { privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+    const body = pem.split("\n").slice(1, -2).join("\n");
+    // Labels exercise lexical redaction, independent of key parsing.
+    const block = `-----BEGIN ${keyType}-----\n${body}\n-----END ${keyType}-----`;
+    for (const redact of [
+      redactSensitiveText,
+      redactCredentialText,
+      redactCommandOutput,
+      (text: string) => String(redactBindings({ value: text }).value),
+    ]) {
+      for (const [input, expected] of [
+        [`key: ${block}`, "key: [Redacted]"],
+        [`private_key: ${block}`, "private_key: [Redacted]"],
+        [`Before ${block} after.`, "Before [Redacted] after."],
+        [`Before ${block} between ${block} after.`, "Before [Redacted] between [Redacted] after."],
+        [`Before ${block.replaceAll("\n", "\r\n")} after.`, "Before [Redacted] after."],
+        [`Before -----BEGIN ${keyType}-----\n${body}`, "Before [Redacted]"],
+        [`Before -----BEGIN ${keyType}\n${body}`, "Before [Redacted]"],
+      ]) {
+        // Compare as booleans so a failure cannot reveal generated key material.
+        expect(redact(input!) === expected).toBe(true);
+      }
+    }
+  });
+  it.each(["PUBLIC KEY", "RSA PUBLIC KEY", "CERTIFICATE"])(
+    "preserves a public %s block when no other redaction rule applies",
+    (type) => {
+      const body = Buffer.from("fixture-only-public-material").toString("base64");
+      const input = `Before -----BEGIN ${type}-----\n${body}\n-----END ${type}----- after.`;
+      for (const redact of [redactSensitiveText, redactCredentialText, redactCommandOutput]) {
+        expect(redact(input) === input).toBe(true);
+      }
+    },
+  );
   it.each([
     "apiTokens",
     "mySecrets",

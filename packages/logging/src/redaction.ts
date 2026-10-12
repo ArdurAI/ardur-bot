@@ -281,17 +281,18 @@ export function redactCredentialText(text: string): string {
 
 /** Source-aware redaction for retained shell output only; logs and memories stay conservative. */
 export function redactCommandOutput(text: string): string {
-  // Remove blocks before assignment scanning can consume their opening marker.
-  const withoutPrivateKeys = text.replace(
-    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g,
-    REDACTED,
-  );
-  return redactText(withoutPrivateKeys, false, true);
+  return redactText(text, false, true);
 }
 
 function redactText(text: string, credentialsOnly: boolean, commandOutput = false): string {
+  // Remove blocks first: a preceding credential assignment can consume the BEGIN marker.
+  // An unfinished block stays secret through the end of the string.
+  let result = text.replace(
+    /-----BEGIN [A-Z ]*PRIVATE KEY(?:-----|(?=\r?\n|$))[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g,
+    REDACTED,
+  );
   // Hide URL credentials before their password/host suffix can look like an email.
-  let result = text.includes("@") ? text.replace(CREDENTIAL_URL, `$1${REDACTED}@`) : text;
+  if (result.includes("@")) result = result.replace(CREDENTIAL_URL, `$1${REDACTED}@`);
   if (!credentialsOnly && result.includes("@")) result = result.replace(EMAIL, REDACTED);
   result = redactAssignments(result, credentialsOnly, commandOutput);
   for (const [pattern, replacement] of TEXT_REDACTIONS)
