@@ -337,6 +337,10 @@ msgstr "{name} yanıtlamadan önce durduruldu"
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
 msgstr "{pending, plural, one {incelenmesi gereken # öneri} other {incelenmesi gereken # öneri}}"
 
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider} şu anda istekleri reddediyor (istek sıklığı veya kullanım sınırı). Daha sonra tekrar deneyin veya planınızı kontrol edin."
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
@@ -1443,7 +1447,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "Engellendi"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, provider: row.reasonProvider ?? i18n._(unknownProviderName), }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Engellendi — {0}"
@@ -9530,6 +9534,11 @@ msgstr "Bu yapılandırma çok karmaşık."
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration version is not supported."
 msgstr "Bu yapılandırma sürümü desteklenmiyor."
+
+#: src/lib/failure-category-copy.ts
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This connection"
+msgstr "Bu bağlantı"
 
 #: src/lib/model-selection-error.ts
 msgid "This connection cannot serve that model."

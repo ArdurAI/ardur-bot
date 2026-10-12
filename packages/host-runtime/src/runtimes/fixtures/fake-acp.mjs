@@ -253,6 +253,7 @@ async function handle(value) {
   }
   if (
     scenario === "provider-usage-limit" ||
+    scenario === "provider-http-429" ||
     scenario === "provider-signed-out" ||
     scenario === "provider-model-missing" ||
     scenario === "provider-unknown"
@@ -260,11 +261,13 @@ async function handle(value) {
     const text =
       scenario === "provider-usage-limit"
         ? "HTTP 429: rate limit exceeded, usage limit reached"
-        : scenario === "provider-signed-out"
-          ? "HTTP 401: invalid api key"
-          : scenario === "provider-model-missing"
-            ? "model fixture-pro is not available"
-            : "upstream socket reset";
+        : scenario === "provider-http-429"
+          ? "HTTP 429"
+          : scenario === "provider-signed-out"
+            ? "HTTP 401: invalid api key"
+            : scenario === "provider-model-missing"
+              ? "model fixture-pro is not available"
+              : "upstream socket reset";
     send({ id: value.id, error: { code: -32000, message: text } });
     return;
   }

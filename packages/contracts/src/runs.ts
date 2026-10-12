@@ -22,6 +22,8 @@ export const RunActivityRowSchema = z.object({
   failureCategory: FailureCategoryIdSchema.optional(),
   /** The runtime display name a categorized failure sentence names, when it names one. */
   failureRuntime: z.string().nullable().optional(),
+  /** Public catalog connection name for provider refusals. */
+  failureProvider: z.string().nullable().optional(),
   trigger: RunTriggerSchema,
   routineId: Id.nullable().optional(),
   notificationsEnabled: z.boolean(),

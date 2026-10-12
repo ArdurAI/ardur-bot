@@ -337,6 +337,10 @@ msgstr "{name}이(가) 답변하기 전에 중지되었습니다"
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
 msgstr "{pending, plural, other {검토할 제안 #개}}"
 
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider}에서 현재 요청을 거부하고 있습니다(요청 빈도 또는 사용 한도). 나중에 다시 시도하거나 요금제를 확인하세요."
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
@@ -1443,7 +1447,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "차단됨"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, provider: row.reasonProvider ?? i18n._(unknownProviderName), }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "차단됨 — {0}"
@@ -9530,6 +9534,11 @@ msgstr "이 구성은 너무 복잡합니다."
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration version is not supported."
 msgstr "지원되지 않는 구성 버전입니다."
+
+#: src/lib/failure-category-copy.ts
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This connection"
+msgstr "이 연결"
 
 #: src/lib/model-selection-error.ts
 msgid "This connection cannot serve that model."

@@ -141,6 +141,9 @@ export const RU_MESSAGES: Record<string, string> = {
     "Срок входа {botName} для модели группы истёк. Восстановите подключение или измените модель группы.",
   "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
     "{botName} не смог использовать модель, выбранную для этой группы. Измените модель группы или проверьте настройки бота.",
+  "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan.":
+    "{provider} сейчас отклоняет запросы (лимит частоты или использования). Повторите попытку позже или проверьте свой тариф.",
+  "This connection": "Это подключение",
   "{runtime}'s usage limit is reached. Try again after it resets.":
     "Лимит использования {runtime} исчерпан. Повторите попытку после его сброса.",
   "Sign in to {runtime} on this computer, then try again.":

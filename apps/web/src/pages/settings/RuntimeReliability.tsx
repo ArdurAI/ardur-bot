@@ -105,7 +105,11 @@ export function RuntimeReliability() {
                           <Trans>Last failure</Trans>:{" "}
                           {i18n._({
                             ...failureCategoryMessages[row.lastFailure.category],
-                            values: { runtime: runtimeNames[row.runtimeKind], bot: t`This bot` },
+                            values: {
+                              runtime: runtimeNames[row.runtimeKind],
+                              bot: t`This bot`,
+                              provider: row.lastFailure.provider ?? t`This connection`,
+                            },
                           })}
                         </p>
                       ) : null}

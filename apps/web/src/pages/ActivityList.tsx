@@ -4,7 +4,11 @@ import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
-import { failureCategoryMessages, unknownRuntimeName } from "../lib/failure-category-copy";
+import {
+  failureCategoryMessages,
+  unknownProviderName,
+  unknownRuntimeName,
+} from "../lib/failure-category-copy";
 import { rpc } from "../lib/rpc";
 import { statusLabel } from "../lib/run-status-label";
 import { localizedTeamDeliveryText } from "../lib/team-delivery-text";
@@ -136,6 +140,7 @@ function ActivityRow({
           values: {
             runtime: run.failureRuntime ?? i18n._(unknownRuntimeName),
             bot: run.botName,
+            provider: run.failureProvider ?? i18n._(unknownProviderName),
           },
         })
       : null;

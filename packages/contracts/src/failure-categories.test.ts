@@ -261,3 +261,14 @@ describe("failure categories table", () => {
     expect(classified.reasonId).toBe("destinations-bot");
   });
 });
+
+it("preserves the catalog provider name through a stored 429 sentence", () => {
+  const message = failureCategoryMessage("provider-rate-limit", { provider: "Z.AI Coding CN" });
+  expect(message).toBe(
+    "Z.AI Coding CN is refusing requests right now (rate or usage limit). Try again later or check your plan.",
+  );
+  expect(failureCategoryFromText(message, { runtimes: ["Hermes"] })).toEqual({
+    id: "provider-rate-limit",
+    params: { provider: "Z.AI Coding CN" },
+  });
+});

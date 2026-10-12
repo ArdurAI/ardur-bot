@@ -337,6 +337,10 @@ msgstr "{name} остановился до ответа"
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
 msgstr "{pending, plural, one {# предложение на проверку} few {# предложения на проверку} many {# предложений на проверку} other {# предложения на проверку}}"
 
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider} сейчас отклоняет запросы (лимит частоты или использования). Повторите попытку позже или проверьте свой тариф."
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
@@ -1443,7 +1447,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "Заблокировано"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, provider: row.reasonProvider ?? i18n._(unknownProviderName), }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Заблокировано — {0}"
@@ -9530,6 +9534,11 @@ msgstr "Эта конфигурация слишком сложная."
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration version is not supported."
 msgstr "Эта версия конфигурации не поддерживается."
+
+#: src/lib/failure-category-copy.ts
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This connection"
+msgstr "Это подключение"
 
 #: src/lib/model-selection-error.ts
 msgid "This connection cannot serve that model."

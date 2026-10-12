@@ -1,5 +1,6 @@
 import type { Actor, TaskCard } from "@ardurbot/contracts";
 import { TaskCardSchema, TeamBoardSchema } from "@ardurbot/contracts";
+import { failureCategoryMessage } from "@ardurbot/contracts/failure-categories";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { acceptTeamTask, teamBoard, teamState } from "./team.js";
@@ -146,6 +147,38 @@ function fixture(runStatus = "running", delegationStatus = "running") {
   return { db, prisma: db as unknown as PrismaClient, delegation, run };
 }
 describe("team.board", () => {
+  it.each([
+    ["Stored provider refusal", snapshot.pin.provider],
+    [
+      failureCategoryMessage("provider-rate-limit", { provider: "Fixture Connection" }),
+      "Fixture Connection",
+    ],
+  ])("keeps the provider on a blocked card for reason %s", async (reason, provider) => {
+    const f = fixture("failed", "failed");
+    f.db.event.findMany.mockResolvedValue([
+      {
+        runId: f.run.id,
+        payload: {
+          message: reason,
+          runtimeProblem: {
+            kind: "problem",
+            pin: snapshot.pin,
+            code: "runtime-unavailable",
+            reasonId: "provider-rate-limit",
+            reason,
+            actions: ["retry"],
+          },
+        },
+      },
+    ]);
+    const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+    expect(row).toMatchObject({
+      state: "blocked",
+      reasonCategory: "provider-rate-limit",
+      reasonProvider: provider,
+    });
+  });
+
   it("projects the run's effort evidence without changing its saved pin", async () => {
     const f = fixture();
     const runtimeInfo = {

@@ -51,3 +51,15 @@ describe("teamRowText failure categories", () => {
     );
   });
 });
+
+it("names the provider on a blocked rate-limit card", () => {
+  const text = teamRowText({
+    ...blocked,
+    reasonCategory: "provider-rate-limit",
+    reasonProvider: "Z.AI Coding CN",
+    reasonRuntime: "Hermes",
+  });
+  expect(text).toContain("Z.AI Coding CN is refusing requests right now");
+  expect(text).not.toContain("Hermes");
+  expect(text).not.toContain("{provider}");
+});

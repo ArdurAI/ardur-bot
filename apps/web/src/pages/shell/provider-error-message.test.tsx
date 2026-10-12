@@ -428,3 +428,46 @@ it.each([
     await act(async () => root.unmount());
   },
 );
+
+it.each([true, false])(
+  "renders a provider 429 with the catalog connection name (catalog loaded=%s)",
+  async (loaded) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const element = document.createElement("div");
+    const root = createRoot(element);
+    const pin = { ...nativePin("hermes"), provider: "zai-coding-cn", modelId: "glm-5.3" };
+    const problem = runtimePinProblem(
+      pin,
+      "runtime-unavailable",
+      "Z.AI Coding CN is refusing requests right now (rate or usage limit). Try again later or check your plan.",
+      "provider-rate-limit",
+    );
+    try {
+      await act(async () =>
+        root.render(
+          <ProviderErrorMessage
+            text=""
+            runtimeProblem={problem}
+            catalog={
+              loaded
+                ? [
+                    {
+                      provider: "zai-coding-cn",
+                      providerName: "Z.AI Coding CN",
+                      id: "glm-5.3",
+                      label: "GLM 5.3",
+                    } as never,
+                  ]
+                : undefined
+            }
+          />,
+        ),
+      );
+      expect(element.textContent).toContain("Z.AI Coding CN is refusing requests right now");
+      expect(element.textContent).not.toContain("Hermes");
+      expect(element.textContent).not.toContain("{provider}");
+    } finally {
+      await act(async () => root.unmount());
+    }
+  },
+);

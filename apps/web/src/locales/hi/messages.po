@@ -337,6 +337,10 @@ msgstr "{name} जवाब देने से पहले रुक गया
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
 msgstr "{pending, plural, one {समीक्षा के लिए # सुझाव} other {समीक्षा के लिए # सुझाव}}"
 
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider} अभी अनुरोध अस्वीकार कर रहा है (अनुरोध दर या उपयोग सीमा)। बाद में फिर कोशिश करें या अपना प्लान जाँचें।"
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
@@ -1443,7 +1447,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "अवरुद्ध"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, provider: row.reasonProvider ?? i18n._(unknownProviderName), }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "अवरुद्ध — {0}"
@@ -9530,6 +9534,11 @@ msgstr "यह कॉन्फ़िगरेशन बहुत जटिल �
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration version is not supported."
 msgstr "यह कॉन्फ़िगरेशन संस्करण समर्थित नहीं है।"
+
+#: src/lib/failure-category-copy.ts
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This connection"
+msgstr "यह कनेक्शन"
 
 #: src/lib/model-selection-error.ts
 msgid "This connection cannot serve that model."
