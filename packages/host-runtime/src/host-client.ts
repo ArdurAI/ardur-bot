@@ -45,6 +45,7 @@ export class HostClient {
       !context.runId &&
       "homeKey" in operation &&
       operation.op.startsWith("computer.") &&
+      operation.op !== "computer.terminal" &&
       !operation.op.startsWith("computer.remote.")
     )
       operation = { ...operation, maintenanceId: context.operationId } as HostOperation;

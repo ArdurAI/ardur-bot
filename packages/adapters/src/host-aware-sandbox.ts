@@ -11,7 +11,9 @@ import type {
   ProcessEvent,
   SandboxProvider,
   ScreenRequest,
+  TerminalProvider,
 } from "@ardurbot/adapter-kit";
+import { routedTerminal } from "@ardurbot/adapter-kit";
 import type { HostLabel } from "@ardurbot/contracts";
 import { computerRunsOnHost } from "@ardurbot/contracts";
 import { hostLabel, unknownCapacity } from "@ardurbot/contracts/fleet";
@@ -104,9 +106,7 @@ export function owningSandbox(
 }
 
 export class HostAwareSandbox implements SandboxProvider {
-  get terminal() {
-    return this.isolated.terminal;
-  }
+  readonly terminal: TerminalProvider;
 
   readonly pageBrowser?: SandboxProvider["pageBrowser"];
 
@@ -117,6 +117,9 @@ export class HostAwareSandbox implements SandboxProvider {
     private readonly hostName: () => Promise<HostLabel> = async () => hostLabel(process.platform),
     private readonly hostAvailable: () => Promise<boolean> = hostEnabled,
   ) {
+    this.terminal = routedTerminal(
+      async (computer, context) => (await this.owner(computer, context)).terminal,
+    );
     if (isolated.pageBrowser || host.pageBrowser) {
       this.pageBrowser = async (computer, request, context) => {
         const provider = await this.route(computer);

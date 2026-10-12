@@ -5,6 +5,7 @@ import type {
   ComputerRef,
   PortableFile,
   ProcessEvent,
+  TerminalContext,
 } from "@ardurbot/adapter-kit";
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import {
@@ -16,6 +17,7 @@ import { resolveEncryptionKey } from "@ardurbot/core";
 import { secretEnvironment } from "@ardurbot/core/node/service-secrets";
 import { DesktopSandboxProvider } from "@ardurbot/host-runtime/desktop-sandbox";
 import { HostClient } from "@ardurbot/host-runtime/host-client";
+import { remoteHostTerminal } from "./remote-host-terminal.js";
 
 export function usesHostBridge(env: NodeJS.ProcessEnv = process.env) {
   return env.ARDURBOT_HOST_BRIDGE === "api";
@@ -28,8 +30,10 @@ export function createHostClient(env: NodeJS.ProcessEnv = secretEnvironment()) {
 }
 /** Only forwarding lives here. DesktopSandboxProvider inside the host owns execution. */
 export class RemoteHostSandboxProvider extends DesktopSandboxProvider {
+  readonly terminal;
   constructor(private readonly client: Pick<HostClient, "request" | "result" | "health">) {
     super();
+    this.terminal = remoteHostTerminal(client);
   }
   override async capacity() {
     return (await this.client.health())?.capacity ?? unknownCapacity();
@@ -80,6 +84,32 @@ export class RemoteHostSandboxProvider extends DesktopSandboxProvider {
     cwd: string | undefined,
     context: AdapterContext,
   ) {
+    if (
+      "leaseId" in context &&
+      "fence" in context &&
+      "generation" in context &&
+      "expiresAt" in context
+    ) {
+      const grant = context as TerminalContext;
+      const hostGeneration = (await this.client.health())?.capabilities?.hostTerminal?.generation;
+      if (!hostGeneration) throw new Error("Terminal is not available on this computer.");
+      return (await this.client.result(
+        {
+          op: "computer.terminal",
+          homeKey: computer.botId,
+          action: {
+            type: "cwd",
+            cwd,
+            hostGeneration,
+            leaseId: grant.leaseId,
+            fence: grant.fence,
+            generation: grant.generation,
+            expiresAt: grant.expiresAt,
+          },
+        },
+        context,
+      )) as string;
+    }
     return (await this.client.result(
       { op: "computer.lifecycle", homeKey: computer.botId, action: "cwd", cwd },
       context,
