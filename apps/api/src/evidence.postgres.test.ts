@@ -450,7 +450,9 @@ describePostgres("signing key rotation and revocation (PostgreSQL)", () => {
     });
     const summary = await runEvidenceSummary(prisma, actor(ownerId), runId);
     expect(summary.state).toBe("verified");
-    expect(summary.evidence?.revocationListRevision).toBeTruthy();
+    // The run's key was rotated, not emergency-revoked, so the bundle names no
+    // revocation date; the emergency revocation below is the head key's.
+    expect(summary.evidence?.revocationListRevision).toBe("");
     // Offline check with the dated revocation: records before it verify.
     const response = await download(actor(ownerId), runId);
     const files = extractEvidenceArchive(new Uint8Array(await response.arrayBuffer()));
@@ -461,7 +463,7 @@ describePostgres("signing key rotation and revocation (PostgreSQL)", () => {
       .map((line) => JSON.parse(line).jwt);
     expect(
       verifySeal(files.get("seal.jwt")!.trim(), journal, fixtureKeys.publicKeyPem, undefined, {
-        revokedAt: new Date(summary.evidence!.revocationListRevision!),
+        revokedAt: new Date(revoked.keys.at(-1)!.revokedAt!),
       }).ok,
     ).toBe(true);
     // Signing stays stopped until the owner authorizes a replacement.

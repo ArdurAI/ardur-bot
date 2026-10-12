@@ -143,7 +143,10 @@ async function loadRunEvidence(
           encrypted: false,
           keyId: kid,
           keyRevision: key?.version ?? 1,
-          revocationListRevision: key?.revokedAt ? key.revokedAt.toISOString() : "",
+          // Only an emergency revocation is a revocation; a replaced key's
+          // retired-at stamp must not read as one to offline verifiers.
+          revocationListRevision:
+            key?.revokedAt && !key.replacedAt ? key.revokedAt.toISOString() : "",
           verifierUrl: "https://ardur.ai/docs/governance/",
         }
       : null,
