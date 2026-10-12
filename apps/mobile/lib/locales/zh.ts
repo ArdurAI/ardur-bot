@@ -18,8 +18,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Replace key?": "更换密钥？",
   "Runs already admitted keep their key; new runs sign with the new key.":
     "已准入的运行保留原密钥；新运行使用新密钥签名。",
-  "Revoke the signing key? Signing stops at once. Records signed before revocation still verify.":
-    "撤销签名密钥？签名将立即停止。撤销前签署的记录仍可验证。",
+  "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted.":
+    "撤销签名密钥？签名将立即停止。更早的签名仍可验证，但撤销所在秒内的签名将被视为不可信。",
   Reason: "原因",
   "The key changed. Reload and try again.": "密钥已更改。请重新加载后重试。",
 

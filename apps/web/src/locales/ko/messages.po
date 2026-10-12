@@ -8102,8 +8102,8 @@ msgid "Revoke key"
 msgstr "키 해지"
 
 #: src/components/RunEvidence.tsx
-msgid "Revoke the signing key? Signing stops at once. Records signed before revocation still verify."
-msgstr "서명 키를 해지할까요? 서명이 즉시 중지됩니다. 해지 전에 서명된 기록은 계속 검증됩니다."
+msgid "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted."
+msgstr "서명 키를 폐기할까요? 서명이 즉시 중단됩니다. 이전 서명은 검증되지만, 폐기 시점과 같은 초에 생성된 서명은 신뢰할 수 없는 것으로 처리됩니다."
 
 #: src/components/RunEvidence.tsx
 #: src/pages/DevicesSettings.tsx
@@ -10630,3 +10630,11 @@ msgstr "언제든 실제 작업을 맡길 수 있는<0/>나만의 Agent 팀"
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: ../mobile/components/run-evidence.tsx
+msgid "Replace key?"
+msgstr "키를 교체할까요?"
+
+#: ../mobile/components/run-evidence.tsx
+msgid "Runs already admitted keep their key; new runs sign with the new key."
+msgstr "이미 승인된 실행은 기존 키를 유지하고, 새 실행은 새 키로 서명합니다."

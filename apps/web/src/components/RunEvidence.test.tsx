@@ -371,3 +371,15 @@ it("hides an earlier signer match when the run stops verifying", async () => {
   );
   expect(node.querySelector('[role="status"]')).toBeNull();
 });
+
+it("states that the revocation second is untrusted in the confirmation", async () => {
+  api.keyHistory.mockResolvedValue({ canManage: true, keys: [] });
+  await openIdentity();
+  await act(async () => {
+    await Promise.resolve();
+  });
+  await act(() => button("Revoke key").click());
+  expect(node.textContent).toContain(
+    "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted.",
+  );
+});

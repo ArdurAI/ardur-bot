@@ -8102,8 +8102,8 @@ msgid "Revoke key"
 msgstr "Revogar chave"
 
 #: src/components/RunEvidence.tsx
-msgid "Revoke the signing key? Signing stops at once. Records signed before revocation still verify."
-msgstr "Revogar a chave de assinatura? A assinatura para imediatamente. Registros assinados antes da revogação ainda são verificáveis."
+msgid "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted."
+msgstr "Revogar a chave de assinatura? A assinatura para agora. As assinaturas anteriores são verificadas, mas as do segundo da revogação não são confiáveis."
 
 #: src/components/RunEvidence.tsx
 #: src/pages/DevicesSettings.tsx
@@ -10630,3 +10630,11 @@ msgstr "Sua equipe de agentes sempre ativos<0/>, a quem você pode dar trabalho 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: ../mobile/components/run-evidence.tsx
+msgid "Replace key?"
+msgstr "Substituir a chave?"
+
+#: ../mobile/components/run-evidence.tsx
+msgid "Runs already admitted keep their key; new runs sign with the new key."
+msgstr "As execuções já admitidas mantêm sua chave; as novas assinam com a nova chave."

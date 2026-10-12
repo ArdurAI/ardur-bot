@@ -19,8 +19,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Replace key?": "Заменить ключ?",
   "Runs already admitted keep their key; new runs sign with the new key.":
     "Уже допущенные запуски сохраняют свой ключ; новые запуски подписываются новым ключом.",
-  "Revoke the signing key? Signing stops at once. Records signed before revocation still verify.":
-    "Отозвать ключ подписи? Подпись немедленно прекращается. Записи, подписанные до отзыва, по-прежнему проверяются.",
+  "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted.":
+    "Отозвать ключ подписи? Подписание сразу прекратится. Более ранние подписи проходят проверку, но подписи за секунду отзыва считаются недоверенными.",
   Reason: "Причина",
   "The key changed. Reload and try again.": "Ключ изменился. Перезагрузите и попробуйте снова.",
 

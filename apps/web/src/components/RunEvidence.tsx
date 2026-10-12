@@ -358,8 +358,8 @@ export function EvidenceIdentityDetails({
               <div className="space-y-2">
                 <p>
                   <Trans>
-                    Revoke the signing key? Signing stops at once. Records signed before revocation
-                    still verify.
+                    Revoke the signing key? Signing stops now. Earlier signatures verify, but those
+                    in the revocation second are untrusted.
                   </Trans>
                 </p>
                 <Input

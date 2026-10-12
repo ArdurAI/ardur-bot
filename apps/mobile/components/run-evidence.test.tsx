@@ -187,6 +187,17 @@ it("reports failed verification without a signer success", async () => {
   expect(node.textContent).not.toContain("self-consistent only");
 });
 
+it("states that the revocation second is untrusted in the confirmation", async () => {
+  mocks.rpc.mockResolvedValue({ canManage: true, keys: [] });
+  await act(async () =>
+    root.render(<EvidenceIdentityDetails summary={summary} spaceId="space" open paired={false} />),
+  );
+  await act(() => button("Revoke key").click());
+  expect(node.textContent).toContain(
+    "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted.",
+  );
+});
+
 it("hides an earlier signer match when the run stops verifying", async () => {
   await act(() =>
     root.render(<EvidenceIdentityDetails summary={summary} spaceId="space" open paired={false} />),

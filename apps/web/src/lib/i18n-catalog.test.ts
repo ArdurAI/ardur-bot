@@ -14,6 +14,26 @@ import zhCN from "../../scripts/translations-zh-CN.json";
 
 describe("lingui catalogs", () => {
   it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates web and phone signing-key confirmations in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const source = readFileSync(filename, "utf8");
+      const catalog = await formatter().parse(source, { locale, sourceLocale: "en", filename });
+      for (const message of [
+        "Replace key?",
+        "Runs already admitted keep their key; new runs sign with the new key.",
+        "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key.",
+        "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted.",
+      ]) {
+        expect(source.split(`msgid ${JSON.stringify(message)}\n`)).toHaveLength(2);
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation?.trim(), `${locale}: ${message}`).toBeTruthy();
+        if (locale === "en") expect(entry?.translation).toBe(message);
+        else expect(entry?.translation).not.toBe(message);
+      }
+    },
+  );
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     "translates session-start failures and command refusals once in %s",
     async (locale) => {
       const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));

@@ -8102,8 +8102,8 @@ msgid "Revoke key"
 msgstr "कुंजी रद्द करें"
 
 #: src/components/RunEvidence.tsx
-msgid "Revoke the signing key? Signing stops at once. Records signed before revocation still verify."
-msgstr "हस्ताक्षर कुंजी रद्द करें? हस्ताक्षर तुरंत बंद हो जाता है। रद्द करने से पहले किए गए हस्ताक्षर सत्यापित होते रहते हैं।"
+msgid "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted."
+msgstr "हस्ताक्षर कुंजी निरस्त करें? हस्ताक्षर करना अभी रुक जाएगा। पहले के हस्ताक्षर सत्यापित होते हैं, लेकिन निरस्तीकरण वाले सेकंड के हस्ताक्षर अविश्वसनीय माने जाते हैं।"
 
 #: src/components/RunEvidence.tsx
 #: src/pages/DevicesSettings.tsx
@@ -10630,3 +10630,11 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: ../mobile/components/run-evidence.tsx
+msgid "Replace key?"
+msgstr "कुंजी बदलें?"
+
+#: ../mobile/components/run-evidence.tsx
+msgid "Runs already admitted keep their key; new runs sign with the new key."
+msgstr "पहले से स्वीकृत रन अपनी कुंजी रखते हैं; नए रन नई कुंजी से हस्ताक्षर करते हैं।"

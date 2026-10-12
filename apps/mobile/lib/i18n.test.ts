@@ -38,6 +38,22 @@ function collectSourceFiles(dir: string): string[] {
 }
 
 describe("mobile i18n", () => {
+  it.each(["ru", "zh-CN"] as const)("translates signing-key confirmations (%s)", async (locale) => {
+    const { resetI18nForTests, t } = await import("./i18n");
+    resetI18nForTests(locale);
+    try {
+      for (const message of [
+        "Replace key?",
+        "Runs already admitted keep their key; new runs sign with the new key.",
+        "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted.",
+      ]) {
+        expect(t(message).trim()).toBeTruthy();
+        expect(t(message)).not.toBe(message);
+      }
+    } finally {
+      resetI18nForTests("en");
+    }
+  });
   it.each(["ru", "zh-CN"] as const)(
     "translates freeze cancellation in chat and copy text (%s)",
     async (locale) => {

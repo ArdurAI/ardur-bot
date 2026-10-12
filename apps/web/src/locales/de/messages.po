@@ -8102,8 +8102,8 @@ msgid "Revoke key"
 msgstr "Schlüssel widerrufen"
 
 #: src/components/RunEvidence.tsx
-msgid "Revoke the signing key? Signing stops at once. Records signed before revocation still verify."
-msgstr "Den Signierschlüssel widerrufen? Die Signierung stoppt sofort. Vor dem Widerruf signierte Einträge bleiben überprüfbar."
+msgid "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted."
+msgstr "Den Signierschlüssel widerrufen? Die Signierung stoppt sofort. Frühere Signaturen lassen sich prüfen, aber die aus der Widerrufssekunde gelten als nicht vertrauenswürdig."
 
 #: src/components/RunEvidence.tsx
 #: src/pages/DevicesSettings.tsx
@@ -10630,3 +10630,11 @@ msgstr "Dein Team aus jederzeit verfügbaren Agents<0/>für echte Aufgaben."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: ../mobile/components/run-evidence.tsx
+msgid "Replace key?"
+msgstr "Schlüssel ersetzen?"
+
+#: ../mobile/components/run-evidence.tsx
+msgid "Runs already admitted keep their key; new runs sign with the new key."
+msgstr "Bereits zugelassene Läufe behalten ihren Schlüssel; neue Läufe signieren mit dem neuen Schlüssel."

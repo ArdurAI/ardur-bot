@@ -57,6 +57,23 @@ test("owner recording and sealed run evidence", async ({ page }, testInfo) => {
           : "no_expected_key",
       };
     }
+    if (procedure === "evidence/keyHistory") {
+      result = {
+        canManage: true,
+        keys: [
+          {
+            keyId: summary.signingIdentity!.fingerprint,
+            fingerprint: summary.signingIdentity!.fingerprint,
+            version: 1,
+            state: "active",
+            createdAt: "2026-09-29T12:00:00Z",
+            replacedAt: null,
+            revokedAt: null,
+            revokedReason: null,
+          },
+        ],
+      };
+    }
     if (procedure === "threads/get") {
       const snapshot = result as ThreadSnapshot;
       result = {
@@ -103,4 +120,12 @@ test("owner recording and sealed run evidence", async ({ page }, testInfo) => {
     .fill(`sha256:${"b".repeat(64)}`);
   await page.getByRole("button", { name: "Check key" }).click();
   await expect(page.getByText("Signed by a different key", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Revoke key", exact: true }).click();
+  await expect(
+    page.getByText(
+      "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await captureScreenshot(page, testInfo, "evidence-revocation-confirmation");
 });

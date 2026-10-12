@@ -360,7 +360,7 @@ export function EvidenceIdentityDetails({
         <>
           <Text style={{ color: native.label }}>
             {t(
-              "Revoke the signing key? Signing stops at once. Records signed before revocation still verify.",
+              "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted.",
             )}
           </Text>
           <TextInput

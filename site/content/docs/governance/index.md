@@ -62,8 +62,8 @@ public key; new runs sign with the new key.
 In an emergency the owner can revoke the key instead. The revocation is recorded
 with its date and reason, signing with the revoked key stops at once — an
 admitted run stops signing further records and reports the gap — and records
-signed after the revocation time are reported untrusted, while earlier records
-still verify against the retained public key. After a bare revocation nothing
+signed during or after the revocation second are reported untrusted. Earlier
+records still verify against the retained public key. After a bare revocation nothing
 signs again until the owner authorizes a replacement. Paired devices and members
 cannot replace or revoke a key.
 
