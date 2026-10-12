@@ -24,6 +24,7 @@ import {
   replaceEvidenceKey,
   revokeEvidenceKey,
 } from "@ardurbot/db";
+import { redactCommandOutput, redactCredentialText } from "@ardurbot/logging";
 import { ORPCError } from "@orpc/server";
 import type { Context, Hono } from "hono";
 import { gzipArchive } from "./export-archive.js";
@@ -173,7 +174,18 @@ type EvidenceKeyRow = {
   revokedReason: string | null;
 };
 
-function keyHistoryEntry(row: EvidenceKeyRow): EvidenceKeyHistoryEntry {
+const REVOCATION_REASON_MAX_LENGTH = 200;
+
+/**
+ * The free-text reason is shared with every space member and paired device,
+ * and an owner may paste a credential into it by mistake. Persist only
+ * conservatively redacted, bounded text; over-masking is accepted here.
+ */
+function sanitizeRevocationReason(reason: string): string {
+  return redactCommandOutput(redactCredentialText(reason)).slice(0, REVOCATION_REASON_MAX_LENGTH);
+}
+
+function keyHistoryEntry(row: EvidenceKeyRow, includeReason: boolean): EvidenceKeyHistoryEntry {
   return {
     keyId: row.kid,
     fingerprint: evidenceKeyId(row.publicKeyPem),
@@ -182,7 +194,8 @@ function keyHistoryEntry(row: EvidenceKeyRow): EvidenceKeyHistoryEntry {
     createdAt: row.createdAt.toISOString(),
     replacedAt: row.replacedAt?.toISOString() ?? null,
     revokedAt: row.revokedAt?.toISOString() ?? null,
-    revokedReason: row.revokedReason,
+    // The free-text reason can name credentials: only the owner may read it.
+    revokedReason: includeReason ? row.revokedReason : null,
   };
 }
 
@@ -203,13 +216,20 @@ async function keyHistoryFor(
     where: { spaceId: actor.spaceId },
     orderBy: { version: "asc" },
   });
-  return { canManage, keys: rows.map(keyHistoryEntry) };
+  return { canManage, keys: rows.map((row) => keyHistoryEntry(row, canManage)) };
 }
 
 /** Public-only key history; any member can compare fingerprints. */
-export async function evidenceKeyHistory(prisma: PrismaClient, actor: Actor) {
+export async function evidenceKeyHistory(
+  prisma: PrismaClient,
+  actor: Actor,
+  authSessionId?: string,
+) {
   const member = await membership(prisma, actor);
-  return keyHistoryFor(prisma, actor, member.role === "owner");
+  // Managing and reading the free-text reason both require an authenticated
+  // owner session; paired devices hold the owner's membership but no session.
+  const canManage = member.role === "owner" && Boolean(authSessionId);
+  return keyHistoryFor(prisma, actor, canManage);
 }
 
 /**
@@ -271,7 +291,7 @@ export async function revokeSpaceEvidenceKey(
     await revokeEvidenceKey(prisma, {
       spaceId: actor.spaceId,
       expectedKid: expectedFingerprint,
-      reason,
+      reason: sanitizeRevocationReason(reason),
     });
   } catch (error) {
     if (error instanceof EvidenceKeyConflict)

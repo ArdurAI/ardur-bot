@@ -6438,7 +6438,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         runEvidenceSummary(deps.prisma, context.actor, input.runId, input.expectedFingerprint),
       ),
       keyHistory: authed.evidence.keyHistory.handler(({ context }) =>
-        evidenceKeyHistory(deps.prisma, context.actor),
+        evidenceKeyHistory(deps.prisma, context.actor, context.authSessionId),
       ),
       replaceKey: authed.evidence.replaceKey.handler(({ context, input }) =>
         replaceSpaceEvidenceKey(

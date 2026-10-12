@@ -361,11 +361,11 @@ describePostgres("signing key rotation and revocation (PostgreSQL)", () => {
     return app.request(`/api/evidence/runs/${id}?spaceId=${viewer.spaceId}`);
   };
   async function headKeyId() {
-    const history = await evidenceKeyHistory(prisma, actor(ownerId));
+    const history = await evidenceKeyHistory(prisma, actor(ownerId), "session-1");
     return history.keys.at(-1)!.keyId;
   }
   it("lets the owner rotate the key while the admitted run keeps verifying", async () => {
-    const history = await evidenceKeyHistory(prisma, actor(ownerId));
+    const history = await evidenceKeyHistory(prisma, actor(ownerId), "session-1");
     expect(history.canManage).toBe(true);
     const active = history.keys.find((entry) => entry.state === "active")!;
     expect(active.keyId).toBe(fixtureKeys.kid);
@@ -398,13 +398,13 @@ describePostgres("signing key rotation and revocation (PostgreSQL)", () => {
     );
   });
   it("maps a raced replacement to a conflict instead of overwriting", async () => {
-    const before = await evidenceKeyHistory(prisma, actor(ownerId));
+    const before = await evidenceKeyHistory(prisma, actor(ownerId), "session-1");
     const kid = await headKeyId();
     await replaceSpaceEvidenceKey({ prisma, secrets }, actor(ownerId), "session-1", kid);
     await expect(
       replaceSpaceEvidenceKey({ prisma, secrets }, actor(ownerId), "session-1", kid),
     ).rejects.toMatchObject({ code: "CONFLICT" });
-    const after = await evidenceKeyHistory(prisma, actor(ownerId));
+    const after = await evidenceKeyHistory(prisma, actor(ownerId), "session-1");
     expect(after.keys).toHaveLength(before.keys.length + 1);
     expect(after.keys.filter((entry) => entry.state === "active")).toHaveLength(1);
   });

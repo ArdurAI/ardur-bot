@@ -561,9 +561,9 @@ describe("evidence key management", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(refused.rows[0]?.revokedAt).toBeNull();
   });
-  it("shares key history as public-only with a manage hint for owners", async () => {
+  it("shares key history as public-only with a manage hint for owner sessions", async () => {
     const owner = keyFixture("owner");
-    expect(await evidenceKeyHistory(owner.prisma, actor)).toMatchObject({
+    expect(await evidenceKeyHistory(owner.prisma, actor, "session-1")).toMatchObject({
       canManage: true,
       keys: [
         {
@@ -575,13 +575,64 @@ describe("evidence key management", () => {
       ],
     });
     const member = keyFixture("member");
-    expect((await evidenceKeyHistory(member.prisma, actor)).canManage).toBe(false);
+    expect((await evidenceKeyHistory(member.prisma, actor, "session-1")).canManage).toBe(false);
+    // Paired devices act with the owner's membership but hold no authenticated session.
+    const device = keyFixture("owner");
+    expect((await evidenceKeyHistory(device.prisma, actor)).canManage).toBe(false);
     const outsider = keyFixture(null);
-    await expect(evidenceKeyHistory(outsider.prisma, actor)).rejects.toMatchObject({
+    await expect(evidenceKeyHistory(outsider.prisma, actor, "session-1")).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
-    const history = await evidenceKeyHistory(owner.prisma, actor);
+    const history = await evidenceKeyHistory(owner.prisma, actor, "session-1");
     expect(JSON.stringify(history)).not.toContain("fixture-ciphertext");
     expect(JSON.stringify(history)).not.toContain("PRIVATE KEY");
+  });
+  it("redacts credentials from the revocation reason before storing it", async () => {
+    const f = keyFixture("owner");
+    const apiToken = "sk-live4eC39HqLyjWDartJzT1zdp7dc51Js";
+    const pemBody = "MIIEpAIBAAKCAQEA7d1fK7fG6vBQ8mY3xYzL9vN0pQrS2tT5uVwX8yZaBcD4eF7h";
+    const reason = [
+      `rotating after leak of ${apiToken}`,
+      "-----BEGIN RSA PRIVATE KEY-----",
+      pemBody,
+      "-----END RSA PRIVATE KEY-----",
+      "please review",
+    ].join("\n");
+    const history = await revokeSpaceEvidenceKey(
+      f.prisma,
+      actor,
+      "session-1",
+      f.rows[0]!.kid,
+      reason,
+    );
+    const stored = f.rows[0]?.revokedReason ?? "";
+    // Boolean assertions keep any leaked material out of test output.
+    expect(stored.includes(apiToken)).toBe(false);
+    expect(stored.includes(pemBody)).toBe(false);
+    expect(stored.includes("PRIVATE KEY")).toBe(false);
+    expect(stored).toContain("[Redacted]");
+    expect(stored).toContain("please review");
+    expect(history.keys[0]?.revokedReason).toBe(stored);
+  });
+  it("bounds the stored revocation reason length", async () => {
+    const f = keyFixture("owner");
+    await revokeSpaceEvidenceKey(f.prisma, actor, "session-1", f.rows[0]!.kid, "a".repeat(500));
+    expect(f.rows[0]?.revokedReason).toHaveLength(200);
+  });
+  it("shows the free-text reason only to the owner with an authenticated session", async () => {
+    const f = keyFixture("owner");
+    f.rows[0]!.revokedAt = new Date("2026-10-02T00:00:00.000Z");
+    f.rows[0]!.revokedReason = "compromised fixture";
+    expect((await evidenceKeyHistory(f.prisma, actor, "session-1")).keys[0]?.revokedReason).toBe(
+      "compromised fixture",
+    );
+    // Members and paired devices see the revocation time and state only.
+    expect((await evidenceKeyHistory(f.prisma, actor)).keys[0]?.revokedReason).toBeNull();
+    const member = keyFixture("member");
+    member.rows[0]!.revokedAt = new Date("2026-10-02T00:00:00.000Z");
+    member.rows[0]!.revokedReason = "compromised fixture";
+    expect(
+      (await evidenceKeyHistory(member.prisma, actor, "session-1")).keys[0]?.revokedReason,
+    ).toBeNull();
   });
 });
