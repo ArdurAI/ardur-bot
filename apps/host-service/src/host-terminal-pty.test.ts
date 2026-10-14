@@ -33,7 +33,7 @@ function fakeOperations() {
     signal: vi.fn(),
   };
 }
-async function fixture(pid = 100, operations = fakeOperations()) {
+function fakePty(pid = 100) {
   let data: (data: string) => void = () => {};
   let exit: () => void = () => {};
   const dataDispose = vi.fn();
@@ -54,8 +54,17 @@ async function fixture(pid = 100, operations = fakeOperations()) {
     }),
   };
   const spawn = vi.fn(() => child as unknown as IPty);
+  return {
+    spawn,
+    child,
+    dataDispose,
+    data: (value: string) => data(value),
+    exit: () => exit(),
+  };
+}
+async function fixture(pid = 100, operations = fakeOperations(), pty = fakePty(pid)) {
   const { snapshot, signal } = operations;
-  const factory = darwinHostTerminalFactory({ spawn }, operations);
+  const factory = darwinHostTerminalFactory(pty, operations);
   const guard = {
     paths: ["/fixture/protected"],
     ports: [12345],
@@ -65,19 +74,53 @@ async function fixture(pid = 100, operations = fakeOperations()) {
   const terminal = await factory(guard).spawn("/bin/sh", "/fixture/work", environment, 93, 31);
   processes.push(terminal);
   return {
+    ...pty,
     terminal,
-    spawn,
     snapshot,
     signal,
-    child,
-    dataDispose,
-    data: (value: string) => data(value),
-    exit: () => exit(),
     environment,
   };
 }
 
 describe("macOS host PTY boundary", () => {
+  it.each([
+    { failure: "rejects", alreadyGone: false },
+    { failure: "rejects", alreadyGone: true },
+    { failure: "times out", alreadyGone: false },
+    { failure: "times out", alreadyGone: true },
+  ])(
+    "kills the spawned shell without tracking or polling when the first snapshot $failure (ESRCH: $alreadyGone)",
+    async ({ failure, alreadyGone }) => {
+      const operations = fakeOperations();
+      const pty = fakePty();
+      const message =
+        failure === "rejects"
+          ? "Terminal process lookup failed."
+          : "Terminal process lookup timed out.";
+      if (failure === "rejects") operations.snapshot.mockRejectedValueOnce(new Error(message));
+      else operations.snapshot.mockReturnValueOnce(new Promise(() => {}));
+      if (alreadyGone)
+        pty.child.kill.mockImplementation(() => {
+          throw Object.assign(new Error("Process already exited."), { code: "ESRCH" });
+        });
+
+      const opening = fixture(100, operations, pty);
+      const rejected = expect(opening).rejects.toEqual(new Error(message));
+      await vi.waitFor(() => expect(operations.snapshot).toHaveBeenCalledOnce());
+      await vi.advanceTimersByTimeAsync(failure === "rejects" ? 0 : 2000);
+      await rejected;
+
+      expect(pty.spawn).toHaveBeenCalledOnce();
+      expect(pty.child.kill).toHaveBeenCalledExactlyOnceWith("SIGKILL");
+      expect(processes).toEqual([]);
+      expect(operations.signal).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(operations.snapshot).toHaveBeenCalledExactlyOnceWith(2000);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
   it("launches the requested login shell under all guards with only the supplied environment", async () => {
     const f = await fixture();
     expect(f.spawn).toHaveBeenCalledOnce();

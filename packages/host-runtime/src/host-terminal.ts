@@ -146,6 +146,7 @@ export class HostTerminalProvider implements TerminalProvider {
         throw unavailable();
     };
     check();
+    // Re-check Linux shell selection in step 3 before injecting a factory there.
     const shell =
       this.options.shell ??
       (process.platform === "win32"
