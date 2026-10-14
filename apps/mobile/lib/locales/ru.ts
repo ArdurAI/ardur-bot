@@ -1650,4 +1650,13 @@ export const RU_MESSAGES: Record<string, string> = {
   "Connect GitHub or grant a team member permission to read and write.":
     "Подключите GitHub или разрешите участнику команды читать и записывать данные.",
   "Needs you": "Нужна ваша помощь",
+  "Git changes": "Изменения Git",
+  "Git changes are unavailable on this computer.": "Изменения Git недоступны на этом компьютере.",
+  "Not a Git repository": "Не репозиторий Git",
+  "No changes to show": "Нет изменений для отображения",
+  "Some changes are not shown": "Некоторые изменения не показаны",
+  "Diff is too large": "Слишком большой diff",
+  Modified: "Изменён",
+  Untracked: "Не отслеживаются",
+  "This file looks like it contains a secret.": "Этот файл похож на секрет.",
 };

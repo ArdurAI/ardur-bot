@@ -54,6 +54,9 @@ export interface GitRunner {
   ): Promise<GitRunResult>;
 }
 
+/** One label for a changed path. Copies count as added; conflicts count as modified. */
+export type GitChangeKind = "added" | "modified" | "deleted" | "untracked";
+
 export interface GitStatusEntry {
   /** Repository-relative path. */
   path: string;
@@ -65,6 +68,8 @@ export interface GitStatusEntry {
   untracked: boolean;
   /** The path carries a merge-conflict state. */
   conflict: boolean;
+  /** Porcelain summary used by the phone list. */
+  change: GitChangeKind;
 }
 
 export type GitChangesResult =
@@ -201,6 +206,19 @@ async function resolveHead(
   return /^[0-9a-f]{40}$/u.test(id) ? id : "unavailable";
 }
 
+/** Collapses porcelain XY into the statuses the changes list shows. */
+export function gitChangeKind(x: string, y: string): GitChangeKind {
+  if (x === "?" && y === "?") return "untracked";
+  if (x === "C" || y === "C") return "added";
+  if (
+    (x === "D" && (y === "D" || y === " " || y === "!")) ||
+    (y === "D" && (x === " " || x === "!"))
+  )
+    return "deleted";
+  if (x === "A" && (y === "A" || y === " " || y === "M")) return "added";
+  return "modified";
+}
+
 export function parseGitStatus(text: string): GitStatusEntry[] {
   const entries: GitStatusEntry[] = [];
   for (const record of text.split("\0")) {
@@ -213,7 +231,7 @@ export function parseGitStatus(text: string): GitStatusEntry[] {
     const conflict = CONFLICT_CODES.has(x + y);
     const staged = !untracked && x !== " " && x !== "!";
     const unstaged = !untracked && y !== " " && y !== "!";
-    entries.push({ path, staged, unstaged, untracked, conflict });
+    entries.push({ path, staged, unstaged, untracked, conflict, change: gitChangeKind(x, y) });
   }
   return entries;
 }

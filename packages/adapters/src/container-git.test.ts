@@ -254,15 +254,63 @@ describe("container git observation on a temporary repository", () => {
     if (status.kind !== "status") throw new Error("unreachable");
     expect(status.entries).toEqual(
       expect.arrayContaining([
-        { path: "staged.md", staged: true, unstaged: false, untracked: false, conflict: false },
-        { path: "renamed.md", staged: true, unstaged: false, untracked: false, conflict: false },
-        { path: "unstaged.md", staged: false, unstaged: true, untracked: false, conflict: false },
-        { path: "note name.md", staged: false, unstaged: false, untracked: true, conflict: false },
+        {
+          path: "staged.md",
+          staged: true,
+          unstaged: false,
+          untracked: false,
+          conflict: false,
+          change: "deleted",
+        },
+        {
+          path: "renamed.md",
+          staged: true,
+          unstaged: false,
+          untracked: false,
+          conflict: false,
+          change: "added",
+        },
+        {
+          path: "unstaged.md",
+          staged: false,
+          unstaged: true,
+          untracked: false,
+          conflict: false,
+          change: "modified",
+        },
+        {
+          path: "note name.md",
+          staged: false,
+          unstaged: false,
+          untracked: true,
+          conflict: false,
+          change: "untracked",
+        },
       ]),
     );
     expect(staged).toMatchObject({ kind: "diff", binary: false });
     expect(unstaged).toMatchObject({ kind: "diff", before: "old", after: "new" });
     expect(untracked).toMatchObject({ kind: "diff", before: null, after: "spaced" });
+  });
+
+  it("keeps both sides when a renamed file is edited after the move", async () => {
+    const { root, git, runner } = await fixture();
+    git(["init", "-q", "-b", "main"]);
+    await writeFile(path.join(root, "old.txt"), "before\n");
+    git(["add", "old.txt"]);
+    git(["commit", "-q", "-m", "base"]);
+    git(["mv", "old.txt", "new.txt"]);
+    await writeFile(path.join(root, "new.txt"), "after\n");
+
+    const status = await observeContainerGitChanges(runner, { root });
+    expect(status.kind).toBe("status");
+    if (status.kind !== "status") throw new Error("unreachable");
+    expect(status.entries.map((entry) => entry.path).sort()).toEqual(["new.txt", "old.txt"]);
+
+    const removed = await observeContainerGitChanges(runner, { root, path: "old.txt" });
+    const added = await observeContainerGitChanges(runner, { root, path: "new.txt" });
+    expect(removed).toMatchObject({ kind: "diff", before: "before", after: "" });
+    expect(added).toMatchObject({ kind: "diff", before: "", after: "after" });
   });
 
   it("reports binary and oversized files without returning the whole file", async () => {

@@ -78,6 +78,9 @@ export const WorkspaceContextSchema = z.object({
 });
 export type WorkspaceContext = z.infer<typeof WorkspaceContextSchema>;
 
+export const GitChangeKindSchema = z.enum(["added", "modified", "deleted", "untracked"]);
+export type GitChangeKind = z.infer<typeof GitChangeKindSchema>;
+
 export const GitStatusEntrySchema = z
   .object({
     path: IdePathSchema.min(1),
@@ -85,6 +88,8 @@ export const GitStatusEntrySchema = z
     unstaged: z.boolean(),
     untracked: z.boolean(),
     conflict: z.boolean(),
+    /** Present when the observer classified the porcelain code. Older clients omit it. */
+    change: GitChangeKindSchema.optional(),
   })
   .strict();
 export type GitStatusEntry = z.infer<typeof GitStatusEntrySchema>;

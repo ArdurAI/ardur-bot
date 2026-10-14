@@ -3553,7 +3553,7 @@
       "id": "mobile-files",
       "aliases": [],
       "title": "Files",
-      "summary": "Browse available roots/directories and read a text preview.",
+      "summary": "Browse available roots/directories, read a text preview, and review a bot's Git changes.",
       "area": "mobile",
       "order": 30,
       "internal": false,

@@ -90,8 +90,22 @@ it("shows staged, unstaged and untracked worktree changes without a model run", 
   if (result.kind !== "status") throw new Error("unreachable");
   expect(result.head).toMatch(/^[0-9a-f]{40}$/u);
   expect(result.entries).toEqual([
-    { path: "staged.md", staged: true, unstaged: true, untracked: false, conflict: false },
-    { path: "untracked.md", staged: false, unstaged: false, untracked: true, conflict: false },
+    {
+      path: "staged.md",
+      staged: true,
+      unstaged: true,
+      untracked: false,
+      conflict: false,
+      change: "modified",
+    },
+    {
+      path: "untracked.md",
+      staged: false,
+      unstaged: false,
+      untracked: true,
+      conflict: false,
+      change: "untracked",
+    },
   ]);
 });
 

@@ -99,7 +99,8 @@
         "from": "../host-service/dist/native/${os}_${arch}",
         "to": "host-service/native/${os}_${arch}",
         "filter": [
-          "koffi.node"
+          "koffi.node",
+          "node-pty/**/*"
         ]
       },
       {

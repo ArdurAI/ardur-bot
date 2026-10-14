@@ -3811,6 +3811,10 @@ msgstr "Удалить пространство"
 msgid "deleted"
 msgstr "удалено"
 
+#: src/lib/git-changes-phone-copy.ts
+msgid "Deleted"
+msgstr "Удалён"
+
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Deleting…"
@@ -6099,6 +6103,10 @@ msgstr "Модели для пространства владельца серв
 #: src/pages/Onboarding.tsx
 msgid "Models from server"
 msgstr "Модели с сервера"
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "Modified"
+msgstr "Изменён"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Monthly"
@@ -9678,6 +9686,10 @@ msgstr "Этот файл недействителен в формате UTF-8 M
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file is read-only. Open a copy to edit it."
 msgstr "Этот файл доступен только для чтения. Откройте копию, чтобы изменить его."
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "This file looks like it contains a secret."
+msgstr "Этот файл похож на секрет."
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file no longer exists. Save it as a new file or close it."

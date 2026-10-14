@@ -43,7 +43,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await rm(root, { recursive: true, force: true });
 });
-function fixture() {
+function fixture(environmentPatch: NodeJS.ProcessEnv = {}) {
   const processes: ReturnType<typeof fakeProcess>[] = [];
   const spawn = vi.fn(async () => {
     const process = fakeProcess();
@@ -65,6 +65,7 @@ function fixture() {
       PAIRING_TOKEN: "fake-pairing",
       SERVICE_API_KEY: "fake-secret",
       NODE_OPTIONS: "fake-injection",
+      ...environmentPatch,
     }),
   });
   providers.push(provider);
@@ -91,6 +92,19 @@ function fixture() {
 }
 
 describe("host terminal process boundary", () => {
+  it.skipIf(process.platform === "win32")(
+    "uses the captured login shell and rejects relative shell paths",
+    async () => {
+      for (const shell of ["/bin/zsh", "relative-shell"]) {
+        const f = fixture({ SHELL: shell });
+        const opened = await f.provider.open(f.computer, size, f.context);
+        expect((f.spawn.mock.calls[0] as unknown as [string])[0]).toBe(
+          shell.startsWith("/") ? shell : "/bin/sh",
+        );
+        await f.provider.close(opened.id, "closed");
+      }
+    },
+  );
   it("kills an opened process when its bridge result cannot be delivered", async () => {
     const f = fixture();
     await expect(

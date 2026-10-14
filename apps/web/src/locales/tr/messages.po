@@ -3811,6 +3811,10 @@ msgstr ""
 msgid "deleted"
 msgstr "silindi"
 
+#: src/lib/git-changes-phone-copy.ts
+msgid "Deleted"
+msgstr "Silindi"
+
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Deleting…"
@@ -6099,6 +6103,10 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 msgid "Models from server"
 msgstr "Sunucudan gelen modeller"
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "Modified"
+msgstr "Değiştirildi"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Monthly"
@@ -9678,6 +9686,10 @@ msgstr "Bu dosya geçerli bir UTF-8 Markdown değil."
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file is read-only. Open a copy to edit it."
 msgstr "Bu dosya salt okunur. Düzenlemek için bir kopyasını açın."
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "This file looks like it contains a secret."
+msgstr "Bu dosya bir sır içeriyor gibi görünüyor."
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file no longer exists. Save it as a new file or close it."

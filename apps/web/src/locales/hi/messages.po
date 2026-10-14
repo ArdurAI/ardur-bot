@@ -3811,6 +3811,10 @@ msgstr ""
 msgid "deleted"
 msgstr "डिलीट किया गया"
 
+#: src/lib/git-changes-phone-copy.ts
+msgid "Deleted"
+msgstr "हटाया गया"
+
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Deleting…"
@@ -6099,6 +6103,10 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 msgid "Models from server"
 msgstr "सर्वर से मॉडल"
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "Modified"
+msgstr "बदला गया"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Monthly"
@@ -9678,6 +9686,10 @@ msgstr "यह फ़ाइल मान्य UTF-8 Markdown नहीं ह�
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file is read-only. Open a copy to edit it."
 msgstr "यह फ़ाइल रीड-ओनली है। इसे संपादित करने के लिए एक प्रति खोलें।"
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "This file looks like it contains a secret."
+msgstr "यह फ़ाइल किसी रहस्य जैसी लगती है."
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file no longer exists. Save it as a new file or close it."

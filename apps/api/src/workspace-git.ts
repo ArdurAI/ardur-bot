@@ -87,6 +87,8 @@ function mapResult(
           unstaged: entry.unstaged,
           untracked: entry.untracked,
           conflict: entry.conflict,
+          change:
+            entry.change ?? (entry.untracked ? ("untracked" as const) : ("modified" as const)),
         })),
         ...(result.truncated ? { truncated: true } : {}),
       };

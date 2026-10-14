@@ -1,13 +1,55 @@
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, rm } from "node:fs/promises";
+import { chmod, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { builtinModules, createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { smokeDarwinPty } from "./scripts/smoke-darwin-pty.mjs";
 
 const adapterRequire = createRequire(
   new URL("../../packages/adapters/package.json", import.meta.url),
 );
+const hostRequire = createRequire(new URL("./package.json", import.meta.url));
+
+export async function stageDarwinPty(directory, ptyEntry = hostRequire.resolve("node-pty")) {
+  const root = path.dirname(path.dirname(ptyEntry));
+  const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+  if (manifest.version !== "1.1.0") throw new Error("Expected the pinned node-pty 1.1.0 runtime.");
+  const files = [];
+  for (const arch of ["arm64", "x64"]) {
+    const relative = `native/mac_${arch}/node-pty`;
+    const target = path.join(directory, relative);
+    await rm(path.dirname(target), { recursive: true, force: true });
+    await mkdir(path.join(target, "lib"), { recursive: true });
+    const prebuild = `prebuilds/darwin-${arch}`;
+    await mkdir(path.join(target, prebuild), { recursive: true });
+    // Preserve upstream's relative addon/helper lookup; no install-time loader,
+    // development dependencies, sources, tests or other platforms are shipped.
+    for (const name of ["index", "unixTerminal", "terminal", "eventEmitter2", "utils"]) {
+      const file = `lib/${name}.js`;
+      await copyFile(path.join(root, file), path.join(target, file));
+      files.push(`${relative}/${file}`);
+    }
+    for (const name of ["pty.node", "spawn-helper"]) {
+      const file = `${prebuild}/${name}`;
+      await copyFile(path.join(root, file), path.join(target, file));
+      if (name === "spawn-helper") await chmod(path.join(target, file), 0o755);
+      files.push(`${relative}/${file}`);
+    }
+    await copyFile(path.join(root, "LICENSE"), path.join(target, "LICENSE"));
+    await writeFile(
+      path.join(target, "package.json"),
+      `${JSON.stringify({
+        name: "node-pty",
+        version: manifest.version,
+        main: "lib/index.js",
+        license: "MIT",
+      })}\n`,
+    );
+    files.push(`${relative}/LICENSE`, `${relative}/package.json`);
+  }
+  return { files };
+}
 
 export async function stageWindowsNativeAddons(
   directory,
@@ -63,17 +105,29 @@ export async function bundleHostService(
     format: "cjs",
     target: "node22",
     packages: "bundle",
+    external: ["node-pty"],
+    // ESM source uses its module URL in tsx; the relocatable CJS artifact uses
+    // its own URL, never a build-machine path or esbuild's empty import.meta.
+    banner: {
+      js: 'const hostServiceModuleUrl = require("node:url").pathToFileURL(__filename).href;',
+    },
     sourcemap: false,
     metafile: true,
     minify: true,
-    define: { "process.env.WS_NO_BUFFER_UTIL": '"1"', "process.env.WS_NO_UTF_8_VALIDATE": '"1"' },
+    define: {
+      "process.env.WS_NO_BUFFER_UTIL": '"1"',
+      "process.env.WS_NO_UTF_8_VALIDATE": '"1"',
+      "import.meta.url": "hostServiceModuleUrl",
+    },
     logLevel: "warning",
   });
   for (const output of Object.values(result.metafile.outputs)) {
     for (const entry of output.imports) {
       if (
         !entry.external ||
-        (!entry.path.startsWith("node:") && !builtinModules.includes(entry.path))
+        (entry.path !== "node-pty" &&
+          !entry.path.startsWith("node:") &&
+          !builtinModules.includes(entry.path))
       )
         throw new Error(`Host bundle has a runtime dependency: ${entry.path}`);
     }
@@ -87,6 +141,7 @@ export async function bundleHostService(
   )
     throw new Error("Host bundle includes a server or native-addon dependency.");
   const native = await stageWindowsNativeAddons(path.dirname(outfile));
+  const pty = await stageDarwinPty(path.dirname(outfile));
   const python = path.join(path.dirname(outfile), "python");
   await mkdir(python, { recursive: true });
   for (const name of [
@@ -100,7 +155,8 @@ export async function bundleHostService(
       fileURLToPath(new URL(`../../packages/host-runtime/python/${name}`, import.meta.url)),
       path.join(python, name),
     );
-  return { ...result.metafile, native };
+  await smokeDarwinPty(path.dirname(outfile));
+  return { ...result.metafile, native: { ...native, files: [...native.files, ...pty.files] } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const metadata = await bundleHostService();

@@ -63,11 +63,68 @@ describe("parseGitStatus", () => {
     const text =
       "M  staged.md\0 M unstaged.md\0MM both.md\0?? new.md\0UU conflict.md\0!! ignored.md\0";
     expect(parseGitStatus(text)).toEqual([
-      { path: "staged.md", staged: true, unstaged: false, untracked: false, conflict: false },
-      { path: "unstaged.md", staged: false, unstaged: true, untracked: false, conflict: false },
-      { path: "both.md", staged: true, unstaged: true, untracked: false, conflict: false },
-      { path: "new.md", staged: false, unstaged: false, untracked: true, conflict: false },
-      { path: "conflict.md", staged: true, unstaged: true, untracked: false, conflict: true },
+      {
+        path: "staged.md",
+        staged: true,
+        unstaged: false,
+        untracked: false,
+        conflict: false,
+        change: "modified",
+      },
+      {
+        path: "unstaged.md",
+        staged: false,
+        unstaged: true,
+        untracked: false,
+        conflict: false,
+        change: "modified",
+      },
+      {
+        path: "both.md",
+        staged: true,
+        unstaged: true,
+        untracked: false,
+        conflict: false,
+        change: "modified",
+      },
+      {
+        path: "new.md",
+        staged: false,
+        unstaged: false,
+        untracked: true,
+        conflict: false,
+        change: "untracked",
+      },
+      {
+        path: "conflict.md",
+        staged: true,
+        unstaged: true,
+        untracked: false,
+        conflict: true,
+        change: "modified",
+      },
+    ]);
+  });
+
+  it("classifies added and deleted paths", () => {
+    const text = "A  fresh.md\0D  gone.md\0";
+    expect(parseGitStatus(text)).toEqual([
+      {
+        path: "fresh.md",
+        staged: true,
+        unstaged: false,
+        untracked: false,
+        conflict: false,
+        change: "added",
+      },
+      {
+        path: "gone.md",
+        staged: true,
+        unstaged: false,
+        untracked: false,
+        conflict: false,
+        change: "deleted",
+      },
     ]);
   });
 
@@ -167,8 +224,22 @@ describe("observeGitChanges", () => {
       kind: "status",
       head: HEAD,
       entries: [
-        { path: "one.md", staged: false, unstaged: true, untracked: false, conflict: false },
-        { path: "two.md", staged: false, unstaged: false, untracked: true, conflict: false },
+        {
+          path: "one.md",
+          staged: false,
+          unstaged: true,
+          untracked: false,
+          conflict: false,
+          change: "modified",
+        },
+        {
+          path: "two.md",
+          staged: false,
+          unstaged: false,
+          untracked: true,
+          conflict: false,
+          change: "untracked",
+        },
       ],
       truncated: false,
     });

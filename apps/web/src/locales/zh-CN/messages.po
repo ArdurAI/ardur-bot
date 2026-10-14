@@ -3811,6 +3811,10 @@ msgstr ""
 msgid "deleted"
 msgstr "已删除"
 
+#: src/lib/git-changes-phone-copy.ts
+msgid "Deleted"
+msgstr "已删除"
+
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Deleting…"
@@ -6099,6 +6103,10 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 msgid "Models from server"
 msgstr "来自服务器的模型"
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "Modified"
+msgstr "已修改"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Monthly"
@@ -9678,6 +9686,10 @@ msgstr "此文件不是有效的 UTF-8 Markdown。"
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file is read-only. Open a copy to edit it."
 msgstr "此文件为只读。打开副本以进行编辑。"
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "This file looks like it contains a secret."
+msgstr "此文件看起来包含密钥。"
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file no longer exists. Save it as a new file or close it."

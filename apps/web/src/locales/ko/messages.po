@@ -3811,6 +3811,10 @@ msgstr ""
 msgid "deleted"
 msgstr "삭제됨"
 
+#: src/lib/git-changes-phone-copy.ts
+msgid "Deleted"
+msgstr "삭제됨"
+
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Deleting…"
@@ -6099,6 +6103,10 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 msgid "Models from server"
 msgstr "서버에서 찾은 모델"
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "Modified"
+msgstr "수정됨"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Monthly"
@@ -9678,6 +9686,10 @@ msgstr "이 파일은 올바른 UTF-8 Markdown 형식이 아닙니다."
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file is read-only. Open a copy to edit it."
 msgstr "이 파일은 읽기 전용입니다. 편집하려면 복사본을 여세요."
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "This file looks like it contains a secret."
+msgstr "이 파일에 비밀이 있는 것 같습니다."
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file no longer exists. Save it as a new file or close it."

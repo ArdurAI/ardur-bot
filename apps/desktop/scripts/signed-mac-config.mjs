@@ -12,4 +12,11 @@ const mac = {
 };
 // Select Developer ID from the CI job's temporary keychain, never the preview's "-".
 delete mac.identity;
-export default { ...build, mac, forceCodeSigning: true };
+// osx-sign walks all Mach-O files in extraResources, including the extensionless
+// spawn-helper. Verify both added binaries after signing, before publishing.
+export default {
+  ...build,
+  mac,
+  afterSign: "./scripts/verify-mac-pty-signatures.mjs",
+  forceCodeSigning: true,
+};

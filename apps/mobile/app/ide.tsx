@@ -1,6 +1,6 @@
 import type { IdeEntry, IdeRoot, WorkspaceContext } from "@ardurbot/contracts";
 import { COMPUTER_CHANGED_MESSAGE, WorkspaceReadCancelled, WorkspaceReads } from "@ardurbot/core";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Button, ScrollView, Text, View } from "react-native";
 import { rpc } from "../lib/api";
@@ -12,6 +12,7 @@ import { actionMessage, RpcServerError } from "../lib/rpc-error";
 /** Native file browsing uses the same registered-root authorization as the IDE. */
 export default function FilesScreen() {
   const { botId } = useLocalSearchParams<{ botId?: string }>();
+  const router = useRouter();
   const { t } = useI18n();
   const tokens = useMobileTokens();
   const [roots, setRoots] = useState<IdeRoot[]>([]);
@@ -252,6 +253,12 @@ export default function FilesScreen() {
         <Text style={{ color: tokens.mutedForeground }}>
           {t("Files are unavailable on this computer.")}
         </Text>
+      ) : null}
+      {botId && scopedWorkspace?.git ? (
+        <Button
+          title={t("Git changes")}
+          onPress={() => router.push({ pathname: "/git-changes", params: { botId } })}
+        />
       ) : null}
       {botId && scopedWorkspace && scopedWorkspace.files !== "unavailable" ? (
         <Text style={{ color: tokens.mutedForeground }}>
