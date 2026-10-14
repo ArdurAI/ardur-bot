@@ -311,6 +311,10 @@ export function groupGoalDocsFixture(review = false) {
               actorId: null,
               reason: null,
               evidenceId: null,
+              support: [{ kind: "run", recordId: "sample-run", revision: null }],
+              proposedSupport: [
+                { kind: "artifact", recordId: "sample-artifact", revision: "sample-hash" },
+              ],
               createdAt: null,
             },
           ],
@@ -330,6 +334,43 @@ export function groupGoalDocsFixture(review = false) {
     rpc(procedure: string, input?: Record<string, unknown>): unknown {
       if (procedure === "groups/list") return [group];
       if (procedure === "goals/get") return goal;
+      if (procedure === "evidence/runSummary")
+        return {
+          sessionId: input?.runId,
+          recordedAt: now,
+          decisions: { allowed: 2, denied: 0, asked: 0, recorded: 2 },
+          captureLevel: "decisions",
+          evidence: null,
+          gates: { spend: null, risks: [] },
+          state: "verified",
+          sealed: true,
+          gapCount: 0,
+          failureCodes: [],
+        };
+      if (procedure === "evidence/record")
+        return {
+          id: "sample-record",
+          runId: "sample-run",
+          receiptId: "sample-receipt",
+          kid: "sample-kid",
+          toolName: "sample_tool",
+          verdict: "compliant",
+          decisionKind: "allowed",
+          sha256: "sample-record-hash",
+          createdAt: now,
+        };
+      if (procedure === "artifacts/get")
+        return {
+          id: "sample-artifact",
+          botId: "bot",
+          groupId: group.id,
+          runId: null,
+          name: "sample.md",
+          mimeType: "text/markdown",
+          size: 120,
+          createdAt: now,
+          contentBase64: btoa("# Sample plan\n"),
+        };
       if (procedure === "goals/revision") {
         if (
           input?.groupId !== group.id ||

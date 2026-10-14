@@ -13,7 +13,18 @@ const decisions = vi.hoisted(() => ({
   reviewCondition: vi.fn(),
   revision: vi.fn(),
 }));
-vi.mock("../lib/rpc", () => ({ rpc: { goals: decisions } }));
+const supportCalls = vi.hoisted(() => ({
+  runSummary: vi.fn(),
+  record: vi.fn(),
+  artifactGet: vi.fn(),
+}));
+vi.mock("../lib/rpc", () => ({
+  rpc: {
+    goals: decisions,
+    evidence: { runSummary: supportCalls.runSummary, record: supportCalls.record },
+    artifacts: { get: supportCalls.artifactGet },
+  },
+}));
 vi.mock("@lingui/core/macro", () => ({
   msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
   t: (parts: TemplateStringsArray) => parts.join(""),
@@ -21,6 +32,9 @@ vi.mock("@lingui/core/macro", () => ({
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
   Trans: ({ children }: { children: ReactNode }) => children,
+}));
+vi.mock("@lingui/react", () => ({
+  useLingui: () => ({ i18n: { _: (descriptor: { id: string }) => descriptor.id } }),
 }));
 vi.mock("@ardurbot/ui-web", () => ({
   Button: ({
@@ -30,6 +44,10 @@ vi.mock("@ardurbot/ui-web", () => ({
   }: ComponentProps<"button"> & { variant?: string; size?: string }) => (
     <button type="button" {...props} />
   ),
+  Dialog: ({ open, children }: { open?: boolean; children: ReactNode }) =>
+    open ? <div>{children}</div> : null,
+  DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Input: () => null,
   NativeSelect: () => null,
   NativeSelectOption: () => null,
@@ -210,6 +228,68 @@ it("shows the board link and a pending update", async () => {
   expect(node.querySelector("a")?.getAttribute("href")).toBe(
     "/app/board?workspace=workspace&item=board-a",
   );
+});
+
+it("shows supporting records on a reviewed condition and opens one beside it", async () => {
+  supportCalls.runSummary.mockResolvedValue({
+    sessionId: "run-1",
+    recordedAt: "2030-01-01T00:00:00.000Z",
+    decisions: { allowed: 2, denied: 0, asked: 0, recorded: 2 },
+    captureLevel: "decisions",
+    gates: { spend: null, risks: [] },
+    state: "verified",
+    sealed: true,
+    gapCount: 0,
+    failureCodes: [],
+  });
+  const onRefresh = vi.fn(async () => undefined);
+  await act(async () =>
+    root.render(
+      <GroupGoalStrip
+        goal={{
+          ...goal,
+          currentRevision: {
+            ...goal.currentRevision!,
+            conditions: [
+              {
+                id: "cond-final",
+                description: GOAL_FINAL_REVIEW_DESCRIPTION,
+                status: "unknown",
+                actorId: null,
+                reason: null,
+                evidenceId: null,
+                createdAt: null,
+                support: [{ kind: "run", recordId: "run-1", revision: null }],
+                proposedSupport: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+              },
+            ],
+          },
+        }}
+        onStop={vi.fn()}
+        onRefresh={onRefresh}
+      />,
+    ),
+  );
+  expect(node.textContent).toContain("Run record");
+  expect(node.textContent).toContain("Proposed");
+  await act(async () => button("Run record run-1…").click());
+  expect(supportCalls.runSummary).toHaveBeenCalledWith({ runId: "run-1" });
+  expect(node.textContent).toContain("Decisions recorded");
+});
+
+it("maps a support conflict to a plain sentence and refreshes nothing", async () => {
+  decisions.reviewCondition.mockRejectedValue(
+    new ORPCError("CONFLICT", { data: { reason: "stale-record" } }),
+  );
+  const onRefresh = vi.fn(async () => undefined);
+  await act(async () =>
+    root.render(<GroupGoalStrip goal={goal} onStop={vi.fn()} onRefresh={onRefresh} />),
+  );
+  await act(async () => button("Pass").click());
+  expect(node.querySelector('[role="alert"]')?.textContent).toBe(
+    "A supporting record is missing or changed; review again.",
+  );
+  expect(onRefresh).not.toHaveBeenCalled();
 });
 
 it("shows the named accepted result and keeps owner decision controls disabled", async () => {

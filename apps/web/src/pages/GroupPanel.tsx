@@ -32,6 +32,7 @@ import {
   useState,
 } from "react";
 import { BotContext } from "../components/ContextEntry";
+import { GoalConditionSupportChips } from "../components/GoalConditionSupport";
 import { rpc } from "../lib/rpc";
 import type { ModelSettings } from "../lib/use-model-settings";
 import { GroupModelControl } from "./group-model-control";
@@ -553,7 +554,11 @@ export function GroupGoalStrip({
       setError(
         reason === "revision-changed"
           ? t`Result changed; review again.`
-          : t`Could not review result. Try again.`,
+          : reason === "missing-record" ||
+              reason === "stale-record" ||
+              reason === "run-outside-goal"
+            ? t`A supporting record is missing or changed; review again.`
+            : t`Could not review result. Try again.`,
       );
       if (reason === "revision-changed") await onRefresh().catch(() => undefined);
     } finally {
@@ -665,6 +670,11 @@ export function GroupGoalStrip({
                       </Button>
                     </span>
                   ) : null}
+                  <GoalConditionSupportChips
+                    groupId={goal.groupId}
+                    support={cond.support ?? []}
+                    proposedSupport={cond.proposedSupport ?? []}
+                  />
                 </li>
               ))}
             </ul>

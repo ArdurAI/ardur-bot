@@ -552,7 +552,13 @@ test("group-goals: review a submitted result and refresh after accepting it", as
   await page.getByRole("textbox", { name: "Rework notes" }).fill("Revise the sample plan.");
   await expect(page.getByRole("button", { name: "Accept result", exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Reject result", exact: true })).toBeEnabled();
+  const runRecord = page.getByRole("button", { name: /Run record/ });
+  await expect(runRecord).toBeVisible();
+  await expect(page.getByText("Proposed", { exact: false })).toBeVisible();
+  await runRecord.click();
+  await expect(page.getByText("Decisions recorded")).toBeVisible();
   await capture(page, "docs-group-goals-review");
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Accept result", exact: true }).click();
   await expect(page.getByText("Goal: Accepted", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Accept result", exact: true })).toHaveCount(0);
