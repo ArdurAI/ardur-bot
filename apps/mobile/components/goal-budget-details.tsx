@@ -1,10 +1,17 @@
 import type { Goal } from "@ardurbot/contracts";
+import { GOAL_FINAL_REVIEW_DESCRIPTION } from "@ardurbot/contracts";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { rpc } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
+
+function supportKindLabel(kind: "artifact" | "tool-result" | "run") {
+  if (kind === "artifact") return "Artifact";
+  if (kind === "run") return "Run record";
+  return "Tool record";
+}
 
 /** Owner home sessions only; paired-device grants retain their existing restrictions. */
 export function GoalBudgetDetails({ groupId }: { groupId: string }) {
@@ -57,6 +64,37 @@ export function GoalBudgetDetails({ groupId }: { groupId: string }) {
           </Text>
           {!goal.usageComplete ? (
             <Text style={{ color: tokens.mutedForeground }}>{t("Usage incomplete")}</Text>
+          ) : null}
+          {goal.currentRevision && goal.currentRevision.conditions.length > 0 ? (
+            <View style={{ gap: 2 }}>
+              {goal.currentRevision.conditions.map((cond) => (
+                <View key={cond.id} style={{ gap: 1 }}>
+                  <Text style={{ color: tokens.foreground }}>
+                    {cond.description === GOAL_FINAL_REVIEW_DESCRIPTION || cond.id === "cond-final"
+                      ? t("Final owner review")
+                      : cond.description}
+                    :{" "}
+                    {cond.status === "pass"
+                      ? t("Pass")
+                      : cond.status === "fail"
+                        ? t("Fail")
+                        : t("Unknown")}
+                  </Text>
+                  {[
+                    ...(cond.support ?? []).map((link) => ({ link, proposed: false })),
+                    ...(cond.proposedSupport ?? []).map((link) => ({ link, proposed: true })),
+                  ].map(({ link, proposed }) => (
+                    <Text
+                      key={`${proposed ? "proposed" : "attested"}:${link.kind}:${link.recordId}`}
+                      style={{ color: tokens.mutedForeground }}
+                    >
+                      {proposed ? `${t("Proposed")} ` : ""}
+                      {t(supportKindLabel(link.kind))} {link.recordId}
+                    </Text>
+                  ))}
+                </View>
+              ))}
+            </View>
           ) : null}
           {goal.boardWorkspaceId && goal.boardItemId ? (
             <Text style={{ color: tokens.foreground }}>
