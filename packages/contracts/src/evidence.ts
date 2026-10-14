@@ -81,7 +81,25 @@ export const EvidenceRunSummarySchema = z.object({
   failureCodes: z.array(z.string()),
 });
 export type EvidenceRunSummary = z.infer<typeof EvidenceRunSummarySchema> & GovernanceSummary;
+
+/** One tool-result record (a signed execution-receipt entry), as read by id. */
+export const EvidenceRecordViewSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  receiptId: z.string().min(1),
+  kid: z.string().min(1),
+  toolName: z.string().min(1),
+  verdict: z.string().min(1),
+  decisionKind: z.string().min(1),
+  sha256: z.string().min(1),
+  createdAt: z.string().min(1),
+});
+export type EvidenceRecordView = z.infer<typeof EvidenceRecordViewSchema>;
+
 export const evidenceContract = {
+  record: oc
+    .input(z.object({ recordId: z.string().min(1).max(200) }))
+    .output(EvidenceRecordViewSchema),
   runSummary: oc
     .input(
       z.object({

@@ -106,6 +106,23 @@ export function goalBoardDeliveryKey(
 export const GoalConditionStatusSchema = z.enum(["unknown", "pass", "fail"]);
 export type GoalConditionStatus = z.infer<typeof GoalConditionStatusSchema>;
 
+export const GoalConditionSupportKindSchema = z.enum(["artifact", "tool-result", "run"]);
+export type GoalConditionSupportKind = z.infer<typeof GoalConditionSupportKindSchema>;
+
+/**
+ * A record tied to a condition's review: an artifact revision, a tool-result
+ * record, or a run record. Support links attest that a decision was recorded
+ * against an immutable record; they are not a claim that the execution itself
+ * succeeded — run outcomes stay on the run.
+ */
+export const GoalConditionSupportSchema = z.object({
+  kind: GoalConditionSupportKindSchema,
+  recordId: Id,
+  /** Immutable revision reviewed: the artifact content hash or the tool-result record hash; null for a run record. */
+  revision: z.string().nullable(),
+});
+export type GoalConditionSupport = z.infer<typeof GoalConditionSupportSchema>;
+
 export const GoalConditionSchema = z.object({
   id: Id,
   description: z.string(),
@@ -113,6 +130,10 @@ export const GoalConditionSchema = z.object({
   actorId: Id.nullable(),
   reason: z.string().nullable(),
   evidenceId: Id.nullable(),
+  /** Records the owner's review attested for this decision. */
+  support: z.array(GoalConditionSupportSchema).default([]),
+  /** Records a bot proposed; a proposal is never a pass/fail decision. */
+  proposedSupport: z.array(GoalConditionSupportSchema).default([]),
   createdAt: IsoDate.nullable(),
 });
 export type GoalCondition = z.infer<typeof GoalConditionSchema>;
@@ -182,15 +203,35 @@ export const GoalRejectInputSchema = z.object({
 });
 export type GoalRejectInput = z.infer<typeof GoalRejectInputSchema>;
 
-/** Owner marks one condition on the revision under review. Workers cannot call this. */
+/**
+ * Owner marks one condition on the revision under review and may attest the
+ * records that support the decision. Workers cannot call this.
+ */
 export const GoalConditionReviewInputSchema = z.object({
   goalId: Id,
   revisionId: Id,
   conditionId: z.string().trim().min(1).max(200),
   status: z.enum(["pass", "fail"]),
   reason: z.string().trim().max(2_000).optional(),
+  support: z.array(GoalConditionSupportSchema).max(20).default([]),
 });
 export type GoalConditionReviewInput = z.infer<typeof GoalConditionReviewInputSchema>;
+
+/**
+ * The coordinator bot proposes records that support a condition. Proposals are
+ * stored as proposedSupport; only the owner's review records pass or fail.
+ */
+export const GoalSupportProposalInputSchema = z.object({
+  goalId: Id,
+  spaceId: Id,
+  userId: Id,
+  coordinatorBotId: Id,
+  threadId: Id,
+  revisionId: Id,
+  conditionId: z.string().trim().min(1).max(200),
+  support: z.array(GoalConditionSupportSchema).max(20),
+});
+export type GoalSupportProposalInput = z.infer<typeof GoalSupportProposalInputSchema>;
 
 export const GoalSchema = z.object({
   id: Id,
