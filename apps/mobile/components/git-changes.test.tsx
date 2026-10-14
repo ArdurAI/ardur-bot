@@ -108,7 +108,6 @@ it("lists each status with a count and opens the path", async () => {
           entry("new.ts", "added"),
           entry("app.ts", "modified"),
           entry("old.ts", "deleted"),
-          entry("moved.ts", "renamed"),
           entry("note.ts", "untracked"),
         ],
         onOpen: (path) => opened.push(path),
@@ -118,14 +117,11 @@ it("lists each status with a count and opens the path", async () => {
   expect(host.textContent).toContain("Added 1");
   expect(host.textContent).toContain("Modified 1");
   expect(host.textContent).toContain("Deleted 1");
-  expect(host.textContent).toContain("Renamed 1");
   expect(host.textContent).toContain("Untracked 1");
   await act(async () => {
-    [...host.querySelectorAll("button")]
-      .find((button) => button.textContent === "moved.ts")!
-      .click();
+    [...host.querySelectorAll("button")].find((button) => button.textContent === "old.ts")!.click();
   });
-  expect(opened).toEqual(["moved.ts"]);
+  expect(opened).toEqual(["old.ts"]);
 });
 
 it("shows no changes when the worktree is clean", async () => {

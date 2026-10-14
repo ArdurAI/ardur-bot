@@ -78,7 +78,7 @@ export const WorkspaceContextSchema = z.object({
 });
 export type WorkspaceContext = z.infer<typeof WorkspaceContextSchema>;
 
-export const GitChangeKindSchema = z.enum(["added", "modified", "deleted", "renamed", "untracked"]);
+export const GitChangeKindSchema = z.enum(["added", "modified", "deleted", "untracked"]);
 export type GitChangeKind = z.infer<typeof GitChangeKindSchema>;
 
 export const GitStatusEntrySchema = z

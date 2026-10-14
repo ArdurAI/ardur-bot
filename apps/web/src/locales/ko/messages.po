@@ -7750,10 +7750,6 @@ msgstr ""
 msgid "Rename section"
 msgstr "섹션 이름 바꾸기"
 
-#: src/lib/git-changes-phone-copy.ts
-msgid "Renamed"
-msgstr "이름 변경됨"
-
 #: src/pages/ScratchpadSection.tsx
 msgid "Reopen"
 msgstr "다시 열기"

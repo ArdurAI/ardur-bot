@@ -106,8 +106,8 @@ describe("parseGitStatus", () => {
     ]);
   });
 
-  it("classifies added, deleted and exact renames, and keeps the destination path", () => {
-    const text = "A  fresh.md\0D  gone.md\0R  renamed.md\0old.md\0C  copy.md\0source.md\0";
+  it("classifies added and deleted paths", () => {
+    const text = "A  fresh.md\0D  gone.md\0";
     expect(parseGitStatus(text)).toEqual([
       {
         path: "fresh.md",
@@ -124,22 +124,6 @@ describe("parseGitStatus", () => {
         untracked: false,
         conflict: false,
         change: "deleted",
-      },
-      {
-        path: "renamed.md",
-        staged: true,
-        unstaged: false,
-        untracked: false,
-        conflict: false,
-        change: "renamed",
-      },
-      {
-        path: "copy.md",
-        staged: true,
-        unstaged: false,
-        untracked: false,
-        conflict: false,
-        change: "added",
       },
     ]);
   });
@@ -182,7 +166,7 @@ describe("observeGitChanges", () => {
       "status",
       "--porcelain=v1",
       "-z",
-      "--find-renames=100%",
+      "--no-renames",
       "--ignore-submodules=all",
       "--untracked-files=all",
     ]);

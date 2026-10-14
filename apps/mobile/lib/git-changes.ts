@@ -7,7 +7,6 @@ export const GIT_CHANGE_ORDER = [
   "added",
   "modified",
   "deleted",
-  "renamed",
   "untracked",
 ] as const satisfies readonly GitChangeKind[];
 

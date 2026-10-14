@@ -18,8 +18,6 @@ function statusLabel(kind: GitChangeKind, t: (message: string) => string): strin
       return t("Modified");
     case "deleted":
       return t("Deleted");
-    case "renamed":
-      return t("Renamed");
     case "untracked":
       return t("Untracked");
   }

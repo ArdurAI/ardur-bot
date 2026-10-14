@@ -255,12 +255,20 @@ describe("container git observation on a temporary repository", () => {
     expect(status.entries).toEqual(
       expect.arrayContaining([
         {
+          path: "staged.md",
+          staged: true,
+          unstaged: false,
+          untracked: false,
+          conflict: false,
+          change: "deleted",
+        },
+        {
           path: "renamed.md",
           staged: true,
           unstaged: false,
           untracked: false,
           conflict: false,
-          change: "renamed",
+          change: "added",
         },
         {
           path: "unstaged.md",
@@ -283,6 +291,26 @@ describe("container git observation on a temporary repository", () => {
     expect(staged).toMatchObject({ kind: "diff", binary: false });
     expect(unstaged).toMatchObject({ kind: "diff", before: "old", after: "new" });
     expect(untracked).toMatchObject({ kind: "diff", before: null, after: "spaced" });
+  });
+
+  it("keeps both sides when a renamed file is edited after the move", async () => {
+    const { root, git, runner } = await fixture();
+    git(["init", "-q", "-b", "main"]);
+    await writeFile(path.join(root, "old.txt"), "before\n");
+    git(["add", "old.txt"]);
+    git(["commit", "-q", "-m", "base"]);
+    git(["mv", "old.txt", "new.txt"]);
+    await writeFile(path.join(root, "new.txt"), "after\n");
+
+    const status = await observeContainerGitChanges(runner, { root });
+    expect(status.kind).toBe("status");
+    if (status.kind !== "status") throw new Error("unreachable");
+    expect(status.entries.map((entry) => entry.path).sort()).toEqual(["new.txt", "old.txt"]);
+
+    const removed = await observeContainerGitChanges(runner, { root, path: "old.txt" });
+    const added = await observeContainerGitChanges(runner, { root, path: "new.txt" });
+    expect(removed).toMatchObject({ kind: "diff", before: "before", after: "" });
+    expect(added).toMatchObject({ kind: "diff", before: "", after: "after" });
   });
 
   it("reports binary and oversized files without returning the whole file", async () => {

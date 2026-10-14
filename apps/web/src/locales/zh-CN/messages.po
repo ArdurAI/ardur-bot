@@ -7750,10 +7750,6 @@ msgstr ""
 msgid "Rename section"
 msgstr "重命名分组"
 
-#: src/lib/git-changes-phone-copy.ts
-msgid "Renamed"
-msgstr "已重命名"
-
 #: src/pages/ScratchpadSection.tsx
 msgid "Reopen"
 msgstr "重新打开"

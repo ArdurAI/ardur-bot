@@ -6,5 +6,4 @@ import { msg } from "@lingui/core/macro";
  */
 export const gitChangeModified = msg`Modified`;
 export const gitChangeDeleted = msg`Deleted`;
-export const gitChangeRenamed = msg`Renamed`;
 export const gitChangeFiltered = msg`This file looks like it contains a secret.`;

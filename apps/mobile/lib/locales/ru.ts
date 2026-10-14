@@ -1653,7 +1653,6 @@ export const RU_MESSAGES: Record<string, string> = {
   "Some changes are not shown": "Некоторые изменения не показаны",
   "Diff is too large": "Слишком большой diff",
   Modified: "Изменён",
-  Renamed: "Переименован",
   Untracked: "Не отслеживаются",
   "This file looks like it contains a secret.": "Этот файл похож на секрет.",
 };
