@@ -106,9 +106,11 @@ export async function getSpaceArtifact(
   const row = await deps.prisma.artifact.findFirst({
     where: {
       id: input.artifactId,
-      groupId: input.groupId,
       spaceId: actor.spaceId,
       userId: actor.userId,
+      // The goal reviewers' scope: the group's artifacts, plus the owner's own
+      // ungrouped artifacts — exactly what condition-support validation accepts.
+      OR: [{ groupId: input.groupId }, { groupId: null }],
     },
   });
   if (!row) throw new IsolationError();

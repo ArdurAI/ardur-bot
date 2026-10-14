@@ -1034,22 +1034,28 @@ export class GoalConditionSupportError extends Error {
 
 /**
  * Every support link must live in this space, exist, and name the revision that
- * was actually reviewed. A run record must belong to this goal's own work.
- * Cross-scope rows refuse with IsolationError, like every other scope check.
+ * was actually reviewed. An artifact must be openable by the goal's reviewers
+ * through the goal's group: it belongs to this goal's group or to no group (the
+ * owner's own ungrouped artifacts). A run record must belong to this goal's own
+ * work. Cross-scope rows refuse with IsolationError, like every other scope check.
  */
 async function validateGoalConditionSupport(
   tx: Prisma.TransactionClient,
-  goal: Pick<TeamGoal, "id" | "spaceId" | "userId" | "rootTaskId">,
+  goal: Pick<TeamGoal, "id" | "spaceId" | "userId" | "rootTaskId" | "groupId">,
   support: readonly GoalConditionSupport[],
 ) {
   for (const link of support) {
     if (link.kind === "artifact") {
       const artifact = await tx.artifact.findFirst({
         where: { id: link.recordId },
-        select: { spaceId: true, userId: true, hash: true },
+        select: { spaceId: true, userId: true, hash: true, groupId: true },
       });
       if (!artifact) throw new GoalConditionSupportError("missing-record");
       if (artifact.spaceId !== goal.spaceId || artifact.userId !== goal.userId)
+        throw new IsolationError();
+      // The reviewers open the record through the goal's group; the owner's own
+      // ungrouped artifacts are the only other scope that reader supports.
+      if (artifact.groupId !== goal.groupId && artifact.groupId !== null)
         throw new IsolationError();
       // The artifact revision is immutable: the named hash must be the one on file.
       if (!link.revision || artifact.hash !== link.revision)

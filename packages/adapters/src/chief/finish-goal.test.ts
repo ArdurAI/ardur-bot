@@ -110,8 +110,8 @@ describe("finish_goal condition support proposals", () => {
     vi.mocked(store.tx.artifact.findFirst).mockImplementation(
       async ({ where }: { where: { id: string } }) =>
         where.id === "artifact-1"
-          ? { spaceId: "space-1", userId: "owner-1", hash: "hash-1" }
-          : { spaceId: "space-2", userId: "owner-1", hash: "hash-x" },
+          ? { spaceId: "space-1", userId: "owner-1", hash: "hash-1", groupId: "group-1" }
+          : { spaceId: "space-2", userId: "owner-1", hash: "hash-x", groupId: "group-1" },
     );
     vi.mocked(store.tx.run.findFirst).mockResolvedValue({
       spaceId: "space-1",

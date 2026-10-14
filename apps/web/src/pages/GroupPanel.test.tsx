@@ -298,6 +298,56 @@ it("omits an attested record from the decision when the owner unchecks it", asyn
   });
 });
 
+it("opens an accepted artifact record through the goal's group scope", async () => {
+  supportCalls.artifactGet.mockResolvedValue({
+    id: "artifact-1",
+    botId: "bot-1",
+    groupId: "group-1",
+    runId: null,
+    name: "result.md",
+    mimeType: "text/markdown",
+    size: 5,
+    createdAt: "2030-01-01T00:00:00.000Z",
+    contentBase64: btoa("ready"),
+  });
+  const onRefresh = vi.fn(async () => undefined);
+  await act(async () =>
+    root.render(
+      <GroupGoalStrip
+        goal={{
+          ...goal,
+          status: "accepted",
+          currentRevision: {
+            ...goal.currentRevision!,
+            conditions: [
+              {
+                id: "cond-final",
+                description: GOAL_FINAL_REVIEW_DESCRIPTION,
+                status: "pass",
+                actorId: null,
+                reason: null,
+                evidenceId: null,
+                createdAt: null,
+                support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+                proposedSupport: [],
+              },
+            ],
+          },
+        }}
+        onStop={vi.fn()}
+        onRefresh={onRefresh}
+        recordedResult
+      />,
+    ),
+  );
+  await act(async () => button("Artifact artifact…").click());
+  expect(supportCalls.artifactGet).toHaveBeenCalledWith({
+    groupId: "group-1",
+    artifactId: "artifact-1",
+  });
+  expect(node.textContent).toContain("result.md");
+});
+
 it("shows supporting records on a reviewed condition and opens one beside it", async () => {
   supportCalls.runSummary.mockResolvedValue({
     sessionId: "run-1",
