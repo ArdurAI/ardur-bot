@@ -22,11 +22,11 @@ const proposals: readonly {
 }[] = [
   {
     conditionId: "cond-final",
-    support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+    support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
   },
   {
     conditionId: "cond-final",
-    support: [{ kind: "artifact", recordId: "foreign-artifact", revision: "hash-x" }],
+    support: [{ kind: "artifact", recordId: "foreign-artifact", revision: "d".repeat(64) }],
   },
 ];
 
@@ -82,7 +82,7 @@ describe("coordinator goal submission", () => {
         threadId: "thread-1",
         revisionId: "revision-1",
         conditionId: "cond-final",
-        support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+        support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
       },
     );
   });

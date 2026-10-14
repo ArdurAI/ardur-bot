@@ -15,7 +15,8 @@ import { parsePeerHoldRequest } from "@ardurbot/core";
 import { appendBotMessageAuditInTransaction } from "./bot-comms.js";
 import { lockPeerTrafficPolicy } from "./bot-comms-policy.js";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
-import { Prisma, type PrismaClient } from "./client.js";
+import type { PrismaClient } from "./client.js";
+import { Prisma } from "./client.js";
 import { expireComputerExecutionLeases } from "./computers.js";
 import { recordStoppedGroupAskOutcomesInTransaction } from "./group-asks.js";
 import { IsolationError } from "./scope.js";
@@ -233,6 +234,39 @@ const groupTargetInclude = {
   },
 } as const;
 
+/** Read the owned, active group and its thread target. */
+export async function getOwnedGroupTarget(
+  prisma: Pick<Prisma.TransactionClient, "chatGroup">,
+  actor: Pick<Actor, "spaceId" | "userId">,
+  groupId: string,
+) {
+  const group = await prisma.chatGroup.findFirst({
+    where: {
+      id: groupId,
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      archivedAt: null,
+    },
+    include: {
+      ...groupTargetInclude,
+      space: { select: { coordinatorBotId: true } },
+      thread: {
+        select: {
+          id: true,
+          runs: {
+            where: { spaceId: actor.spaceId, userId: actor.userId },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 1,
+            select: { botId: true },
+          },
+        },
+      },
+    },
+  });
+  if (!group || !hasMinimumActiveMembers(group.members)) throw new IsolationError();
+  return group;
+}
+
 export function createGroupRepos(prisma: PrismaClient) {
   async function listSpaceGroupsForSpaces(actor: Actor, spaceIds: string[]): Promise<SpaceGroup[]> {
     if (spaceIds.length === 0) return [];
@@ -301,31 +335,7 @@ export function createGroupRepos(prisma: PrismaClient) {
     },
 
     async getGroupTarget(actor: Actor, groupId: string) {
-      const group = await prisma.chatGroup.findFirst({
-        where: {
-          id: groupId,
-          spaceId: actor.spaceId,
-          userId: actor.userId,
-          archivedAt: null,
-        },
-        include: {
-          ...groupTargetInclude,
-          space: { select: { coordinatorBotId: true } },
-          thread: {
-            select: {
-              id: true,
-              runs: {
-                where: { spaceId: actor.spaceId, userId: actor.userId },
-                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-                take: 1,
-                select: { botId: true },
-              },
-            },
-          },
-        },
-      });
-      if (!group || !hasMinimumActiveMembers(group.members)) throw new IsolationError();
-      return group;
+      return getOwnedGroupTarget(prisma, actor, groupId);
     },
 
     async createGroup(

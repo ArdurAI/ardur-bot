@@ -36,6 +36,26 @@ import { lockSpaceForContentCreation } from "./spaces.js";
 import { activeRunSelection, previewFromBlocks } from "./thread-listing.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
+/** Read the owned, active bot using the same rule as thread access. */
+export async function getOwnedBot(
+  prisma: Pick<Prisma.TransactionClient, "bot">,
+  actor: Pick<Actor, "spaceId" | "userId">,
+  botId: string,
+  options: { includeArchived?: boolean } = {},
+) {
+  const bot = await prisma.bot.findFirst({
+    where: {
+      id: botId,
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      ...(options.includeArchived ? {} : { archivedAt: null }),
+    },
+    include: { thread: true, computer: true },
+  });
+  if (!bot) throw new IsolationError();
+  return bot;
+}
+
 /** Newest messages loaded for sidebar preview; enough to skip a short peer-run tail. */
 const SIDEBAR_PREVIEW_MESSAGE_WINDOW = 16;
 
@@ -419,17 +439,7 @@ export function createRepos(
     listSpaceBotsForSpaces,
 
     async getBot(actor: Actor, botId: string, options: { includeArchived?: boolean } = {}) {
-      const bot = await prisma.bot.findFirst({
-        where: {
-          id: botId,
-          spaceId: actor.spaceId,
-          userId: actor.userId,
-          ...(options.includeArchived ? {} : { archivedAt: null }),
-        },
-        include: { thread: true, computer: true },
-      });
-      if (!bot) throw new IsolationError();
-      return bot;
+      return getOwnedBot(prisma, actor, botId, options);
     },
 
     async createBot(

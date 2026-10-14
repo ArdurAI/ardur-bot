@@ -25,6 +25,7 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
   let prisma: PrismaClient;
   let close: () => Promise<void>;
   let botId: string;
+  let workerBotId: string;
   let goalCount = 0;
 
   beforeAll(async () => {
@@ -48,6 +49,32 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
         },
       },
     });
+    await prisma.user.create({
+      data: { id: userId, name: "Review fixture", email: `${userId}@example.test` },
+    });
+    await prisma.member.create({
+      data: {
+        id: `member-${suffix}`,
+        organizationId,
+        userId,
+        role: "owner",
+        createdAt: new Date(),
+      },
+    });
+    await prisma.spaceMember.create({
+      data: {
+        id: `space-member-${suffix}`,
+        organizationId,
+        spaceId,
+        userId,
+        role: "owner",
+        createdAt: new Date(),
+      },
+    });
+    const worker = await prisma.bot.create({
+      data: { spaceId, userId, name: "Worker fixture", color: "ink" },
+    });
+    workerBotId = worker.id;
     const bot = await prisma.bot.create({
       data: { spaceId, userId, name: "Goal review fixture", color: "ink" },
     });
@@ -62,6 +89,7 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
       await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SET LOCAL ardur.evidence_delete = 'on'`;
         await tx.organization.delete({ where: { id: organizationId } });
+        await tx.user.delete({ where: { id: userId } });
       });
     } finally {
       await close();
@@ -79,7 +107,9 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
       },
     });
     const thread = await prisma.thread.create({ data: { spaceId, userId, groupId: group.id } });
-    await prisma.chatGroupMember.create({ data: { groupId: group.id, botId } });
+    await prisma.chatGroupMember.createMany({
+      data: [botId, workerBotId].map((memberBotId) => ({ groupId: group.id, botId: memberBotId })),
+    });
     const task = await prisma.task.create({
       data: {
         spaceId,
@@ -309,11 +339,12 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
   async function createSupportRecords(
     goal: { id: string; threadId: string; coordinatorBotId: string },
     space: string,
+    recordUserId = userId,
   ) {
     const task = await prisma.task.create({
       data: {
         spaceId: space,
-        userId,
+        userId: recordUserId,
         botId: goal.coordinatorBotId,
         threadId: goal.threadId,
         prompt: "Support fixture",
@@ -323,7 +354,7 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
     const run = await prisma.run.create({
       data: {
         spaceId: space,
-        userId,
+        userId: recordUserId,
         botId: goal.coordinatorBotId,
         threadId: goal.threadId,
         taskId: task.id,
@@ -340,7 +371,7 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
         receiptId: `receipt-${run.id}`,
         kid: "kid-fixture",
         jws: "fixture-jws",
-        sha256: "record-hash-1",
+        sha256: "b".repeat(64),
         verdict: "compliant",
         decisionKind: "allowed",
         toolName: "fixture_tool",
@@ -349,18 +380,97 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
     const artifact = await prisma.artifact.create({
       data: {
         spaceId: space,
-        userId,
+        userId: recordUserId,
         botId: goal.coordinatorBotId,
         runId: run.id,
         name: "result.md",
         mimeType: "text/markdown",
         size: 10,
-        hash: "artifact-hash-1",
+        hash: "a".repeat(64),
         storageKey: `storage-${run.id}`,
       },
     });
     return { run, record, artifact };
   }
+
+  it.each(["owner", "coordinator"])(
+    "rejects a secret run revision at the %s boundary without storing it",
+    async (caller) => {
+      const goal = await createGoal();
+      const revision = await submitGoal(prisma, actor, {
+        goalId: goal.id,
+        summary: "Candidate",
+        artifacts: [],
+        reports: [],
+      });
+      const { run } = await createSupportRecords(goal, spaceId);
+      const input = {
+        goalId: goal.id,
+        revisionId: revision.id,
+        conditionId: "cond-final",
+        support: [{ kind: "run", recordId: run.id, revision: "fixture-secret-7k2" }],
+      };
+      await expect(
+        caller === "owner"
+          ? reviewGoalCondition(prisma, actor, { ...input, status: "pass" } as never)
+          : proposeGoalConditionSupport(prisma, {
+              ...input,
+              spaceId,
+              userId,
+              coordinatorBotId: goal.coordinatorBotId,
+              threadId: goal.threadId,
+            } as never),
+      ).rejects.toThrow();
+      const stored = await prisma.goalRevision.findUniqueOrThrow({ where: { id: revision.id } });
+      expect(stored.conditions).toEqual(revision.conditions);
+      expect(JSON.stringify(stored)).not.toContain("fixture-secret-7k2");
+    },
+  );
+
+  it.each([false, true])(
+    "checks tool support against its private run thread (visible=%s)",
+    async (visible) => {
+      const goal = await createGoal();
+      const revision = await submitGoal(prisma, actor, {
+        goalId: goal.id,
+        summary: "Candidate",
+        artifacts: [],
+        reports: [],
+      });
+      const recordUserId = visible ? userId : `other-user-${suffix}`;
+      const bot = await prisma.bot.create({
+        data: { spaceId, userId: recordUserId, name: "Private fixture", color: "ink" },
+      });
+      const thread = await prisma.thread.create({
+        data: { spaceId, userId: recordUserId, botId: bot.id },
+      });
+      const { record } = await createSupportRecords(
+        { ...goal, coordinatorBotId: bot.id, threadId: thread.id },
+        spaceId,
+        recordUserId,
+      );
+      const support = [
+        { kind: "tool-result" as const, recordId: record.id, revision: record.sha256 },
+      ];
+      const attempt = reviewGoalCondition(prisma, actor, {
+        goalId: goal.id,
+        revisionId: revision.id,
+        conditionId: "cond-final",
+        status: "pass",
+        support,
+      });
+      if (visible)
+        await expect(attempt).resolves.toMatchObject({
+          conditions: [expect.objectContaining({ status: "pass", support })],
+        });
+      else {
+        await expect(attempt).rejects.toThrow();
+        expect(
+          (await prisma.goalRevision.findUniqueOrThrow({ where: { id: revision.id } })).conditions,
+        ).toEqual(revision.conditions);
+      }
+    },
+  );
 
   it("attests supporting records and keeps them in the review snapshot", async () => {
     const goal = await createGoal();
@@ -372,8 +482,8 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
     });
     const { run, record, artifact } = await createSupportRecords(goal, spaceId);
     const support = [
-      { kind: "artifact" as const, recordId: artifact.id, revision: "artifact-hash-1" },
-      { kind: "tool-result" as const, recordId: record.id, revision: "record-hash-1" },
+      { kind: "artifact" as const, recordId: artifact.id, revision: "a".repeat(64) },
+      { kind: "tool-result" as const, recordId: record.id, revision: "b".repeat(64) },
       { kind: "run" as const, recordId: run.id, revision: null },
     ];
     const reviewed = await reviewGoalCondition(prisma, actor, {
@@ -396,9 +506,9 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
   });
 
   it.each([
-    ["foreign-space", "foreign-space", "artifact-hash-1", null],
-    ["stale", "same-space", "artifact-hash-2", "stale-record"],
-    ["missing", "same-space", "artifact-hash-1", "missing-record"],
+    ["foreign-space", "foreign-space", "a".repeat(64), null],
+    ["stale", "same-space", "c".repeat(64), "stale-record"],
+    ["missing", "same-space", "a".repeat(64), "missing-record"],
   ])("refuses a %s artifact support link", async (_kind, space, revisionHash, reason) => {
     const goal = await createGoal();
     const revision = await submitGoal(prisma, actor, {
@@ -499,7 +609,7 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
       threadId: goal.threadId,
       revisionId: revision.id,
       conditionId: "cond-final",
-      support: [{ kind: "artifact" as const, recordId: artifact.id, revision: "artifact-hash-1" }],
+      support: [{ kind: "artifact" as const, recordId: artifact.id, revision: "a".repeat(64) }],
     };
     const proposed = await proposeGoalConditionSupport(prisma, proposal);
     expect(proposed.conditions[0]).toEqual(
@@ -540,7 +650,7 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
     });
     const { artifact } = await createSupportRecords(goal, spaceId);
     const support = [
-      { kind: "artifact" as const, recordId: artifact.id, revision: "artifact-hash-1" },
+      { kind: "artifact" as const, recordId: artifact.id, revision: "a".repeat(64) },
     ];
     await reviewGoalCondition(prisma, actor, {
       goalId: goal.id,

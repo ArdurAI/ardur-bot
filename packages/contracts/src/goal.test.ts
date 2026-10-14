@@ -3,6 +3,7 @@ import { ProductEventSchema } from "./events.js";
 import {
   GoalAcceptInputSchema,
   GoalConditionReviewInputSchema,
+  GoalConditionSupportSchema,
   GoalRejectInputSchema,
   GoalStartInputSchema,
   GoalSubmitInputSchema,
@@ -90,3 +91,43 @@ it.each(["goal.submitted", "goal.accepted", "goal.rejected"])(
     ).toBe(true);
   },
 );
+
+describe("condition support revision formats", () => {
+  it.each([
+    { kind: "run", revision: "fixture-secret-7k2" },
+    { kind: "run", revision: "a".repeat(64) },
+    ...["artifact", "tool-result"].flatMap((kind) =>
+      [
+        null,
+        "fixture-secret-7k2",
+        "A".repeat(64),
+        "a".repeat(63),
+        "g".repeat(64),
+        `sha256:${"a".repeat(64)}`,
+        `${"a".repeat(64)}\n`,
+      ].map((revision) => ({ kind, revision })),
+    ),
+  ])("rejects malformed support $kind / $revision", (link) => {
+    expect(GoalConditionSupportSchema.safeParse({ ...link, recordId: "record-1" }).success).toBe(
+      false,
+    );
+  });
+  it.each([
+    { kind: "run", revision: null },
+    { kind: "artifact", revision: "a".repeat(64) },
+    { kind: "tool-result", revision: "0123456789abcdef".repeat(4) },
+  ])("accepts the stored revision format for $kind", (link) => {
+    expect(GoalConditionSupportSchema.parse({ ...link, recordId: "record-1" })).toEqual({
+      ...link,
+      recordId: "record-1",
+    });
+    expect(GoalConditionSupportSchema.safeParse({ ...link, recordId: "" }).success).toBe(false);
+    expect(
+      GoalConditionSupportSchema.safeParse({
+        ...link,
+        recordId: "record-1",
+        note: "fixture-secret-7k2",
+      }).success,
+    ).toBe(false);
+  });
+});

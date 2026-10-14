@@ -44,6 +44,7 @@ import { Prisma as PrismaNS } from "./client.js";
 import { finishDelegation, requestCancel, requestCancelInTransaction } from "./delegation.js";
 import { appendEventInTransaction } from "./events.js";
 import { IsolationError } from "./scope.js";
+import { assertRunEvidenceAccess } from "./thread-access.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 type GoalSettlementRow = Prisma.GoalSettlementGetPayload<object> & {
@@ -1063,10 +1064,11 @@ async function validateGoalConditionSupport(
     } else if (link.kind === "tool-result") {
       const record = await tx.evidenceRecord.findFirst({
         where: { id: link.recordId },
-        select: { spaceId: true, sha256: true },
+        select: { spaceId: true, sha256: true, runId: true },
       });
       if (!record) throw new GoalConditionSupportError("missing-record");
       if (record.spaceId !== goal.spaceId) throw new IsolationError();
+      await assertRunEvidenceAccess(tx, goal, record.runId);
       if (!link.revision || record.sha256 !== link.revision)
         throw new GoalConditionSupportError("stale-record");
     } else {
@@ -1427,6 +1429,7 @@ export async function reviewGoalCondition(
   raw: GoalConditionReviewInput,
 ) {
   if (!actor.isDeploymentOwner) throw new IsolationError();
+  // Parse at the storage boundary too: tool/runtime callers are not trusted types.
   const input = GoalConditionReviewInputSchema.parse(raw);
   const goal = await prisma.teamGoal.findFirst({
     where: { id: input.goalId, spaceId: actor.spaceId, userId: actor.userId },
@@ -1483,6 +1486,7 @@ export async function proposeGoalConditionSupport(
   prisma: PrismaClient,
   raw: GoalSupportProposalInput,
 ) {
+  // Reject free-text revisions and extra link fields before any proposal can persist.
   const input = GoalSupportProposalInputSchema.parse(raw);
   const goal = await prisma.teamGoal.findFirst({
     where: {

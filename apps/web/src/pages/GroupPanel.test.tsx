@@ -244,7 +244,7 @@ const goalWithSupport = {
         evidenceId: null,
         createdAt: null,
         support: [{ kind: "run", recordId: "run-1", revision: null }],
-        proposedSupport: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+        proposedSupport: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
       },
     ],
   },
@@ -271,7 +271,7 @@ it("sends the checked supporting records with the owner's pass", async () => {
     status: "pass",
     support: [
       { kind: "run", recordId: "run-1", revision: null },
-      { kind: "artifact", recordId: "artifact-1", revision: "hash-1" },
+      { kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) },
     ],
   });
 });
@@ -294,7 +294,7 @@ it("omits an attested record from the decision when the owner unchecks it", asyn
     revisionId: goal.currentRevision!.id,
     conditionId: "cond-final",
     status: "fail",
-    support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+    support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
   });
 });
 
@@ -328,7 +328,7 @@ it("opens an accepted artifact record through the goal's group scope", async () 
                 reason: null,
                 evidenceId: null,
                 createdAt: null,
-                support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+                support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
                 proposedSupport: [],
               },
             ],
@@ -378,7 +378,9 @@ it("shows supporting records on a reviewed condition and opens one beside it", a
                 evidenceId: null,
                 createdAt: null,
                 support: [{ kind: "run", recordId: "run-1", revision: null }],
-                proposedSupport: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+                proposedSupport: [
+                  { kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) },
+                ],
               },
             ],
           },

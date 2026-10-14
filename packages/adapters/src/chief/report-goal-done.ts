@@ -1,4 +1,5 @@
 import type { GoalConditionSupport } from "@ardurbot/contracts";
+import { GoalConditionSupportSchema } from "@ardurbot/contracts";
 import { redactSecrets } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { proposeGoalConditionSupport, submitGoalFromCoordinator } from "@ardurbot/db";
@@ -30,20 +31,41 @@ export async function reportGoalDone(
     // The proposing identity is the executing run above, never model text.
     // Each reference is validated exactly like the owner path; invalid ones
     // are dropped without failing the report, and a proposal is never a verdict.
+    const accepted = new Map<string, GoalConditionSupport[]>();
     for (const entry of support ?? []) {
-      try {
-        await proposeGoalConditionSupport(prisma, {
-          goalId: input.goalId,
-          spaceId: input.spaceId,
-          userId: input.userId,
-          coordinatorBotId: input.coordinatorBotId,
-          threadId: input.threadId,
-          revisionId: revision.id,
-          conditionId: entry.conditionId,
-          support: [...entry.support],
-        });
-      } catch {
-        // An invalid or unknown reference never blocks the completion report.
+      const conditionId = entry.conditionId.trim();
+      for (const rawLink of entry.support) {
+        const parsed = GoalConditionSupportSchema.safeParse(rawLink);
+        if (!parsed.success) continue;
+        const link = parsed.data;
+        const previous = accepted.get(conditionId) ?? [];
+        if (
+          previous.some(
+            (item) =>
+              item.kind === link.kind &&
+              item.recordId === link.recordId &&
+              item.revision === link.revision,
+          )
+        )
+          continue;
+        const candidate = [...previous, link];
+        try {
+          await proposeGoalConditionSupport(prisma, {
+            goalId: input.goalId,
+            spaceId: input.spaceId,
+            userId: input.userId,
+            coordinatorBotId: input.coordinatorBotId,
+            threadId: input.threadId,
+            revisionId: revision.id,
+            conditionId,
+            support: candidate,
+          });
+          // The helper replaces the list, so retain only successfully validated
+          // references across repeated entries for this condition.
+          accepted.set(conditionId, candidate);
+        } catch {
+          // An invalid or unknown reference never blocks the completion report.
+        }
       }
     }
     return { ok: true as const, revisionId: revision.id, status: "completed" as const };

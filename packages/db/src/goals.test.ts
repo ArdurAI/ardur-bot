@@ -981,13 +981,130 @@ describe("goal owner review", () => {
     expect(fixture.tx.run.updateMany).toHaveBeenCalledTimes(2);
   });
 
+  it.each(["owner", "coordinator"])(
+    "rejects free-text support at the %s storage boundary",
+    async (caller) => {
+      const fixture = reviewFixture();
+      const revision = await fixture.submit();
+      fixture.tx.run.findFirst.mockResolvedValue({
+        spaceId: fixture.goal.spaceId,
+        userId: fixture.goal.userId,
+        goalId: fixture.goal.id,
+        delegationRootTaskId: null,
+      });
+      fixture.tx.artifact.findFirst.mockResolvedValue({
+        spaceId: fixture.goal.spaceId,
+        userId: fixture.goal.userId,
+        groupId: fixture.goal.groupId,
+        hash: "fixture-secret-7k2",
+      });
+      fixture.tx.evidenceRecord.findFirst.mockResolvedValue({
+        spaceId: fixture.goal.spaceId,
+        sha256: "fixture-secret-7k2",
+      });
+      for (const kind of ["run", "artifact", "tool-result"]) {
+        const input = {
+          goalId: fixture.goal.id,
+          revisionId: revision.id,
+          conditionId: "cond-final",
+          support: [{ kind, recordId: "record-1", revision: "fixture-secret-7k2" }],
+        };
+        await expect(
+          caller === "owner"
+            ? reviewGoalCondition(fixture.prisma, owner, { ...input, status: "pass" } as never)
+            : proposeGoalConditionSupport(fixture.prisma, {
+                ...input,
+                spaceId: fixture.goal.spaceId,
+                userId: fixture.goal.userId,
+                coordinatorBotId: fixture.goal.coordinatorBotId,
+                threadId: fixture.goal.threadId,
+              } as never),
+        ).rejects.toThrow();
+      }
+      expect(fixture.tx.goalRevision.update).not.toHaveBeenCalled();
+      expect(JSON.stringify(fixture.revisions)).not.toContain("fixture-secret-7k2");
+    },
+  );
+
+  it.each([
+    [false, "owner"],
+    [true, "owner"],
+    [false, "coordinator"],
+    [true, "coordinator"],
+  ] as const)(
+    "validates tool support using the record run's private thread access (visible=%s, caller=%s)",
+    async (visible, caller) => {
+      const fixture = reviewFixture();
+      const revision = await fixture.submit();
+      const member = vi.fn(async () => ({ role: "owner" }));
+      const bot = vi.fn(async () =>
+        visible ? { id: "private-bot", thread: { id: "private-thread" } } : null,
+      );
+      Object.assign(fixture.tx, { spaceMember: { findUnique: member }, bot: { findFirst: bot } });
+      fixture.tx.run.findFirst.mockResolvedValue({
+        id: "private-run",
+        spaceId: fixture.goal.spaceId,
+        botId: "private-bot",
+        threadId: "private-thread",
+        thread: { groupId: null },
+      });
+      fixture.tx.evidenceRecord.findFirst.mockResolvedValue({
+        spaceId: fixture.goal.spaceId,
+        runId: "private-run",
+        sha256: "b".repeat(64),
+      });
+      const support = [
+        { kind: "tool-result" as const, recordId: "record-1", revision: "b".repeat(64) },
+      ];
+      const input = {
+        goalId: fixture.goal.id,
+        revisionId: revision.id,
+        conditionId: "cond-final",
+        support,
+      };
+      const attempt =
+        caller === "owner"
+          ? reviewGoalCondition(fixture.prisma, owner, { ...input, status: "pass" })
+          : proposeGoalConditionSupport(fixture.prisma, {
+              ...input,
+              spaceId: fixture.goal.spaceId,
+              userId: fixture.goal.userId,
+              coordinatorBotId: fixture.goal.coordinatorBotId,
+              threadId: fixture.goal.threadId,
+            });
+      if (visible) {
+        await expect(attempt).resolves.toMatchObject({
+          conditions: [
+            expect.objectContaining(
+              caller === "owner"
+                ? { status: "pass", support }
+                : { status: "unknown", support: [], proposedSupport: support },
+            ),
+          ],
+        });
+        expect(bot).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              userId: owner.userId,
+              spaceId: owner.spaceId,
+              archivedAt: null,
+            }),
+          }),
+        );
+      } else {
+        await expect(attempt).rejects.toThrow();
+        expect(fixture.tx.goalRevision.update).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   it("attests the owner's supporting records on the reviewed condition", async () => {
     const fixture = reviewFixture();
     const revision = await fixture.submit();
     fixture.tx.artifact.findFirst.mockResolvedValue({
       spaceId: fixture.goal.spaceId,
       userId: fixture.goal.userId,
-      hash: "hash-1",
+      hash: "a".repeat(64),
       groupId: fixture.goal.groupId,
     });
     fixture.tx.run.findFirst.mockResolvedValue({
@@ -997,7 +1114,7 @@ describe("goal owner review", () => {
       delegationRootTaskId: null,
     });
     const support = [
-      { kind: "artifact" as const, recordId: "artifact-1", revision: "hash-1" },
+      { kind: "artifact" as const, recordId: "artifact-1", revision: "a".repeat(64) },
       { kind: "run" as const, recordId: "run-1", revision: null },
     ];
     const reviewed = await reviewGoalCondition(fixture.prisma, owner, {
@@ -1018,7 +1135,7 @@ describe("goal owner review", () => {
     fixture.tx.artifact.findFirst.mockResolvedValue({
       spaceId: fixture.goal.spaceId,
       userId: fixture.goal.userId,
-      hash: "hash-1",
+      hash: "a".repeat(64),
       groupId: fixture.goal.groupId,
     });
     await reviewGoalCondition(fixture.prisma, owner, {
@@ -1026,7 +1143,7 @@ describe("goal owner review", () => {
       revisionId: revision.id,
       conditionId: "cond-final",
       status: "pass",
-      support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+      support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
     });
     await proposeGoalConditionSupport(fixture.prisma, {
       goalId: fixture.goal.id,
@@ -1036,7 +1153,7 @@ describe("goal owner review", () => {
       threadId: fixture.goal.threadId,
       revisionId: revision.id,
       conditionId: "cond-final",
-      support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+      support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
     });
     const reviewed = await reviewGoalCondition(fixture.prisma, owner, {
       goalId: fixture.goal.id,
@@ -1047,8 +1164,8 @@ describe("goal owner review", () => {
     expect(reviewed.conditions[0]).toEqual(
       expect.objectContaining({
         status: "fail",
-        support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
-        proposedSupport: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+        support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
+        proposedSupport: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
       }),
     );
   });
@@ -1059,7 +1176,7 @@ describe("goal owner review", () => {
     fixture.tx.artifact.findFirst.mockResolvedValue({
       spaceId: fixture.goal.spaceId,
       userId: fixture.goal.userId,
-      hash: "hash-1",
+      hash: "a".repeat(64),
       groupId: fixture.goal.groupId,
     });
     await reviewGoalCondition(fixture.prisma, owner, {
@@ -1067,7 +1184,7 @@ describe("goal owner review", () => {
       revisionId: revision.id,
       conditionId: "cond-final",
       status: "pass",
-      support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+      support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
     });
     const reviewed = await reviewGoalCondition(fixture.prisma, owner, {
       goalId: fixture.goal.id,
@@ -1082,14 +1199,19 @@ describe("goal owner review", () => {
   });
 
   it.each([
-    ["missing", null, "hash-1", "missing-record"],
+    ["missing", null, "a".repeat(64), "missing-record"],
     [
       "stale",
-      { spaceId: "space-1", userId: "owner-1", hash: "hash-2", groupId: "group-1" },
-      "hash-1",
+      { spaceId: "space-1", userId: "owner-1", hash: "c".repeat(64), groupId: "group-1" },
+      "a".repeat(64),
       "stale-record",
     ],
-    ["foreign", { spaceId: "space-2", userId: "owner-1", hash: "hash-1" }, "hash-1", null],
+    [
+      "foreign",
+      { spaceId: "space-2", userId: "owner-1", hash: "a".repeat(64) },
+      "a".repeat(64),
+      null,
+    ],
   ])("refuses a %s artifact support link", async (_kind, artifact, revision, reason) => {
     const fixture = reviewFixture();
     const submitted = await fixture.submit();
@@ -1114,7 +1236,7 @@ describe("goal owner review", () => {
     fixture.tx.artifact.findFirst.mockResolvedValue({
       spaceId: fixture.goal.spaceId,
       userId: fixture.goal.userId,
-      hash: "hash-1",
+      hash: "a".repeat(64),
       groupId: null,
     });
     const reviewed = await reviewGoalCondition(fixture.prisma, owner, {
@@ -1122,12 +1244,12 @@ describe("goal owner review", () => {
       revisionId: revision.id,
       conditionId: "cond-final",
       status: "pass",
-      support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+      support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
     });
     expect(reviewed.conditions[0]).toEqual(
       expect.objectContaining({
         status: "pass",
-        support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+        support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
       }),
     );
   });
@@ -1138,7 +1260,7 @@ describe("goal owner review", () => {
     fixture.tx.artifact.findFirst.mockResolvedValue({
       spaceId: fixture.goal.spaceId,
       userId: fixture.goal.userId,
-      hash: "hash-1",
+      hash: "a".repeat(64),
       groupId: "other-group",
     });
     await expect(
@@ -1147,7 +1269,7 @@ describe("goal owner review", () => {
         revisionId: revision.id,
         conditionId: "cond-final",
         status: "pass",
-        support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+        support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
       }),
     ).rejects.toThrow();
     expect(fixture.revisions[0]?.conditions).toEqual([
@@ -1181,7 +1303,7 @@ describe("goal owner review", () => {
     fixture.tx.artifact.findFirst.mockResolvedValue({
       spaceId: fixture.goal.spaceId,
       userId: fixture.goal.userId,
-      hash: "hash-1",
+      hash: "a".repeat(64),
       groupId: fixture.goal.groupId,
     });
     const proposed = await proposeGoalConditionSupport(fixture.prisma, {
@@ -1192,13 +1314,13 @@ describe("goal owner review", () => {
       threadId: fixture.goal.threadId,
       revisionId: revision.id,
       conditionId: "cond-final",
-      support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+      support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
     });
     expect(proposed.conditions[0]).toEqual(
       expect.objectContaining({
         status: "unknown",
         support: [],
-        proposedSupport: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+        proposedSupport: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
       }),
     );
     // A proposal is not a verdict: acceptance still needs the owner's pass.
@@ -1227,7 +1349,7 @@ describe("goal owner review", () => {
     fixture.tx.artifact.findFirst.mockResolvedValue({
       spaceId: fixture.goal.spaceId,
       userId: fixture.goal.userId,
-      hash: "hash-1",
+      hash: "a".repeat(64),
       groupId: fixture.goal.groupId,
     });
     await proposeGoalConditionSupport(fixture.prisma, {
@@ -1238,19 +1360,19 @@ describe("goal owner review", () => {
       threadId: fixture.goal.threadId,
       revisionId: revision.id,
       conditionId: "cond-final",
-      support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+      support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
     });
     const reviewed = await reviewGoalCondition(fixture.prisma, owner, {
       goalId: fixture.goal.id,
       revisionId: revision.id,
       conditionId: "cond-final",
       status: "pass",
-      support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+      support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
     });
     expect(reviewed.conditions[0]).toEqual(
       expect.objectContaining({
         status: "pass",
-        support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+        support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
         proposedSupport: [],
       }),
     );

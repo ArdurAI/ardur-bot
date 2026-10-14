@@ -1,6 +1,7 @@
 import { generateEvidenceKey, verifyChain, verifySeal } from "@ardurbot/adapters/evidence-format";
 import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
+import { IsolationError, reviewGoalCondition } from "@ardurbot/db";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { createEvidenceRecorder } from "../../../packages/adapters/src/evidence/recorder.js";
@@ -98,6 +99,88 @@ function fixture(role: string | null = "owner") {
 }
 
 describe("run evidence record", () => {
+  it.each([false, true])(
+    "accepts tool support only when the same owner can open it (visible=%s)",
+    async (visible) => {
+      const f = fixture();
+      const reviewer = { ...actor, isDeploymentOwner: true };
+      f.record.sha256 = "b".repeat(64);
+      vi.mocked(f.prisma.evidenceRecord.findFirst).mockImplementation(async ({ where }) =>
+        where!.id === f.record.id && (!where!.spaceId || where!.spaceId === f.record.spaceId)
+          ? (f.record as never)
+          : null,
+      );
+      if (!visible) vi.mocked(f.prisma.bot.findFirst).mockResolvedValue(null);
+      const goal = {
+        id: "goal-1",
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        threadId: "goal-thread",
+        rootTaskId: "root-1",
+        groupId: "group-1",
+        status: "completed",
+      };
+      const revision = {
+        id: "revision-1",
+        goalId: goal.id,
+        summary: "Candidate",
+        attempts: 1,
+        artifacts: [],
+        reports: [],
+        accountingSnapshot: { usedTokens: 0, reservedTokens: 0 },
+        createdAt: new Date(),
+        conditions: [
+          {
+            id: "cond-final",
+            description: "Review",
+            status: "unknown",
+            actorId: null,
+            reason: null,
+            evidenceId: null,
+            support: [],
+            proposedSupport: [],
+            createdAt: null,
+          },
+        ],
+      };
+      const update = vi.fn(async ({ data }) => ({ ...revision, ...data }));
+      Object.assign(f.prisma, {
+        $queryRaw: vi.fn(async () => []),
+        $transaction: (fn: (tx: PrismaClient) => Promise<unknown>) => fn(f.prisma),
+        teamGoal: {
+          findFirst: vi.fn(async () => goal),
+          findUniqueOrThrow: vi.fn(async () => goal),
+        },
+        goalRevision: { findFirst: vi.fn(async () => revision), update },
+        goalVerdict: { findFirst: vi.fn(async () => null) },
+      });
+      const support = [
+        { kind: "tool-result" as const, recordId: f.record.id, revision: f.record.sha256 },
+      ];
+      const attempt = reviewGoalCondition(f.prisma, reviewer, {
+        goalId: goal.id,
+        revisionId: revision.id,
+        conditionId: "cond-final",
+        status: "pass",
+        support,
+      });
+      if (visible) {
+        await expect(attempt).resolves.toMatchObject({
+          conditions: [expect.objectContaining({ status: "pass", support })],
+        });
+        await expect(runEvidenceRecord(f.prisma, reviewer, f.record.id)).resolves.toMatchObject({
+          id: f.record.id,
+          sha256: support[0]!.revision,
+        });
+      } else {
+        await expect(attempt).rejects.toThrow(IsolationError);
+        expect(update).not.toHaveBeenCalled();
+        await expect(runEvidenceRecord(f.prisma, reviewer, f.record.id)).rejects.toMatchObject({
+          code: "NOT_FOUND",
+        });
+      }
+    },
+  );
   it("returns the record's public fields to the thread owner", async () => {
     const f = fixture();
     await expect(runEvidenceRecord(f.prisma, actor, "record-1")).resolves.toEqual({

@@ -35,5 +35,6 @@ export * from "./repos.js";
 export * from "./scope.js";
 export * from "./spaces.js";
 export * from "./task-cards.js";
+export * from "./thread-access.js";
 export * from "./transaction-retry.js";
 export * from "./voice-credentials.js";

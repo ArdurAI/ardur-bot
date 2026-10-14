@@ -18,8 +18,9 @@ import type {
 } from "@ardurbot/contracts/evidence";
 import { EvidenceRevocationReasonSchema } from "@ardurbot/contracts/evidence";
 import { evidenceState } from "@ardurbot/contracts/evidence-states";
-import type { Prisma, PrismaClient } from "@ardurbot/db";
+import type { PrismaClient } from "@ardurbot/db";
 import {
+  assertRunEvidenceAccess as assertReadableRunEvidence,
   createEvidenceStore,
   EvidenceKeyConflict,
   IsolationError,
@@ -30,40 +31,15 @@ import { redactCommandOutput, redactCredentialText } from "@ardurbot/logging";
 import { ORPCError } from "@orpc/server";
 import type { Context, Hono } from "hono";
 import { gzipArchive } from "./export-archive.js";
-import { resolveThreadTarget } from "./thread-target.js";
 
-/**
- * The one access rule for a run's evidence: space membership, a run in this
- * space, and a thread the actor can resolve. Both evidence readers share it,
- * so a record can never be easier to reach than the run it belongs to.
- */
-type EvidenceRunRow = Prisma.RunGetPayload<{ include: { thread: { select: { groupId: true } } } }>;
-
-async function assertRunEvidenceAccess(
-  prisma: PrismaClient,
-  actor: Actor,
-  runId: string,
-): Promise<EvidenceRunRow> {
-  const member = await prisma.spaceMember.findUnique({
-    where: { spaceId_userId: { spaceId: actor.spaceId, userId: actor.userId } },
-  });
-  if (!member) throw new ORPCError("NOT_FOUND");
-  const run = await prisma.run.findFirst({
-    where: { id: runId, spaceId: actor.spaceId },
-    include: { thread: { select: { groupId: true } } },
-  });
-  if (!run) throw new ORPCError("NOT_FOUND");
+/** Translate the shared database access refusal into the reader's 404. */
+async function assertRunEvidenceAccess(prisma: PrismaClient, actor: Actor, runId: string) {
   try {
-    const target = await resolveThreadTarget(prisma, actor, {
-      ...(run.thread.groupId ? { groupId: run.thread.groupId } : { botId: run.botId }),
-      threadId: run.threadId,
-    });
-    if (target.threadId !== run.threadId) throw new ORPCError("NOT_FOUND");
+    return await assertReadableRunEvidence(prisma, actor, runId);
   } catch (error) {
     if (error instanceof IsolationError) throw new ORPCError("NOT_FOUND");
     throw error;
   }
-  return run;
 }
 
 async function loadRunEvidence(

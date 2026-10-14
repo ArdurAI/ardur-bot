@@ -115,12 +115,16 @@ export type GoalConditionSupportKind = z.infer<typeof GoalConditionSupportKindSc
  * against an immutable record; they are not a claim that the execution itself
  * succeeded — run outcomes stay on the run.
  */
-export const GoalConditionSupportSchema = z.object({
-  kind: GoalConditionSupportKindSchema,
-  recordId: Id,
-  /** Immutable revision reviewed: the artifact content hash or the tool-result record hash; null for a run record. */
-  revision: z.string().nullable(),
-});
+const SupportHashSchema = z
+  .string()
+  .length(64)
+  .regex(/^[0-9a-f]{64}$/);
+
+export const GoalConditionSupportSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("artifact"), recordId: Id, revision: SupportHashSchema }),
+  z.strictObject({ kind: z.literal("tool-result"), recordId: Id, revision: SupportHashSchema }),
+  z.strictObject({ kind: z.literal("run"), recordId: Id, revision: z.null() }),
+]);
 export type GoalConditionSupport = z.infer<typeof GoalConditionSupportSchema>;
 
 export const GoalConditionSchema = z.object({

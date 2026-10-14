@@ -42,13 +42,12 @@ import {
   groupMessageRecipientIds,
 } from "@ardurbot/core/group-message-recipients";
 import { deriveMessageQuote } from "@ardurbot/core/message-quote";
+import type { createRepos } from "@ardurbot/db";
 import {
   answerWaitingRunWithTextInTransaction,
   appendEventInTransaction,
   applyChiefCorrectionInTransaction,
   createChiefReceipt,
-  createGroupRepos,
-  createRepos,
   createThreadMessageInTransaction,
   DeviceRequestError,
   deviceDigest,
@@ -62,6 +61,7 @@ import {
   type PrismaClient,
   readChiefReceipt,
   recordStoppedGroupAskOutcomesInTransaction,
+  resolveReadableThreadTarget,
   saveChiefSelection,
   type ThreadEvents,
   touchGroupUpdatedAt,
@@ -324,35 +324,10 @@ export async function resolveThreadTarget(
   actor: Actor,
   input: { botId?: string; groupId?: string; threadId?: string },
 ): Promise<ThreadTarget> {
-  const repos = createRepos(prisma);
-  const groupRepos = createGroupRepos(prisma);
-  if (input.botId) {
-    const bot = await repos.getBot(actor, input.botId);
-    if (!bot.thread) throw new IsolationError();
-    let threadId = bot.thread.id;
-    if (input.threadId && input.threadId !== threadId) {
-      const conversation = await prisma.externalConversation.findFirst({
-        where: {
-          botId: bot.id,
-          userId: actor.userId,
-          spaceId: actor.spaceId,
-          thread: { id: input.threadId },
-        },
-        select: { id: true },
-      });
-      if (!conversation) throw new IsolationError();
-      threadId = input.threadId;
-    }
-    return {
-      kind: "bot",
-      botId: bot.id,
-      threadId,
-      bot,
-    };
-  }
-  if (input.groupId) {
-    const group = await groupRepos.getGroupTarget(actor, input.groupId);
-    if (!group.thread) throw new IsolationError();
+  const target = await resolveReadableThreadTarget(prisma, actor, input);
+  if (target.kind === "bot") return target;
+  if (target.kind === "group") {
+    const { group } = target;
     const members = mapGroupMembers(group.members);
     return {
       kind: "group",

@@ -105,13 +105,86 @@ function reviewStore() {
 }
 
 describe("finish_goal condition support proposals", () => {
+  it.each([
+    null,
+    42,
+    "invalid",
+    { kind: "run", recordId: "run-1", revision: "fixture-secret-7k2" },
+  ])("drops malformed runtime reference %j without losing valid support", async (invalid) => {
+    const store = reviewStore();
+    vi.mocked(store.tx.artifact.findFirst).mockResolvedValue({
+      spaceId: "space-1",
+      userId: "owner-1",
+      hash: "a".repeat(64),
+      groupId: "group-1",
+    });
+    const link = { kind: "artifact" as const, recordId: "artifact-1", revision: "a".repeat(64) };
+    const result = await finishGoalFromRun(store.prisma, {
+      goalId: "goal-1",
+      spaceId: "space-1",
+      userId: "owner-1",
+      coordinatorBotId: "bot-1",
+      threadId: "thread-1",
+      summary: "Candidate",
+      secrets: [],
+      support: [{ conditionId: "cond-final", support: [link, invalid] }] as never,
+    });
+    expect(result.ok).toBe(true);
+    expect(store.revisions[0]?.conditions).toEqual([
+      expect.objectContaining({ status: "unknown", support: [], proposedSupport: [link] }),
+    ]);
+    expect(store.tx.goalVerdict.create).not.toHaveBeenCalled();
+  });
+  it.each([false, true])(
+    "keeps valid references beside a missing reference in the same condition (repeat=%s)",
+    async (repeat) => {
+      const store = reviewStore();
+      vi.mocked(store.tx.artifact.findFirst).mockImplementation(async ({ where }) =>
+        where.id === "missing-artifact"
+          ? null
+          : {
+              spaceId: "space-1",
+              userId: "owner-1",
+              hash: "a".repeat(64),
+              groupId: "group-1",
+            },
+      );
+      const first = { kind: "artifact" as const, recordId: "artifact-1", revision: "a".repeat(64) };
+      const second = { ...first, recordId: "artifact-2" };
+      const reported = await finishGoalFromRun(store.prisma, {
+        goalId: "goal-1",
+        spaceId: "space-1",
+        userId: "owner-1",
+        coordinatorBotId: "bot-1",
+        threadId: "thread-1",
+        summary: "Candidate",
+        secrets: [],
+        support: [
+          {
+            conditionId: "cond-final",
+            support: [first, { ...first, recordId: "missing-artifact" }, second],
+          },
+          ...(repeat ? [{ conditionId: "cond-final", support: [first] }] : []),
+        ],
+      });
+      expect(reported.ok).toBe(true);
+      expect(store.revisions[0]?.conditions).toEqual([
+        expect.objectContaining({
+          status: "unknown",
+          support: [],
+          proposedSupport: [first, second],
+        }),
+      ]);
+      expect(store.tx.goalVerdict.create).not.toHaveBeenCalled();
+    },
+  );
   it("stores valid proposals on the submitted revision and drops invalid ones", async () => {
     const store = reviewStore();
     vi.mocked(store.tx.artifact.findFirst).mockImplementation(
       async ({ where }: { where: { id: string } }) =>
         where.id === "artifact-1"
-          ? { spaceId: "space-1", userId: "owner-1", hash: "hash-1", groupId: "group-1" }
-          : { spaceId: "space-2", userId: "owner-1", hash: "hash-x", groupId: "group-1" },
+          ? { spaceId: "space-1", userId: "owner-1", hash: "a".repeat(64), groupId: "group-1" }
+          : { spaceId: "space-2", userId: "owner-1", hash: "d".repeat(64), groupId: "group-1" },
     );
     vi.mocked(store.tx.run.findFirst).mockResolvedValue({
       spaceId: "space-1",
@@ -130,11 +203,11 @@ describe("finish_goal condition support proposals", () => {
       support: [
         {
           conditionId: "cond-final",
-          support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+          support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
         },
         {
           conditionId: "cond-final",
-          support: [{ kind: "artifact", recordId: "foreign-artifact", revision: "hash-x" }],
+          support: [{ kind: "artifact", recordId: "foreign-artifact", revision: "d".repeat(64) }],
         },
         {
           conditionId: "cond-final",
@@ -148,7 +221,7 @@ describe("finish_goal condition support proposals", () => {
       expect.objectContaining({
         status: "unknown",
         support: [],
-        proposedSupport: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+        proposedSupport: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
       }),
     ]);
     // A proposal is not a verdict: it never records pass/fail.
@@ -159,6 +232,12 @@ describe("finish_goal condition support proposals", () => {
 describe("finish_goal summary redaction", () => {
   it("stores the redacted summary and never the secret", async () => {
     const store = reviewStore();
+    vi.mocked(store.tx.run.findFirst).mockResolvedValue({
+      spaceId: "space-1",
+      userId: "owner-1",
+      goalId: "goal-1",
+      delegationRootTaskId: "root-1",
+    });
     const reported = await finishGoalFromRun(store.prisma, {
       goalId: "goal-1",
       spaceId: "space-1",
@@ -167,11 +246,22 @@ describe("finish_goal summary redaction", () => {
       threadId: "thread-1",
       summary: `The result used ${secret}.`,
       secrets: [secret],
+      // Runtime tool input can bypass the TypeScript union.
+      support: [
+        {
+          conditionId: "cond-final",
+          support: [{ kind: "run", recordId: "run-1", revision: secret }],
+        },
+      ] as never,
     });
     expect(reported).toEqual({ ok: true, revisionId: "revision-1", status: "completed" });
     expect(store.revisions).toHaveLength(1);
     expect(store.revisions[0]?.summary).toBe("The result used [redacted].");
     expect(store.revisions[0]?.summary).not.toContain(secret);
     expect(JSON.stringify(store.revisions[0])).not.toContain(secret);
+    expect(store.revisions[0]?.conditions).toEqual([
+      expect.objectContaining({ status: "unknown", support: [], proposedSupport: [] }),
+    ]);
+    expect(store.tx.goalRevision.update).not.toHaveBeenCalled();
   });
 });

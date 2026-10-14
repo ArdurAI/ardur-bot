@@ -235,7 +235,7 @@ it("maps a stale or missing support link to a typed conflict", async () => {
           revisionId: "revision-1",
           conditionId: "cond-final",
           status: "pass",
-          support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+          support: [{ kind: "artifact", recordId: "artifact-1", revision: "a".repeat(64) }],
         },
       }),
     }),
