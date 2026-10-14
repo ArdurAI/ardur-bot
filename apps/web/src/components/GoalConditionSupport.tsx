@@ -7,46 +7,88 @@ import { rpc } from "../lib/rpc";
 import { ArtifactFileCard } from "./ArtifactFileCard";
 import { EvidenceStatus } from "./RunEvidence";
 
+export function goalSupportLinkKey(link: GoalConditionSupport) {
+  return `${link.kind}:${link.recordId}`;
+}
+
 /**
  * The records supporting one reviewed condition. Owner-attested links and bot
  * proposals open the same record viewers the thread uses, beside the review.
+ * With `selection`, each chip also carries a checkbox so the owner attests the
+ * checked records with the pass/fail decision.
  */
 export function GoalConditionSupportChips({
   groupId,
   support,
   proposedSupport,
+  selection,
 }: {
   groupId: string;
   support: GoalConditionSupport[];
   proposedSupport: GoalConditionSupport[];
+  selection?: {
+    checked: ReadonlySet<string>;
+    onToggle: (key: string) => void;
+  };
 }) {
   const { t } = useLingui();
   const [open, setOpen] = useState<GoalConditionSupport | null>(null);
   const linkLabel = (link: GoalConditionSupport) =>
     link.kind === "artifact" ? t`Artifact` : link.kind === "run" ? t`Run record` : t`Tool record`;
-  const links = [
-    ...support.map((link) => ({ link, proposed: false })),
-    ...proposedSupport.map((link) => ({ link, proposed: true })),
-  ];
+  const links = selection
+    ? [
+        ...new Map(
+          [...support, ...proposedSupport].map((link) => [goalSupportLinkKey(link), link]),
+        ).entries(),
+      ].map(([key, link]) => ({
+        key,
+        link,
+        proposed: !support.some((item) => goalSupportLinkKey(item) === key),
+      }))
+    : [
+        ...support.map((link) => ({
+          key: `attested:${goalSupportLinkKey(link)}`,
+          link,
+          proposed: false,
+        })),
+        ...proposedSupport.map((link) => ({
+          key: `proposed:${goalSupportLinkKey(link)}`,
+          link,
+          proposed: true,
+        })),
+      ];
   if (links.length === 0) return null;
   return (
     <>
       <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
-        {links.map(({ link, proposed }) => (
-          <button
-            key={`${proposed ? "proposed" : "attested"}:${link.kind}:${link.recordId}`}
-            type="button"
-            title={link.recordId}
-            onClick={() => setOpen(link)}
-            className="rounded border border-border px-1.5 py-0.5 text-muted-foreground hover:text-foreground"
+        {links.map(({ key, link, proposed }) => (
+          <span
+            key={key}
+            className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5"
           >
-            {proposed ? (
-              <span className="text-muted-foreground/70">
-                <Trans>Proposed</Trans>{" "}
-              </span>
+            {selection ? (
+              <input
+                type="checkbox"
+                className="accent-foreground"
+                checked={selection.checked.has(goalSupportLinkKey(link))}
+                onChange={() => selection.onToggle(goalSupportLinkKey(link))}
+                aria-label={t`Support ${link.recordId}`}
+              />
             ) : null}
-            {linkLabel(link)} {link.recordId.slice(0, 8)}…
-          </button>
+            <button
+              type="button"
+              title={link.recordId}
+              onClick={() => setOpen(link)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              {proposed ? (
+                <span className="text-muted-foreground/70">
+                  <Trans>Proposed</Trans>{" "}
+                </span>
+              ) : null}
+              {linkLabel(link)} {link.recordId.slice(0, 8)}…
+            </button>
+          </span>
         ))}
       </span>
       <Dialog open={open !== null} onOpenChange={(next) => !next && setOpen(null)}>

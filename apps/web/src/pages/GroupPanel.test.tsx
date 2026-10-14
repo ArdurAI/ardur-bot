@@ -230,6 +230,74 @@ it("shows the board link and a pending update", async () => {
   );
 });
 
+const goalWithSupport = {
+  ...goal,
+  currentRevision: {
+    ...goal.currentRevision!,
+    conditions: [
+      {
+        id: "cond-final",
+        description: GOAL_FINAL_REVIEW_DESCRIPTION,
+        status: "unknown",
+        actorId: null,
+        reason: null,
+        evidenceId: null,
+        createdAt: null,
+        support: [{ kind: "run", recordId: "run-1", revision: null }],
+        proposedSupport: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+      },
+    ],
+  },
+} as Goal;
+
+it("sends the checked supporting records with the owner's pass", async () => {
+  const onRefresh = vi.fn(async () => undefined);
+  await act(async () =>
+    root.render(<GroupGoalStrip goal={goalWithSupport} onStop={vi.fn()} onRefresh={onRefresh} />),
+  );
+  const boxes = [...node.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+  expect(boxes).toHaveLength(2);
+  expect(boxes.map((box) => box.checked)).toEqual([true, false]);
+  await act(async () => {
+    boxes[1]!.click();
+  });
+  await act(async () => {
+    button("Pass").click();
+  });
+  expect(decisions.reviewCondition).toHaveBeenCalledWith({
+    goalId: goal.id,
+    revisionId: goal.currentRevision!.id,
+    conditionId: "cond-final",
+    status: "pass",
+    support: [
+      { kind: "run", recordId: "run-1", revision: null },
+      { kind: "artifact", recordId: "artifact-1", revision: "hash-1" },
+    ],
+  });
+});
+
+it("omits an attested record from the decision when the owner unchecks it", async () => {
+  const onRefresh = vi.fn(async () => undefined);
+  await act(async () =>
+    root.render(<GroupGoalStrip goal={goalWithSupport} onStop={vi.fn()} onRefresh={onRefresh} />),
+  );
+  const boxes = [...node.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+  await act(async () => {
+    boxes[0]!.click();
+    boxes[1]!.click();
+  });
+  await act(async () => {
+    button("Fail").click();
+  });
+  expect(decisions.reviewCondition).toHaveBeenCalledWith({
+    goalId: goal.id,
+    revisionId: goal.currentRevision!.id,
+    conditionId: "cond-final",
+    status: "fail",
+    support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+  });
+});
+
 it("shows supporting records on a reviewed condition and opens one beside it", async () => {
   supportCalls.runSummary.mockResolvedValue({
     sessionId: "run-1",

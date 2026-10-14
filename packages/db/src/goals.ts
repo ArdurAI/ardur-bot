@@ -1452,9 +1452,10 @@ export async function reviewGoalCondition(
             status: input.status,
             actorId: actor.userId,
             reason: input.reason ?? null,
-            // The owner's decision attests the named records and supersedes proposals.
-            support: input.support ?? [],
-            proposedSupport: [],
+            // An explicit list attests exactly those records and supersedes
+            // proposals; omitting support leaves prior links and proposals
+            // untouched so a plain pass/fail cannot erase them.
+            ...(input.support ? { support: input.support, proposedSupport: [] } : {}),
             createdAt: new Date().toISOString(),
           }
         : condition,

@@ -1011,6 +1011,73 @@ describe("goal owner review", () => {
     );
   });
 
+  it("keeps the condition's attested links and proposals when the review omits support", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    fixture.tx.artifact.findFirst.mockResolvedValue({
+      spaceId: fixture.goal.spaceId,
+      userId: fixture.goal.userId,
+      hash: "hash-1",
+    });
+    await reviewGoalCondition(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      status: "pass",
+      support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+    });
+    await proposeGoalConditionSupport(fixture.prisma, {
+      goalId: fixture.goal.id,
+      spaceId: fixture.goal.spaceId,
+      userId: fixture.goal.userId,
+      coordinatorBotId: fixture.goal.coordinatorBotId,
+      threadId: fixture.goal.threadId,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+    });
+    const reviewed = await reviewGoalCondition(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      status: "fail",
+    });
+    expect(reviewed.conditions[0]).toEqual(
+      expect.objectContaining({
+        status: "fail",
+        support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+        proposedSupport: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+      }),
+    );
+  });
+
+  it("clears the condition's attested links when the review passes an empty support array", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    fixture.tx.artifact.findFirst.mockResolvedValue({
+      spaceId: fixture.goal.spaceId,
+      userId: fixture.goal.userId,
+      hash: "hash-1",
+    });
+    await reviewGoalCondition(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      status: "pass",
+      support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+    });
+    const reviewed = await reviewGoalCondition(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      status: "pass",
+      support: [],
+    });
+    expect(reviewed.conditions[0]).toEqual(
+      expect.objectContaining({ status: "pass", support: [], proposedSupport: [] }),
+    );
+  });
+
   it.each([
     ["missing", null, "hash-1", "missing-record"],
     ["stale", { spaceId: "space-1", userId: "owner-1", hash: "hash-2" }, "hash-1", "stale-record"],

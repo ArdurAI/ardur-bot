@@ -9255,6 +9255,11 @@ msgstr ""
 msgid "Superseded"
 msgstr ""
 
+#. placeholder {0}: link.recordId
+#: src/components/GoalConditionSupport.tsx
+msgid "Support {0}"
+msgstr "Apoyar {0}"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Supports images"

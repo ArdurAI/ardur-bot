@@ -2,6 +2,7 @@ import type {
   Bot,
   BotCommunicationPolicy,
   Goal,
+  GoalCondition,
   Group,
   GroupMember,
   RoomPolicyPatch,
@@ -32,7 +33,7 @@ import {
   useState,
 } from "react";
 import { BotContext } from "../components/ContextEntry";
-import { GoalConditionSupportChips } from "../components/GoalConditionSupport";
+import { GoalConditionSupportChips, goalSupportLinkKey } from "../components/GoalConditionSupport";
 import { rpc } from "../lib/rpc";
 import type { ModelSettings } from "../lib/use-model-settings";
 import { GroupModelControl } from "./group-model-control";
@@ -534,10 +535,41 @@ export function GroupGoalStrip({
   const [stopping, setStopping] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [notes, setNotes] = useState("");
+  // Checked support-record keys per condition, overriding the attested-by-default
+  // set only while the owner is deciding; keyed by revision so rework starts clean.
+  const [supportChoice, setSupportChoice] = useState<Record<string, string[]>>({});
   const reviewPending = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const conditionSupportLinks = (condition: GoalCondition) => {
+    const links = new Map<string, GoalCondition["support"][number]>();
+    for (const link of condition.support ?? []) links.set(goalSupportLinkKey(link), link);
+    for (const link of condition.proposedSupport ?? [])
+      if (!links.has(goalSupportLinkKey(link))) links.set(goalSupportLinkKey(link), link);
+    return [...links.values()];
+  };
+  const chosenSupport = (conditionId: string) => {
+    const key = `${goal.currentRevision?.id}:${conditionId}`;
+    const condition = goal.currentRevision?.conditions.find((item) => item.id === conditionId);
+    return supportChoice[key] ?? (condition?.support ?? []).map(goalSupportLinkKey);
+  };
+  const toggleSupport = (conditionId: string, key: string) => {
+    const choiceKey = `${goal.currentRevision?.id}:${conditionId}`;
+    const current = chosenSupport(conditionId);
+    setSupportChoice((previous) => ({
+      ...previous,
+      [choiceKey]: current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key],
+    }));
+  };
   async function markCondition(conditionId: string, status: "pass" | "fail") {
     if (!goal.currentRevision || reviewPending.current) return;
+    const condition = goal.currentRevision.conditions.find((item) => item.id === conditionId);
+    if (!condition) return;
+    const checked = new Set(chosenSupport(conditionId));
+    const support = conditionSupportLinks(condition).filter((link) =>
+      checked.has(goalSupportLinkKey(link)),
+    );
     reviewPending.current = true;
     setReviewing(true);
     setError(null);
@@ -547,6 +579,7 @@ export function GroupGoalStrip({
         revisionId: goal.currentRevision.id,
         conditionId,
         status,
+        support,
       });
       await onRefresh();
     } catch (cause) {
@@ -674,6 +707,14 @@ export function GroupGoalStrip({
                     groupId={goal.groupId}
                     support={cond.support ?? []}
                     proposedSupport={cond.proposedSupport ?? []}
+                    {...(allowDecision
+                      ? {
+                          selection: {
+                            checked: new Set(chosenSupport(cond.id)),
+                            onToggle: (key: string) => toggleSupport(cond.id, key),
+                          },
+                        }
+                      : {})}
                   />
                 </li>
               ))}
