@@ -57,7 +57,12 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
   afterAll(async () => {
     if (!prisma) return;
     try {
-      await prisma.organization.delete({ where: { id: organizationId } });
+      // Evidence rows are append-only; the harness drops this database anyway,
+      // so allow the fixture cleanup cascade to remove them.
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SET LOCAL ardur.evidence_delete = 'on'`;
+        await tx.organization.delete({ where: { id: organizationId } });
+      });
     } finally {
       await close();
     }
