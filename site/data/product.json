@@ -1778,7 +1778,8 @@
         "boundaries": [
           "Only an authorized owner with a group coordinator can start this flow.",
           "Stopping a goal ends new coordinator work; it does not undo completed actions.",
-          "A linked board item is commented when the result is submitted and closed only when the owner accepts it."
+          "A linked board item is commented when the result is submitted and closed only when the owner accepts it.",
+          "Each reviewed condition can name the records that support it: an artifact revision, a tool-result record, or a run record. A bot may propose support; only the owner's review records pass or fail."
         ],
         "troubleshooting": [
           {

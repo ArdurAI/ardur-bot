@@ -506,6 +506,10 @@ msgstr ""
 msgid "A saved shortcut is unavailable; choose another."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "A supporting record is missing or changed; review again."
+msgstr "支撑记录缺失或已更改，请重新审核。"
+
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "About evidence"
 msgstr "关于证据"
@@ -1186,6 +1190,10 @@ msgstr "Ardur 已尝试五次。请在看板上关闭它，或检查此电脑是
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
 msgstr "参数"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Artifact"
+msgstr "产物"
 
 #: src/pages/storage/StorageSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -3154,6 +3162,10 @@ msgstr "无法打开文件"
 msgid "Could not open setup. Try again."
 msgstr ""
 
+#: src/components/GoalConditionSupport.tsx
+msgid "Could not open this record."
+msgstr "无法打开此记录。"
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Could not pair this account. Check its settings and try again."
 msgstr ""
@@ -3700,6 +3712,10 @@ msgstr "日常工作"
 #: src/pages/RoutineSchedule.tsx
 msgid "days"
 msgstr "天"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Decisions recorded"
+msgstr "已记录的决定"
 
 #: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Declared"
@@ -5646,6 +5662,7 @@ msgid "Loading your tools."
 msgstr ""
 
 #: src/App.tsx
+#: src/components/GoalConditionSupport.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
@@ -7298,6 +7315,10 @@ msgstr ""
 msgid "Propose on a branch"
 msgstr ""
 
+#: src/components/GoalConditionSupport.tsx
+msgid "Proposed"
+msgstr "已提议"
+
 #: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Proposed consolidation"
@@ -7499,6 +7520,10 @@ msgstr "正在重新连接终端"
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
 msgstr "记录机器人决策的证据"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Recorded"
+msgstr "已记录"
 
 #: src/pages/workspace/view-registry.ts
 #: src/pages/workspace/WorkspaceChanges.tsx
@@ -8073,6 +8098,10 @@ msgstr ""
 msgid "Review tools before your bots can use this account."
 msgstr ""
 
+#: src/components/GoalConditionSupport.tsx
+msgid "Reviewed revision"
+msgstr "已审核的修订"
+
 #: src/pages/LearningInbox.tsx
 msgid "Reviewer"
 msgstr ""
@@ -8177,6 +8206,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "Run on startup"
 msgstr ""
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Run record"
+msgstr "运行记录"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Run setup again"
@@ -9091,6 +9124,7 @@ msgstr "正在开始"
 msgid "Starting…"
 msgstr "正在开始…"
 
+#: src/components/GoalConditionSupport.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Status"
@@ -9857,6 +9891,10 @@ msgstr ""
 msgid "Told {name} to stand down"
 msgstr "已通知 {name} 停下"
 
+#: src/components/GoalConditionSupport.tsx
+msgid "Tool"
+msgstr "工具"
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
 msgstr ""
@@ -9864,6 +9902,10 @@ msgstr ""
 #: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Tool authorization"
 msgstr "工具授权"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Tool record"
+msgstr "工具记录"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -10268,6 +10310,10 @@ msgstr "使用该账户的权限。"
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "正在使用 {currentId}"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Verdict"
+msgstr "判定"
 
 #: src/components/RunEvidence.tsx
 msgid "Verified"

@@ -506,6 +506,10 @@ msgstr "A new version is available — download"
 msgid "A saved shortcut is unavailable; choose another."
 msgstr "A saved shortcut is unavailable; choose another."
 
+#: src/pages/GroupPanel.tsx
+msgid "A supporting record is missing or changed; review again."
+msgstr "A supporting record is missing or changed; review again."
+
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "About evidence"
 msgstr "About evidence"
@@ -1186,6 +1190,10 @@ msgstr "Ardur tried five times. Close it on the Board, or check that this comput
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
 msgstr "Arguments"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Artifact"
+msgstr "Artifact"
 
 #: src/pages/storage/StorageSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -3154,6 +3162,10 @@ msgstr "Could not open file"
 msgid "Could not open setup. Try again."
 msgstr "Could not open setup. Try again."
 
+#: src/components/GoalConditionSupport.tsx
+msgid "Could not open this record."
+msgstr "Could not open this record."
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Could not pair this account. Check its settings and try again."
 msgstr "Could not pair this account. Check its settings and try again."
@@ -3700,6 +3712,10 @@ msgstr "Day-to-day work"
 #: src/pages/RoutineSchedule.tsx
 msgid "days"
 msgstr "days"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Decisions recorded"
+msgstr "Decisions recorded"
 
 #: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Declared"
@@ -5646,6 +5662,7 @@ msgid "Loading your tools."
 msgstr "Loading your tools."
 
 #: src/App.tsx
+#: src/components/GoalConditionSupport.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
@@ -7298,6 +7315,10 @@ msgstr "Propose consolidation"
 msgid "Propose on a branch"
 msgstr "Propose on a branch"
 
+#: src/components/GoalConditionSupport.tsx
+msgid "Proposed"
+msgstr "Proposed"
+
 #: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Proposed consolidation"
@@ -7499,6 +7520,10 @@ msgstr "Reconnecting terminal"
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
 msgstr "Record evidence of bot decisions"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Recorded"
+msgstr "Recorded"
 
 #: src/pages/workspace/view-registry.ts
 #: src/pages/workspace/WorkspaceChanges.tsx
@@ -8073,6 +8098,10 @@ msgstr "Review tools"
 msgid "Review tools before your bots can use this account."
 msgstr "Review tools before your bots can use this account."
 
+#: src/components/GoalConditionSupport.tsx
+msgid "Reviewed revision"
+msgstr "Reviewed revision"
+
 #: src/pages/LearningInbox.tsx
 msgid "Reviewer"
 msgstr "Reviewer"
@@ -8177,6 +8206,10 @@ msgstr "Run on other bots"
 #: src/pages/system/SystemPage.tsx
 msgid "Run on startup"
 msgstr "Run on startup"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Run record"
+msgstr "Run record"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Run setup again"
@@ -9091,6 +9124,7 @@ msgstr "Starting"
 msgid "Starting…"
 msgstr "Starting…"
 
+#: src/components/GoalConditionSupport.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Status"
@@ -9857,6 +9891,10 @@ msgstr "Tokens over seven days"
 msgid "Told {name} to stand down"
 msgstr "Told {name} to stand down"
 
+#: src/components/GoalConditionSupport.tsx
+msgid "Tool"
+msgstr "Tool"
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
 msgstr "Tool access mode"
@@ -9864,6 +9902,10 @@ msgstr "Tool access mode"
 #: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Tool authorization"
 msgstr "Tool authorization"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Tool record"
+msgstr "Tool record"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -10268,6 +10310,10 @@ msgstr "Uses that account's permissions."
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "Using {currentId}"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Verdict"
+msgstr "Verdict"
 
 #: src/components/RunEvidence.tsx
 msgid "Verified"
