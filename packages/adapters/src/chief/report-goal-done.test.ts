@@ -1,7 +1,9 @@
+import type { GoalConditionSupport } from "@ardurbot/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const submitGoalFromCoordinator = vi.hoisted(() => vi.fn());
-vi.mock("@ardurbot/db", () => ({ submitGoalFromCoordinator }));
+const proposeGoalConditionSupport = vi.hoisted(() => vi.fn());
+vi.mock("@ardurbot/db", () => ({ submitGoalFromCoordinator, proposeGoalConditionSupport }));
 
 import { reportGoalDone } from "./report-goal-done.js";
 
@@ -14,10 +16,26 @@ const input = {
   summary: "  The reviewed wording is ready.  ",
 };
 
+const proposals: readonly {
+  conditionId: string;
+  support: readonly GoalConditionSupport[];
+}[] = [
+  {
+    conditionId: "cond-final",
+    support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+  },
+  {
+    conditionId: "cond-final",
+    support: [{ kind: "artifact", recordId: "foreign-artifact", revision: "hash-x" }],
+  },
+];
+
 describe("coordinator goal submission", () => {
   beforeEach(() => {
     submitGoalFromCoordinator.mockReset();
     submitGoalFromCoordinator.mockResolvedValue({ id: "revision-1" });
+    proposeGoalConditionSupport.mockReset();
+    proposeGoalConditionSupport.mockResolvedValue({ id: "revision-1" });
   });
 
   it("submits the coordinator summary through the home path", async () => {
@@ -39,5 +57,43 @@ describe("coordinator goal submission", () => {
       error: "finish_goal requires a summary",
     });
     expect(submitGoalFromCoordinator).not.toHaveBeenCalled();
+  });
+
+  it("proposes per-condition support with the run identity after submission", async () => {
+    await expect(reportGoalDone({} as never, { ...input, support: proposals })).resolves.toEqual({
+      ok: true,
+      revisionId: "revision-1",
+      status: "completed",
+    });
+    // The summary submission never carries model-supplied support fields.
+    expect(submitGoalFromCoordinator).toHaveBeenCalledWith(
+      {},
+      expect.not.objectContaining({ support: expect.anything() }),
+    );
+    expect(proposeGoalConditionSupport).toHaveBeenCalledTimes(2);
+    expect(proposeGoalConditionSupport).toHaveBeenNthCalledWith(
+      1,
+      {},
+      {
+        goalId: "goal-1",
+        spaceId: "space-1",
+        userId: "owner-1",
+        coordinatorBotId: "bot-1",
+        threadId: "thread-1",
+        revisionId: "revision-1",
+        conditionId: "cond-final",
+        support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+      },
+    );
+  });
+
+  it("drops an invalid proposal without failing the report", async () => {
+    proposeGoalConditionSupport.mockRejectedValueOnce(new Error("isolation"));
+    await expect(reportGoalDone({} as never, { ...input, support: proposals })).resolves.toEqual({
+      ok: true,
+      revisionId: "revision-1",
+      status: "completed",
+    });
+    expect(proposeGoalConditionSupport).toHaveBeenCalledTimes(2);
   });
 });

@@ -2,6 +2,7 @@ import type { ConnectorTool } from "@ardurbot/adapter-kit";
 import {
   BotSecretDestination,
   BotSecretName,
+  GoalConditionSupportSchema,
   ListBotsInputSchema,
   ReconcileChiefActionInputSchema,
   SecretAskPurpose,
@@ -1015,6 +1016,24 @@ export const builtinAgentTools: ConnectorTool[] = [
           minLength: 1,
           maxLength: 10000,
           description: "What was done, for the owner to review.",
+        },
+        support: {
+          type: "array",
+          maxItems: 20,
+          description:
+            "Optional: the condition id (cond-0, cond-1, … or cond-final) with the artifact revisions, tool-result records, or run records that support it.",
+          items: {
+            type: "object",
+            properties: {
+              conditionId: { type: "string", minLength: 1, maxLength: 200 },
+              support: {
+                type: "array",
+                maxItems: 20,
+                items: z.toJSONSchema(GoalConditionSupportSchema),
+              },
+            },
+            required: ["conditionId", "support"],
+          },
         },
       },
       required: ["summary"],

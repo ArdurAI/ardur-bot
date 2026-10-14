@@ -5779,6 +5779,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
               threadId: thread.id,
               summary: String(args.summary ?? ""),
               secrets: runSecrets,
+              support: Array.isArray(args.support)
+                ? args.support.slice(0, 20).map((entry) => ({
+                    conditionId: String(entry?.conditionId ?? ""),
+                    support: Array.isArray(entry?.support) ? entry.support : [],
+                  }))
+                : undefined,
             });
             if (submitted.ok)
               void deliverPendingGoalBoardUpdates({
