@@ -18,7 +18,7 @@ import type {
 } from "@ardurbot/contracts/evidence";
 import { EvidenceRevocationReasonSchema } from "@ardurbot/contracts/evidence";
 import { evidenceState } from "@ardurbot/contracts/evidence-states";
-import type { PrismaClient } from "@ardurbot/db";
+import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   createEvidenceStore,
   EvidenceKeyConflict,
@@ -32,12 +32,18 @@ import type { Context, Hono } from "hono";
 import { gzipArchive } from "./export-archive.js";
 import { resolveThreadTarget } from "./thread-target.js";
 
-async function loadRunEvidence(
+/**
+ * The one access rule for a run's evidence: space membership, a run in this
+ * space, and a thread the actor can resolve. Both evidence readers share it,
+ * so a record can never be easier to reach than the run it belongs to.
+ */
+type EvidenceRunRow = Prisma.RunGetPayload<{ include: { thread: { select: { groupId: true } } } }>;
+
+async function assertRunEvidenceAccess(
   prisma: PrismaClient,
   actor: Actor,
   runId: string,
-  expectedFingerprint?: string,
-) {
+): Promise<EvidenceRunRow> {
   const member = await prisma.spaceMember.findUnique({
     where: { spaceId_userId: { spaceId: actor.spaceId, userId: actor.userId } },
   });
@@ -57,6 +63,16 @@ async function loadRunEvidence(
     if (error instanceof IsolationError) throw new ORPCError("NOT_FOUND");
     throw error;
   }
+  return run;
+}
+
+async function loadRunEvidence(
+  prisma: PrismaClient,
+  actor: Actor,
+  runId: string,
+  expectedFingerprint?: string,
+) {
+  const run = await assertRunEvidenceAccess(prisma, actor, runId);
   const store = createEvidenceStore(prisma);
   const [records, seal] = await Promise.all([store.recordsForRun(runId), store.sealForRun(runId)]);
   const kid = records[0]?.kid ?? "";
@@ -179,6 +195,7 @@ export async function runEvidenceRecord(
     where: { id: recordId, spaceId: actor.spaceId },
   });
   if (!record) throw new ORPCError("NOT_FOUND");
+  await assertRunEvidenceAccess(prisma, actor, record.runId);
   return {
     id: record.id,
     runId: record.runId,

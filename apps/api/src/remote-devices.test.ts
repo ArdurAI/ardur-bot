@@ -297,6 +297,13 @@ it("lets paired devices read the public evidence key history but never manage ke
   }
   expect(f.read).toHaveBeenCalledTimes(1);
 });
+it("refuses paired devices the run-evidence record and summary readers", async () => {
+  const f = fixture();
+  for (const procedure of ["evidence/record", "evidence/runSummary"]) {
+    expect((await f.call(f.signed("rpc", { procedure, input: {} }))).status).toBe(403);
+  }
+  expect(f.read).not.toHaveBeenCalled();
+});
 it("does not expose feature mutation or device management through Overview grants", async () => {
   for (const procedure of ["features/set", "devices/list", "mcp/servers/create"]) {
     const f = fixture();

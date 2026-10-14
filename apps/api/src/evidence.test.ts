@@ -11,6 +11,7 @@ import {
   mountEvidenceRoutes,
   replaceSpaceEvidenceKey,
   revokeSpaceEvidenceKey,
+  runEvidenceRecord,
   runEvidenceSummary,
 } from "./evidence.js";
 import { extractEvidenceArchive, signedRunFixture } from "./evidence-test-fixture.js";
@@ -36,6 +37,18 @@ function fixture(role: string | null = "owner") {
   };
   const records = vi.fn(async () => signed.records);
   const seal = vi.fn(async () => signed.seal as typeof signed.seal | null);
+  const record = {
+    id: "record-1",
+    runId: run.id,
+    spaceId: run.spaceId,
+    receiptId: "receipt-1",
+    kid: signed.keys.kid,
+    toolName: "read_file",
+    verdict: "compliant",
+    decisionKind: "asked",
+    sha256: "hash-1",
+    createdAt: new Date("2030-01-01T00:00:00.000Z"),
+  };
   const prisma = {
     spaceMember: { findUnique: vi.fn(async () => (role ? { role } : null)) },
     run: {
@@ -50,7 +63,12 @@ function fixture(role: string | null = "owner") {
           : null,
       ),
     },
-    evidenceRecord: { findMany: records },
+    evidenceRecord: {
+      findMany: records,
+      findFirst: vi.fn(async ({ where }) =>
+        where.id === record.id && where.spaceId === record.spaceId ? record : null,
+      ),
+    },
     evidenceSeal: { findUnique: seal },
     evidenceKey: {
       findFirst: vi.fn(async () => ({
@@ -71,12 +89,49 @@ function fixture(role: string | null = "owner") {
   return {
     signed,
     run,
+    record,
     records,
     seal,
     prisma,
     download: () => app.request("/api/evidence/runs/run?spaceId=space"),
   };
 }
+
+describe("run evidence record", () => {
+  it("returns the record's public fields to the thread owner", async () => {
+    const f = fixture();
+    await expect(runEvidenceRecord(f.prisma, actor, "record-1")).resolves.toEqual({
+      id: "record-1",
+      runId: "run",
+      receiptId: "receipt-1",
+      kid: f.signed.keys.kid,
+      toolName: "read_file",
+      verdict: "compliant",
+      decisionKind: "asked",
+      sha256: "hash-1",
+      createdAt: "2030-01-01T00:00:00.000Z",
+    });
+  });
+  it("refuses a same-space member who cannot see the record's private thread", async () => {
+    const f = fixture("member");
+    vi.mocked(f.prisma.bot.findFirst).mockResolvedValue(null);
+    await expect(runEvidenceRecord(f.prisma, actor, "record-1")).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+  it("refuses a non-member before reading the record's run", async () => {
+    const f = fixture(null);
+    await expect(runEvidenceRecord(f.prisma, actor, "record-1")).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+  it("returns 404 for a record outside this space", async () => {
+    const f = fixture();
+    await expect(runEvidenceRecord(f.prisma, actor, "record-other")).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+});
 
 describe("run evidence", () => {
   it("returns only the public identity fields and compares the verified signing key", async () => {
