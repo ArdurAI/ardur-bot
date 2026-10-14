@@ -714,6 +714,10 @@ function Thread() {
       onPress: () => router.push({ pathname: "/ide", params: { botId: botId ?? "" } }),
     },
     {
+      text: t("Git changes"),
+      onPress: () => router.push({ pathname: "/git-changes", params: { botId: botId ?? "" } }),
+    },
+    {
       text: t("Chat settings"),
       onPress: () =>
         router.push({

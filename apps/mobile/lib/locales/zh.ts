@@ -1576,4 +1576,14 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Connect GitHub or grant a team member permission to read and write.":
     "连接 GitHub，或授予团队成员读写权限。",
   "Needs you": "需要你",
+  "Git changes": "Git 更改",
+  "Git changes are unavailable on this computer.": "此电脑上无法使用 Git 更改。",
+  "Not a Git repository": "不是 Git 仓库",
+  "No changes to show": "没有可显示的更改",
+  "Some changes are not shown": "未显示部分更改",
+  "Diff is too large": "差异过大",
+  Modified: "已修改",
+  Renamed: "已重命名",
+  Untracked: "未跟踪",
+  "This file looks like it contains a secret.": "此文件看起来包含密钥。",
 };

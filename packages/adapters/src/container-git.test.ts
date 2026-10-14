@@ -254,10 +254,30 @@ describe("container git observation on a temporary repository", () => {
     if (status.kind !== "status") throw new Error("unreachable");
     expect(status.entries).toEqual(
       expect.arrayContaining([
-        { path: "staged.md", staged: true, unstaged: false, untracked: false, conflict: false },
-        { path: "renamed.md", staged: true, unstaged: false, untracked: false, conflict: false },
-        { path: "unstaged.md", staged: false, unstaged: true, untracked: false, conflict: false },
-        { path: "note name.md", staged: false, unstaged: false, untracked: true, conflict: false },
+        {
+          path: "renamed.md",
+          staged: true,
+          unstaged: false,
+          untracked: false,
+          conflict: false,
+          change: "renamed",
+        },
+        {
+          path: "unstaged.md",
+          staged: false,
+          unstaged: true,
+          untracked: false,
+          conflict: false,
+          change: "modified",
+        },
+        {
+          path: "note name.md",
+          staged: false,
+          unstaged: false,
+          untracked: true,
+          conflict: false,
+          change: "untracked",
+        },
       ]),
     );
     expect(staged).toMatchObject({ kind: "diff", binary: false });

@@ -1268,6 +1268,8 @@
       "id": "mobile-files",
       "sources": [
         "apps/mobile/app/ide.tsx",
+        "apps/mobile/app/git-changes.tsx",
+        "apps/mobile/components/git-changes.tsx",
         "packages/contracts/src/rpc.ts",
         "docs/ide.md"
       ],
@@ -1425,6 +1427,7 @@
       "workspace-tasks": "delegation-tasks",
       "routine": "routines",
       "computer": "chat-computer",
+      "git-changes": "mobile-files",
       "pair": "mobile-pairing",
       "overview": "mobile-overview",
       "ide": "mobile-files",

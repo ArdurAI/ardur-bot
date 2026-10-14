@@ -3795,6 +3795,10 @@ msgstr ""
 msgid "deleted"
 msgstr "excluído"
 
+#: src/lib/git-changes-phone-copy.ts
+msgid "Deleted"
+msgstr "Excluído"
+
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Deleting…"
@@ -6083,6 +6087,10 @@ msgstr ""
 msgid "Models from server"
 msgstr "Modelos do servidor"
 
+#: src/lib/git-changes-phone-copy.ts
+msgid "Modified"
+msgstr "Modificado"
+
 #: src/pages/RoutineSchedule.tsx
 msgid "Monthly"
 msgstr "Mensalmente"
@@ -7741,6 +7749,10 @@ msgstr ""
 #: src/pages/shell/dialogs.tsx
 msgid "Rename section"
 msgstr "Renomear seção"
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "Renamed"
+msgstr "Renomeado"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Reopen"
@@ -9639,6 +9651,10 @@ msgstr "Este arquivo não é válido UTF-8 Markdown."
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file is read-only. Open a copy to edit it."
 msgstr "Este arquivo é somente leitura. Abra uma cópia para editá-lo."
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "This file looks like it contains a secret."
+msgstr "Este arquivo parece conter um segredo."
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file no longer exists. Save it as a new file or close it."

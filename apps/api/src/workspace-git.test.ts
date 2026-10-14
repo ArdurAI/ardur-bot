@@ -149,7 +149,14 @@ describe("workspace git observation", () => {
       status: "ok",
       head: "a".repeat(40),
       entries: [
-        { path: "app.ts", staged: true, unstaged: false, untracked: false, conflict: false },
+        {
+          path: "app.ts",
+          staged: true,
+          unstaged: false,
+          untracked: false,
+          conflict: false,
+          change: "modified",
+        },
       ],
     });
     const observe = f.sandbox.gitChanges as ReturnType<typeof vi.fn>;

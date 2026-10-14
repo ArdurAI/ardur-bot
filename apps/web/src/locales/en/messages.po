@@ -3795,6 +3795,10 @@ msgstr "Delete space"
 msgid "deleted"
 msgstr "deleted"
 
+#: src/lib/git-changes-phone-copy.ts
+msgid "Deleted"
+msgstr "Deleted"
+
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Deleting…"
@@ -6083,6 +6087,10 @@ msgstr "Models for the server owner’s default space."
 msgid "Models from server"
 msgstr "Models from server"
 
+#: src/lib/git-changes-phone-copy.ts
+msgid "Modified"
+msgstr "Modified"
+
 #: src/pages/RoutineSchedule.tsx
 msgid "Monthly"
 msgstr "Monthly"
@@ -7741,6 +7749,10 @@ msgstr "Rename"
 #: src/pages/shell/dialogs.tsx
 msgid "Rename section"
 msgstr "Rename section"
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "Renamed"
+msgstr "Renamed"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Reopen"
@@ -9639,6 +9651,10 @@ msgstr "This file is not valid UTF-8 Markdown."
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file is read-only. Open a copy to edit it."
 msgstr "This file is read-only. Open a copy to edit it."
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "This file looks like it contains a secret."
+msgstr "This file looks like it contains a secret."
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file no longer exists. Save it as a new file or close it."

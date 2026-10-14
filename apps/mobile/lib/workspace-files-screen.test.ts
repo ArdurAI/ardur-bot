@@ -16,6 +16,7 @@ vi.mock("./native", () => ({ useMobileTokens: () => ({}) }));
 vi.mock("expo-router", () => ({
   Stack: { Screen: () => null },
   useLocalSearchParams: () => fakes.params,
+  useRouter: () => ({ push: () => undefined }),
 }));
 vi.mock("react-native", () => ({
   View: ({ children }: { children: ReactNode }) => h("div", null, children),
