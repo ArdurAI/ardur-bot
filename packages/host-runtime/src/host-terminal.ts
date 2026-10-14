@@ -150,7 +150,9 @@ export class HostTerminalProvider implements TerminalProvider {
       this.options.shell ??
       (process.platform === "win32"
         ? path.win32.join(env.SystemRoot ?? "C:\\Windows", "System32", "cmd.exe")
-        : "/bin/sh");
+        : env.SHELL && path.posix.isAbsolute(env.SHELL)
+          ? env.SHELL
+          : "/bin/sh");
     const child = await this.factory.spawn(
       shell,
       cwd,
