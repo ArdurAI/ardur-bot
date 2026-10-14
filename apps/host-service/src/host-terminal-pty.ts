@@ -88,62 +88,105 @@ const systemTree: TreeOperations = {
     }
   },
 };
-const POLL_MS = 50;
+// At most two background listings per second, shared across all open terminals.
+// Schedule after completion so slow lookups cannot pile up under load.
+const POLL_MS = 500;
+const LOOKUP_TIMEOUT_MS = 2000;
+const CLEANUP_RETRY_MS = 100;
 const TERM_GRACE_MS = 1500;
 // Finish before the provider's outer deadline so rejection retains the closing session.
 const TREE_DEADLINE_MS = TERMINAL_CLEANUP_DEADLINE_MS - 500;
+
+async function processSnapshot(operations: TreeOperations, timeoutMs: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operations.snapshot(timeoutMs),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("Terminal process lookup timed out.")),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+class DarwinPoller {
+  private readonly trees = new Set<DarwinTree>();
+  private timer?: ReturnType<typeof setTimeout>;
+  private polling = false;
+  constructor(private readonly operations: TreeOperations) {}
+  add(tree: DarwinTree) {
+    this.trees.add(tree);
+    this.poll();
+  }
+  remove(tree: DarwinTree) {
+    this.trees.delete(tree);
+    if (!this.trees.size) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+    }
+  }
+  private poll() {
+    if (!this.trees.size || this.timer || this.polling) return;
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      this.polling = true;
+      void processSnapshot(this.operations, LOOKUP_TIMEOUT_MS)
+        .then((rows) => {
+          for (const tree of this.trees) {
+            try {
+              tree.observe(rows);
+            } catch {
+              // A tracker failure must not prevent observation of other terminals.
+            }
+          }
+        })
+        // A background observation gap is not evidence that cleanup failed.
+        // Termination always makes fresh, deadline-bound lookups.
+        .catch(() => {})
+        .finally(() => {
+          this.polling = false;
+          this.poll();
+        });
+    }, POLL_MS);
+    this.timer.unref();
+  }
+}
+
+const pollers = new WeakMap<TreeOperations, DarwinPoller>();
+function sharedPoller(operations: TreeOperations) {
+  let poller = pollers.get(operations);
+  if (!poller) {
+    poller = new DarwinPoller(operations);
+    pollers.set(operations, poller);
+  }
+  return poller;
+}
 
 /** Tracks descendants while their parent links still exist, including across shell exit. */
 class DarwinTree {
   private readonly owned = new Map<number, string>();
   private rootSeen = false;
-  private timer?: ReturnType<typeof setTimeout>;
-  private reading?: Promise<ProcessIdentity[]>;
   private cleanup?: Promise<void>;
-  private closing = false;
-  private observationFailed = false;
   constructor(
     private readonly root: number,
     private readonly operations: TreeOperations,
+    private readonly poller: DarwinPoller,
   ) {
     if (!Number.isSafeInteger(root) || root <= 1) throw new Error("Invalid terminal PID.");
   }
   async start() {
-    await this.refresh();
+    // A background snapshot may have started before this shell was spawned.
+    this.observe(await processSnapshot(this.operations, LOOKUP_TIMEOUT_MS));
     // A shell that already exited must not be adopted later through PID reuse.
     this.rootSeen = true;
-    this.poll();
+    this.poller.add(this);
   }
-  private poll() {
-    if (this.closing) return;
-    this.timer = setTimeout(() => {
-      void this.refresh()
-        .catch(() => {
-          this.observationFailed = true;
-        })
-        .finally(() => this.poll());
-    }, POLL_MS);
-    this.timer.unref();
-  }
-  private async refresh(timeoutMs = 250) {
-    this.reading ??= (async () => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        return await Promise.race([
-          this.operations.snapshot(timeoutMs),
-          new Promise<never>((_resolve, reject) => {
-            timer = setTimeout(
-              () => reject(new Error("Terminal process lookup timed out.")),
-              timeoutMs,
-            );
-          }),
-        ]);
-      } finally {
-        clearTimeout(timer);
-        this.reading = undefined;
-      }
-    })();
-    const rows = await this.reading;
+  observe(rows: ProcessIdentity[]) {
     const root = rows.find((row) => row.pid === this.root);
     if (!this.rootSeen && root) {
       this.rootSeen = true;
@@ -167,12 +210,12 @@ class DarwinTree {
         added = true;
       }
     }
-    return rows;
+    // A descendant that calls setsid and reparents between observations can escape.
+    // Step 3 must close this gap before terminal capability admission is enabled.
   }
   killTree() {
     if (this.cleanup) return this.cleanup;
-    this.closing = true;
-    clearTimeout(this.timer);
+    this.poller.remove(this);
     this.cleanup = this.terminate().catch((error) => {
       this.cleanup = undefined;
       throw error;
@@ -186,17 +229,28 @@ class DarwinTree {
     for (;;) {
       const remaining = TREE_DEADLINE_MS - (Date.now() - started);
       if (remaining <= 0) throw new Error("Terminal process tree is still closing.");
-      const rows = await this.refresh(Math.min(250, remaining));
-      const live = rows.filter((row) => this.owned.get(row.pid) === row.birth && !row.zombie);
-      if (!live.length) {
-        if (this.observationFailed) throw new Error("Terminal ancestry lookup was interrupted.");
-        return;
+      let rows: ProcessIdentity[];
+      try {
+        // Do not reuse a background lookup started before termination.
+        rows = await processSnapshot(this.operations, Math.min(LOOKUP_TIMEOUT_MS, remaining));
+        this.observe(rows);
+      } catch {
+        const retryRemaining = TREE_DEADLINE_MS - (Date.now() - started);
+        if (retryRemaining > 0)
+          await new Promise<void>((resolve) =>
+            setTimeout(resolve, Math.min(CLEANUP_RETRY_MS, retryRemaining)),
+          );
+        continue;
       }
+      if (Date.now() - started >= TREE_DEADLINE_MS)
+        throw new Error("Terminal process tree is still closing.");
+      const live = rows.filter((row) => this.owned.get(row.pid) === row.birth && !row.zombie);
+      const group = rows.filter((row) => row.group === this.root && !row.zombie);
+      if (!live.length && !group.length) return;
       const signal = Date.now() - started >= TERM_GRACE_MS ? "SIGKILL" : "SIGTERM";
       if (!termSent || signal === "SIGKILL") {
         // The PTY creates a new session/group. Signal it only if every member is
         // a proven descendant. Then also signal tracked children that left it.
-        const group = rows.filter((row) => row.group === this.root && !row.zombie);
         const safeGroup =
           group.length > 0 && group.every((row) => this.owned.get(row.pid) === row.birth);
         if (safeGroup) this.operations.signal(-this.root, signal);
@@ -213,7 +267,11 @@ class DarwinTree {
             termed.add(row.pid);
           }
       }
-      await new Promise<void>((resolve) => setTimeout(resolve, Math.min(POLL_MS, remaining)));
+      const retryRemaining = TREE_DEADLINE_MS - (Date.now() - started);
+      if (retryRemaining > 0)
+        await new Promise<void>((resolve) =>
+          setTimeout(resolve, Math.min(CLEANUP_RETRY_MS, retryRemaining)),
+        );
     }
   }
 }
@@ -240,7 +298,7 @@ export function darwinHostTerminalFactory(
       });
       // Keep the initial prompt in the PTY stream until the provider subscribes.
       child.pause();
-      const tree = new DarwinTree(child.pid, operations);
+      const tree = new DarwinTree(child.pid, operations, sharedPoller(operations));
       // Register before the first asynchronous lookup so a quick exit isn't lost.
       let exited = false;
       const exits = new Set<() => void>();

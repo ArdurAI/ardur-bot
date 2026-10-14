@@ -27,12 +27,18 @@ afterEach(async () => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
-async function fixture() {
+function fakeOperations() {
+  return {
+    snapshot: vi.fn(async (_timeoutMs: number) => [...rows]),
+    signal: vi.fn(),
+  };
+}
+async function fixture(pid = 100, operations = fakeOperations()) {
   let data: (data: string) => void = () => {};
   let exit: () => void = () => {};
   const dataDispose = vi.fn();
   const child = {
-    pid: 100,
+    pid,
     write: vi.fn(),
     resize: vi.fn(),
     kill: vi.fn(),
@@ -48,9 +54,8 @@ async function fixture() {
     }),
   };
   const spawn = vi.fn(() => child as unknown as IPty);
-  const snapshot = vi.fn(async () => [...rows]);
-  const signal = vi.fn();
-  const factory = darwinHostTerminalFactory({ spawn }, { snapshot, signal });
+  const { snapshot, signal } = operations;
+  const factory = darwinHostTerminalFactory({ spawn }, operations);
   const guard = {
     paths: ["/fixture/protected"],
     ports: [12345],
@@ -144,37 +149,47 @@ describe("macOS host PTY boundary", () => {
     ]);
     expect(f.signal.mock.calls.some(([pid]) => pid === 900 || pid === -900)).toBe(false);
     rows = [row(900)];
-    await vi.advanceTimersByTimeAsync(50);
+    await vi.advanceTimersByTimeAsync(100);
     await cleanup;
   });
 
   it("remembers a detached descendant when the shell exits during cleanup", async () => {
     const f = await fixture();
     rows.push(row(101, 100, 101));
-    await vi.advanceTimersByTimeAsync(50);
+    await vi.advanceTimersByTimeAsync(500);
     rows = [row(101, 1, 101)];
     f.exit();
     const cleanup = f.terminal.killTree();
     await vi.advanceTimersByTimeAsync(0);
     expect(f.signal).toHaveBeenCalledExactlyOnceWith(101, "SIGTERM");
     rows = [];
-    await vi.advanceTimersByTimeAsync(50);
+    await vi.advanceTimersByTimeAsync(100);
     await cleanup;
   });
 
   it("never signals a reused PID or adopts its children", async () => {
     const f = await fixture();
     rows = [row(100, 1, 100, "new-process"), row(101, 100, 100)];
-    await f.terminal.killTree();
+    const cleanup = f.terminal.killTree();
+    const rejected = expect(cleanup).rejects.toThrow("still closing");
+    await vi.advanceTimersByTimeAsync(TERMINAL_CLEANUP_DEADLINE_MS - 500);
+    await rejected;
     expect(f.signal).not.toHaveBeenCalled();
+    rows = [];
+    await f.terminal.killTree();
   });
 
   it("never adopts a reused shell PID after the original exited before the first lookup", async () => {
     rows = [];
     const f = await fixture();
     rows = [row(100, 1, 100, "new-process"), row(101, 100, 100)];
-    await f.terminal.killTree();
+    const cleanup = f.terminal.killTree();
+    const rejected = expect(cleanup).rejects.toThrow("still closing");
+    await vi.advanceTimersByTimeAsync(TERMINAL_CLEANUP_DEADLINE_MS - 500);
+    await rejected;
     expect(f.signal).not.toHaveBeenCalled();
+    rows = [];
+    await f.terminal.killTree();
   });
 
   it("refuses a group signal if even one group member is outside the spawned tree", async () => {
@@ -187,8 +202,12 @@ describe("macOS host PTY boundary", () => {
       [101, "SIGTERM"],
     ]);
     rows = [row(900, 1, 100)];
-    await vi.advanceTimersByTimeAsync(50);
-    await cleanup;
+    const rejected = expect(cleanup).rejects.toThrow("still closing");
+    await vi.advanceTimersByTimeAsync(TERMINAL_CLEANUP_DEADLINE_MS - 500);
+    await rejected;
+    expect(f.signal.mock.calls.some(([pid]) => pid === 900 || pid === -100)).toBe(false);
+    rows = [];
+    await f.terminal.killTree();
   });
 
   it("rejects before the provider deadline when the tree survives KILL and permits cleanup retry", async () => {
@@ -204,21 +223,150 @@ describe("macOS host PTY boundary", () => {
     await f.terminal.killTree();
   });
 
-  it("does not equate a failed lookup with a dead tree", async () => {
+  it("recovers from a slow background lookup and requires a fresh clean termination lookup", async () => {
     const f = await fixture();
-    f.snapshot.mockRejectedValueOnce(new Error("lookup failed"));
-    await expect(f.terminal.killTree()).rejects.toThrow("lookup failed");
+    f.snapshot.mockReturnValueOnce(new Promise(() => {}));
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(f.snapshot.mock.calls).toEqual([[2000], [2000]]);
+    rows = [];
+    await expect(f.terminal.killTree()).resolves.toBeUndefined();
+    expect(f.snapshot.mock.calls).toEqual([[2000], [2000], [2000]]);
     expect(f.signal).not.toHaveBeenCalled();
   });
 
-  it("bounds an unresponsive process lookup instead of waiting past the cleanup deadline", async () => {
+  it("does not let a stale in-flight background snapshot prove cleanup", async () => {
     const f = await fixture();
     f.snapshot.mockReturnValueOnce(new Promise(() => {}));
-    const cleanup = f.terminal.killTree();
-    const rejected = expect(cleanup).rejects.toThrow("lookup timed out");
-    await vi.advanceTimersByTimeAsync(250);
-    await rejected;
+    await vi.advanceTimersByTimeAsync(500);
+    rows = [];
+    await expect(f.terminal.killTree()).resolves.toBeUndefined();
+    expect(f.snapshot).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(f.snapshot).toHaveBeenCalledTimes(3);
+  });
+
+  it("recovers from a rejected background lookup without poisoning cleanup", async () => {
+    const f = await fixture();
+    f.snapshot.mockRejectedValueOnce(new Error("lookup failed"));
+    await vi.advanceTimersByTimeAsync(500);
+    rows = [];
+    await expect(f.terminal.killTree()).resolves.toBeUndefined();
+    expect(f.snapshot).toHaveBeenCalledTimes(3);
     expect(f.signal).not.toHaveBeenCalled();
+  });
+
+  it("retries a failed termination lookup before accepting a clean tree", async () => {
+    const f = await fixture();
+    rows = [];
+    f.snapshot.mockRejectedValueOnce(new Error("lookup failed"));
+    const cleanup = f.terminal.killTree();
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(cleanup).resolves.toBeUndefined();
+    expect(f.snapshot).toHaveBeenCalledTimes(3);
+    expect(f.signal).not.toHaveBeenCalled();
+  });
+
+  it("keeps the session closing when termination lookups fail until the deadline", async () => {
+    const f = await fixture();
+    rows = [];
+    f.snapshot.mockRejectedValue(new Error("lookup failed"));
+    const cleanup = f.terminal.killTree();
+    const rejected = expect(cleanup).rejects.toThrow("still closing");
+    await vi.advanceTimersByTimeAsync(TERMINAL_CLEANUP_DEADLINE_MS - 500);
+    await rejected;
+    expect(Date.now()).toBe(TERMINAL_CLEANUP_DEADLINE_MS - 500);
+    expect(f.snapshot.mock.calls.length).toBeGreaterThan(2);
+    expect(f.signal).not.toHaveBeenCalled();
+    expect(() => f.terminal.write(Uint8Array.of(1))).toThrow("closing");
+    f.snapshot.mockImplementation(async () => [...rows]);
+    await f.terminal.killTree();
+  });
+
+  it("bounds repeated unresponsive termination lookups by the cleanup deadline", async () => {
+    const f = await fixture();
+    rows = [];
+    f.snapshot.mockImplementation(() => new Promise(() => {}));
+    const cleanup = f.terminal.killTree();
+    const rejected = expect(cleanup).rejects.toThrow("still closing");
+    await vi.advanceTimersByTimeAsync(TERMINAL_CLEANUP_DEADLINE_MS - 500);
+    await rejected;
+    expect(Date.now()).toBe(TERMINAL_CLEANUP_DEADLINE_MS - 500);
+    expect(f.snapshot.mock.calls.map(([timeout]) => timeout)).toEqual([
+      2000, 2000, 2000, 2000, 2000, 1100,
+    ]);
+    expect(f.signal).not.toHaveBeenCalled();
+    f.snapshot.mockImplementation(async () => [...rows]);
+    await f.terminal.killTree();
+  });
+
+  it("shares one background snapshot per tick across terminals and tracks both trees", async () => {
+    rows.push(row(200));
+    const operations = fakeOperations();
+    const first = await fixture(100, operations);
+    const second = await fixture(200, operations);
+    operations.snapshot.mockClear();
+    rows.push(row(101, 100, 101), row(201, 200, 201));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(operations.snapshot).toHaveBeenCalledExactlyOnceWith(2000);
+    rows = [row(101, 1, 101), row(201, 1, 201)];
+    first.exit();
+    second.exit();
+    const cleanup = Promise.all([first.terminal.killTree(), second.terminal.killTree()]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(operations.signal.mock.calls).toEqual([
+      [101, "SIGTERM"],
+      [201, "SIGTERM"],
+    ]);
+    rows = [];
+    await vi.advanceTimersByTimeAsync(100);
+    await cleanup;
+  });
+
+  it("continues polling until the last terminal closes, then stops", async () => {
+    rows.push(row(200));
+    const operations = fakeOperations();
+    const first = await fixture(100, operations);
+    const second = await fixture(200, operations);
+    rows = [row(200)];
+    await first.terminal.killTree();
+    operations.snapshot.mockClear();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(operations.snapshot).toHaveBeenCalledTimes(2);
+    rows = [];
+    await second.terminal.killTree();
+    operations.snapshot.mockClear();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(operations.snapshot).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("never overlaps background lookups and restarts safely after the last terminal closes", async () => {
+    const operations = fakeOperations();
+    const first = await fixture(100, operations);
+    let complete: (value: ProcessIdentity[]) => void = () => {};
+    operations.snapshot.mockReturnValueOnce(
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(operations.snapshot).toHaveBeenCalledTimes(2);
+    rows = [];
+    await first.terminal.killTree();
+    rows = [row(200)];
+    const second = await fixture(200, operations);
+    complete([]);
+    await vi.advanceTimersByTimeAsync(0);
+    operations.snapshot.mockClear();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(operations.snapshot).toHaveBeenCalledTimes(2);
+    const cleanup = second.terminal.killTree();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(operations.signal).toHaveBeenCalledExactlyOnceWith(-200, "SIGTERM");
+    rows = [];
+    await vi.advanceTimersByTimeAsync(100);
+    await cleanup;
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("treats zombies as exited rather than signaling them repeatedly", async () => {
