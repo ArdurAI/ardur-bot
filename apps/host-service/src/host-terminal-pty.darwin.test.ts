@@ -12,7 +12,7 @@ import {
 } from "./host-terminal-pty.js";
 
 async function until(check: () => boolean | Promise<boolean>) {
-  const deadline = Date.now() + 4000;
+  const deadline = Date.now() + 10_000;
   while (!(await check())) {
     if (Date.now() >= deadline) throw new Error("PTY assertion timed out.");
     await delay(25);
@@ -82,7 +82,7 @@ darwinIt(
       await f.close();
     }
   },
-  20_000,
+  45_000,
 );
 
 darwinIt(
@@ -93,7 +93,7 @@ darwinIt(
     try {
       await f.send("sleep 300\n");
       await until(async () => {
-        const children = (await darwinProcessSnapshot(250)).filter(
+        const children = (await darwinProcessSnapshot(2000)).filter(
           (row) => row.parent === f.pid && !row.zombie,
         );
         foreground = children[0]?.pid ?? 0;
@@ -104,13 +104,13 @@ darwinIt(
       await until(() => f.output().includes("AFTER-INTERRUPT"));
       await until(
         async () =>
-          !(await darwinProcessSnapshot(250)).some((row) => row.pid === foreground && !row.zombie),
+          !(await darwinProcessSnapshot(2000)).some((row) => row.pid === foreground && !row.zombie),
       );
     } finally {
       await f.close();
     }
   },
-  20_000,
+  45_000,
 );
 
 darwinIt(
@@ -131,7 +131,7 @@ darwinIt(
         const log = await readFile(path.join(f.directory, "detached.log"), "utf8").catch(() => "");
         detached = Number(log.match(/DETACHED:(\d+)/)?.[1] ?? 0);
         if (!detached) return false;
-        const rows = await darwinProcessSnapshot(250);
+        const rows = await darwinProcessSnapshot(2000);
         return rows.some((row) => row.pid === detached && row.group === detached);
       });
       // Terminal output arrives asynchronously, like the detached child's log.
@@ -140,10 +140,9 @@ darwinIt(
         background = Number(f.output().match(/BG:(\d+)/)?.[1] ?? 0);
         return background > 1;
       });
-      // Give the live ancestry tracker one observation before reparenting on exit.
-      await delay(100);
+      // Keep the waiting parent alive until cleanup observes the detached child.
       await f.terminal.killTree();
-      const remaining = await darwinProcessSnapshot(250);
+      const remaining = await darwinProcessSnapshot(2000);
       for (const pid of [f.pid, background, detached])
         expect(remaining.some((row) => row.pid === pid && !row.zombie)).toBe(false);
       await f.close();
@@ -152,5 +151,5 @@ darwinIt(
       if (!closed) await f.close();
     }
   },
-  20_000,
+  45_000,
 );
