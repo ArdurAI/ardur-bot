@@ -188,6 +188,77 @@ it("maps an already reviewed decision to conflict", async () => {
   expect(tx.goalVerdict.create).not.toHaveBeenCalled();
 });
 
+it("maps a stale or missing support link to a typed conflict", async () => {
+  const tx = {
+    $queryRaw: vi.fn(async () => []),
+    teamGoal: { findUniqueOrThrow: vi.fn(async () => ({ status: "completed" })) },
+    goalRevision: {
+      findFirst: vi.fn(async () => ({
+        id: "revision-1",
+        conditions: [
+          {
+            id: "cond-final",
+            description: "goal.final-owner-review",
+            status: "unknown",
+            actorId: null,
+            reason: null,
+            evidenceId: null,
+            createdAt: null,
+          },
+        ],
+      })),
+      update: vi.fn(),
+    },
+    goalVerdict: { findFirst: vi.fn(async () => null) },
+    artifact: { findFirst: vi.fn(async () => null) },
+  };
+  const router = createRouter({
+    prisma: {
+      teamGoal: {
+        findFirst: vi.fn(async () => ({
+          id: "goal-1",
+          threadId: "thread-1",
+          rootTaskId: "root-1",
+        })),
+      },
+      $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+    },
+    env: { sandboxProvider: "fake" },
+  } as unknown as RouterDeps);
+  const { response } = await new RPCHandler(router).handle(
+    new Request("http://127.0.0.1/rpc/goals/reviewCondition", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        json: {
+          goalId: "goal-1",
+          revisionId: "revision-1",
+          conditionId: "cond-final",
+          status: "pass",
+          support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+        },
+      }),
+    }),
+    {
+      prefix: "/rpc",
+      context: {
+        actor: {
+          spaceId: "space-1",
+          userId: "owner-1",
+          email: "owner@example.test",
+          isDeploymentOwner: true,
+        },
+        authSessionId: "session-1",
+      },
+    },
+  );
+  expect(response?.status).toBe(409);
+  expect(await response?.json()).toMatchObject({
+    json: { code: "CONFLICT", data: { reason: "missing-record" } },
+  });
+  expect(tx.goalRevision.update).not.toHaveBeenCalled();
+});
+
 it("maps an already submitted goal to a typed conflict", async () => {
   const tx = {
     $queryRaw: vi.fn(async () => []),

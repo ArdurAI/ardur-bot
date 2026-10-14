@@ -4,6 +4,7 @@ import type { PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
 import {
   acceptGoal,
+  proposeGoalConditionSupport,
   rejectGoal,
   reviewGoalCondition,
   submitGoal,
@@ -18,6 +19,7 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
   const suffix = `${process.pid}-${Date.now()}`;
   const organizationId = `goal-review-org-${suffix}`;
   const spaceId = `goal-review-space-${suffix}`;
+  const foreignSpaceId = `goal-review-foreign-space-${suffix}`;
   const userId = `goal-review-user-${suffix}`;
   const actor: Actor = { spaceId, userId, email: "owner@example.test", isDeploymentOwner: true };
   let prisma: PrismaClient;
@@ -38,7 +40,12 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
         name: "Goal review fixture",
         slug: organizationId,
         createdAt: new Date(),
-        spaces: { create: { id: spaceId, name: "Goal review fixture" } },
+        spaces: {
+          create: [
+            { id: spaceId, name: "Goal review fixture" },
+            { id: foreignSpaceId, name: "Goal review foreign fixture" },
+          ],
+        },
       },
     });
     const bot = await prisma.bot.create({
@@ -292,5 +299,272 @@ describePostgres("Goal owner review (PostgreSQL)", () => {
     expect((await prisma.teamGoal.findUniqueOrThrow({ where: { id: goal.id } })).status).toBe(
       "running",
     );
+  });
+
+  async function createSupportRecords(
+    goal: { id: string; threadId: string; coordinatorBotId: string },
+    space: string,
+  ) {
+    const task = await prisma.task.create({
+      data: {
+        spaceId: space,
+        userId,
+        botId: goal.coordinatorBotId,
+        threadId: goal.threadId,
+        prompt: "Support fixture",
+        status: "completed",
+      },
+    });
+    const run = await prisma.run.create({
+      data: {
+        spaceId: space,
+        userId,
+        botId: goal.coordinatorBotId,
+        threadId: goal.threadId,
+        taskId: task.id,
+        status: "completed",
+        trigger: "follow_up",
+        goalId: goal.id,
+      },
+    });
+    const record = await prisma.evidenceRecord.create({
+      data: {
+        spaceId: space,
+        runId: run.id,
+        seq: 1,
+        receiptId: `receipt-${run.id}`,
+        kid: "kid-fixture",
+        jws: "fixture-jws",
+        sha256: "record-hash-1",
+        verdict: "compliant",
+        decisionKind: "allowed",
+        toolName: "fixture_tool",
+      },
+    });
+    const artifact = await prisma.artifact.create({
+      data: {
+        spaceId: space,
+        userId,
+        botId: goal.coordinatorBotId,
+        runId: run.id,
+        name: "result.md",
+        mimeType: "text/markdown",
+        size: 10,
+        hash: "artifact-hash-1",
+        storageKey: `storage-${run.id}`,
+      },
+    });
+    return { run, record, artifact };
+  }
+
+  it("attests supporting records and keeps them in the review snapshot", async () => {
+    const goal = await createGoal();
+    const revision = await submitGoal(prisma, actor, {
+      goalId: goal.id,
+      summary: "Candidate",
+      artifacts: [],
+      reports: [],
+    });
+    const { run, record, artifact } = await createSupportRecords(goal, spaceId);
+    const support = [
+      { kind: "artifact" as const, recordId: artifact.id, revision: "artifact-hash-1" },
+      { kind: "tool-result" as const, recordId: record.id, revision: "record-hash-1" },
+      { kind: "run" as const, recordId: run.id, revision: null },
+    ];
+    const reviewed = await reviewGoalCondition(prisma, actor, {
+      goalId: goal.id,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      status: "pass",
+      support,
+    });
+    expect(reviewed.conditions[0]).toEqual(expect.objectContaining({ status: "pass", support }));
+    const verdict = await acceptGoal(prisma, actor, {
+      goalId: goal.id,
+      revisionId: revision.id,
+    });
+    expect(verdict.type).toBe("accept");
+    const snapshot = await prisma.goalRevision.findUniqueOrThrow({ where: { id: revision.id } });
+    expect(snapshot.conditions).toEqual([
+      expect.objectContaining({ status: "pass", actorId: userId, support }),
+    ]);
+  });
+
+  it.each([
+    ["foreign-space", "foreign-space", "artifact-hash-1", null],
+    ["stale", "same-space", "artifact-hash-2", "stale-record"],
+    ["missing", "same-space", "artifact-hash-1", "missing-record"],
+  ])("refuses a %s artifact support link", async (_kind, space, revisionHash, reason) => {
+    const goal = await createGoal();
+    const revision = await submitGoal(prisma, actor, {
+      goalId: goal.id,
+      summary: "Candidate",
+      artifacts: [],
+      reports: [],
+    });
+    const { artifact } = await createSupportRecords(goal, spaceId);
+    if (space === "foreign-space") {
+      await prisma.artifact.update({
+        where: { id: artifact.id },
+        data: { spaceId: foreignSpaceId },
+      });
+    }
+    const recordId =
+      space === "same-space" && reason === "missing-record" ? "missing" : artifact.id;
+    const attempt = reviewGoalCondition(prisma, actor, {
+      goalId: goal.id,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      status: "pass",
+      support: [{ kind: "artifact", recordId, revision: revisionHash }],
+    });
+    if (reason) await expect(attempt).rejects.toMatchObject({ reason });
+    else await expect(attempt).rejects.toThrow();
+    const snapshot = await prisma.goalRevision.findUniqueOrThrow({ where: { id: revision.id } });
+    expect(snapshot.conditions).toEqual([
+      expect.objectContaining({ status: "unknown", support: [] }),
+    ]);
+  });
+
+  it("refuses a run support link from outside the goal's work", async () => {
+    const goal = await createGoal();
+    const revision = await submitGoal(prisma, actor, {
+      goalId: goal.id,
+      summary: "Candidate",
+      artifacts: [],
+      reports: [],
+    });
+    const other = await createGoal();
+    const { run } = await createSupportRecords(other, spaceId);
+    await expect(
+      reviewGoalCondition(prisma, actor, {
+        goalId: goal.id,
+        revisionId: revision.id,
+        conditionId: "cond-final",
+        status: "pass",
+        support: [{ kind: "run", recordId: run.id, revision: null }],
+      }),
+    ).rejects.toMatchObject({ reason: "run-outside-goal" });
+  });
+
+  it("refuses a stale review revision when attesting support", async () => {
+    const goal = await createGoal();
+    const revision = await submitGoal(prisma, actor, {
+      goalId: goal.id,
+      summary: "Candidate",
+      artifacts: [],
+      reports: [],
+    });
+    await rejectGoal(prisma, actor, {
+      goalId: goal.id,
+      revisionId: revision.id,
+      reworkNotes: "Review again",
+    });
+    await submitGoal(prisma, actor, {
+      goalId: goal.id,
+      summary: "Second attempt",
+      artifacts: [],
+      reports: [],
+    });
+    await expect(
+      reviewGoalCondition(prisma, actor, {
+        goalId: goal.id,
+        revisionId: revision.id,
+        conditionId: "cond-final",
+        status: "pass",
+        support: [],
+      }),
+    ).rejects.toThrow("not current");
+  });
+
+  it("stores coordinator proposals without recording a verdict", async () => {
+    const goal = await createGoal();
+    const revision = await submitGoal(prisma, actor, {
+      goalId: goal.id,
+      summary: "Candidate",
+      artifacts: [],
+      reports: [],
+    });
+    const { artifact } = await createSupportRecords(goal, spaceId);
+    const proposal = {
+      goalId: goal.id,
+      spaceId,
+      userId,
+      coordinatorBotId: goal.coordinatorBotId,
+      threadId: goal.threadId,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      support: [{ kind: "artifact" as const, recordId: artifact.id, revision: "artifact-hash-1" }],
+    };
+    const proposed = await proposeGoalConditionSupport(prisma, proposal);
+    expect(proposed.conditions[0]).toEqual(
+      expect.objectContaining({
+        status: "unknown",
+        support: [],
+        proposedSupport: proposal.support,
+      }),
+    );
+    // The proposal decided nothing: acceptance still needs the owner's pass.
+    await expect(
+      acceptGoal(prisma, actor, { goalId: goal.id, revisionId: revision.id }),
+    ).rejects.toThrow("Every condition must pass");
+    expect(await prisma.goalVerdict.count({ where: { goalId: goal.id } })).toBe(0);
+    await expect(
+      proposeGoalConditionSupport(prisma, { ...proposal, coordinatorBotId: "other-bot" }),
+    ).rejects.toThrow();
+    // The owner's review supersedes the proposal.
+    const reviewed = await reviewGoalCondition(prisma, actor, {
+      goalId: goal.id,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      status: "pass",
+      support: proposal.support,
+    });
+    expect(reviewed.conditions[0]).toEqual(
+      expect.objectContaining({ status: "pass", support: proposal.support, proposedSupport: [] }),
+    );
+  });
+
+  it("keeps earlier links readable after rework and starts fresh proposals", async () => {
+    const goal = await createGoal();
+    const revision = await submitGoal(prisma, actor, {
+      goalId: goal.id,
+      summary: "First attempt",
+      artifacts: [],
+      reports: [],
+    });
+    const { artifact } = await createSupportRecords(goal, spaceId);
+    const support = [
+      { kind: "artifact" as const, recordId: artifact.id, revision: "artifact-hash-1" },
+    ];
+    await reviewGoalCondition(prisma, actor, {
+      goalId: goal.id,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      status: "fail",
+      reason: "Rework this",
+      support,
+    });
+    await rejectGoal(prisma, actor, {
+      goalId: goal.id,
+      revisionId: revision.id,
+      reworkNotes: "Review again",
+    });
+    const reworked = await submitGoal(prisma, actor, {
+      goalId: goal.id,
+      summary: "Second attempt",
+      artifacts: [],
+      reports: [],
+    });
+    expect(reworked.attempts).toBe(2);
+    // The new revision starts fresh: no attested links, no proposals.
+    expect(reworked.conditions).toEqual([
+      expect.objectContaining({ status: "unknown", support: [], proposedSupport: [] }),
+    ]);
+    // The earlier revision still reads back with the links the owner attested.
+    const earlier = await prisma.goalRevision.findUniqueOrThrow({ where: { id: revision.id } });
+    expect(earlier.conditions).toEqual([
+      expect.objectContaining({ status: "fail", support, proposedSupport: [] }),
+    ]);
   });
 });

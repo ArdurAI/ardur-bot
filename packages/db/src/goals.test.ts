@@ -10,6 +10,7 @@ import {
   getGoal,
   goalExhaustionReason,
   isGoalRunEffectFrozen,
+  proposeGoalConditionSupport,
   reconcileGoalExhaustion,
   rejectGoal,
   reviewGoalCondition,
@@ -394,6 +395,12 @@ function reviewFixture() {
       findFirst: vi.fn(async (_args: { where: { status: unknown } }) => null as unknown),
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
+    artifact: {
+      findFirst: vi.fn(async (..._args: unknown[]) => null as unknown),
+    },
+    evidenceRecord: {
+      findFirst: vi.fn(async (..._args: unknown[]) => null as unknown),
+    },
     goalSettlement: {
       create: vi.fn(
         async ({ data }: { data: { goalId: string; revisionId: string; usedTokens: number } }) => ({
@@ -517,6 +524,8 @@ describe("goal owner review", () => {
         actorId: null,
         reason: null,
         evidenceId: null,
+        support: [],
+        proposedSupport: [],
         createdAt: null,
       },
     ]);
@@ -970,6 +979,157 @@ describe("goal owner review", () => {
     // The frozen run was cancelled at submission (conditional check plus the shared
     // cancellation helper); rework queues a new run instead of reviving it.
     expect(fixture.tx.run.updateMany).toHaveBeenCalledTimes(2);
+  });
+
+  it("attests the owner's supporting records on the reviewed condition", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    fixture.tx.artifact.findFirst.mockResolvedValue({
+      spaceId: fixture.goal.spaceId,
+      userId: fixture.goal.userId,
+      hash: "hash-1",
+    });
+    fixture.tx.run.findFirst.mockResolvedValue({
+      spaceId: fixture.goal.spaceId,
+      userId: fixture.goal.userId,
+      goalId: fixture.goal.id,
+      delegationRootTaskId: null,
+    });
+    const support = [
+      { kind: "artifact" as const, recordId: "artifact-1", revision: "hash-1" },
+      { kind: "run" as const, recordId: "run-1", revision: null },
+    ];
+    const reviewed = await reviewGoalCondition(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      status: "pass",
+      support,
+    });
+    expect(reviewed.conditions[0]).toEqual(
+      expect.objectContaining({ status: "pass", support, proposedSupport: [] }),
+    );
+  });
+
+  it.each([
+    ["missing", null, "hash-1", "missing-record"],
+    ["stale", { spaceId: "space-1", userId: "owner-1", hash: "hash-2" }, "hash-1", "stale-record"],
+    ["foreign", { spaceId: "space-2", userId: "owner-1", hash: "hash-1" }, "hash-1", null],
+  ])("refuses a %s artifact support link", async (_kind, artifact, revision, reason) => {
+    const fixture = reviewFixture();
+    const submitted = await fixture.submit();
+    fixture.tx.artifact.findFirst.mockResolvedValue(artifact);
+    const attempt = reviewGoalCondition(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      revisionId: submitted.id,
+      conditionId: "cond-final",
+      status: "pass",
+      support: [{ kind: "artifact", recordId: "artifact-1", revision }],
+    });
+    if (reason) await expect(attempt).rejects.toMatchObject({ reason });
+    else await expect(attempt).rejects.toThrow();
+    expect(fixture.revisions[0]?.conditions).toEqual([
+      expect.objectContaining({ status: "unknown", support: [] }),
+    ]);
+  });
+
+  it("refuses a run support link from outside the goal's work", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    fixture.tx.run.findFirst.mockResolvedValue({
+      spaceId: fixture.goal.spaceId,
+      userId: fixture.goal.userId,
+      goalId: "other-goal",
+      delegationRootTaskId: "other-root",
+    });
+    await expect(
+      reviewGoalCondition(fixture.prisma, owner, {
+        goalId: fixture.goal.id,
+        revisionId: revision.id,
+        conditionId: "cond-final",
+        status: "pass",
+        support: [{ kind: "run", recordId: "run-1", revision: null }],
+      }),
+    ).rejects.toMatchObject({ reason: "run-outside-goal" });
+  });
+
+  it("stores coordinator proposals without deciding pass or fail", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    fixture.tx.artifact.findFirst.mockResolvedValue({
+      spaceId: fixture.goal.spaceId,
+      userId: fixture.goal.userId,
+      hash: "hash-1",
+    });
+    const proposed = await proposeGoalConditionSupport(fixture.prisma, {
+      goalId: fixture.goal.id,
+      spaceId: fixture.goal.spaceId,
+      userId: fixture.goal.userId,
+      coordinatorBotId: fixture.goal.coordinatorBotId,
+      threadId: fixture.goal.threadId,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+    });
+    expect(proposed.conditions[0]).toEqual(
+      expect.objectContaining({
+        status: "unknown",
+        support: [],
+        proposedSupport: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+      }),
+    );
+    // A proposal is not a verdict: acceptance still needs the owner's pass.
+    await expect(
+      acceptGoal(fixture.prisma, owner, { goalId: fixture.goal.id, revisionId: revision.id }),
+    ).rejects.toMatchObject({ reason: "conditions-open" });
+    expect(fixture.tx.goalVerdict.create).not.toHaveBeenCalled();
+    await expect(
+      proposeGoalConditionSupport(fixture.prisma, {
+        goalId: fixture.goal.id,
+        spaceId: fixture.goal.spaceId,
+        userId: fixture.goal.userId,
+        coordinatorBotId: "other-bot",
+        threadId: fixture.goal.threadId,
+        revisionId: revision.id,
+        conditionId: "cond-final",
+        support: [],
+      }),
+    ).rejects.toThrow();
+    expect(fixture.tx.goalRevision.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the owner's review supersede proposals with attested support", async () => {
+    const fixture = reviewFixture();
+    const revision = await fixture.submit();
+    fixture.tx.artifact.findFirst.mockResolvedValue({
+      spaceId: fixture.goal.spaceId,
+      userId: fixture.goal.userId,
+      hash: "hash-1",
+    });
+    await proposeGoalConditionSupport(fixture.prisma, {
+      goalId: fixture.goal.id,
+      spaceId: fixture.goal.spaceId,
+      userId: fixture.goal.userId,
+      coordinatorBotId: fixture.goal.coordinatorBotId,
+      threadId: fixture.goal.threadId,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+    });
+    const reviewed = await reviewGoalCondition(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      revisionId: revision.id,
+      conditionId: "cond-final",
+      status: "pass",
+      support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+    });
+    expect(reviewed.conditions[0]).toEqual(
+      expect.objectContaining({
+        status: "pass",
+        support: [{ kind: "artifact", recordId: "artifact-1", revision: "hash-1" }],
+        proposedSupport: [],
+      }),
+    );
   });
 
   it("denies the effects of queued runs the submission freeze cancelled", async () => {

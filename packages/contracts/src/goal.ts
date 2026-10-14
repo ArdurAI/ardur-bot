@@ -213,7 +213,7 @@ export const GoalConditionReviewInputSchema = z.object({
   conditionId: z.string().trim().min(1).max(200),
   status: z.enum(["pass", "fail"]),
   reason: z.string().trim().max(2_000).optional(),
-  support: z.array(GoalConditionSupportSchema).max(20).default([]),
+  support: z.array(GoalConditionSupportSchema).max(20).optional(),
 });
 export type GoalConditionReviewInput = z.infer<typeof GoalConditionReviewInputSchema>;
 

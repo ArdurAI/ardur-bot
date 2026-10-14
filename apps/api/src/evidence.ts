@@ -13,6 +13,7 @@ import type { Actor } from "@ardurbot/contracts";
 import type {
   EvidenceKeyHistory,
   EvidenceKeyHistoryEntry,
+  EvidenceRecordView,
   EvidenceRunSummary,
 } from "@ardurbot/contracts/evidence";
 import { EvidenceRevocationReasonSchema } from "@ardurbot/contracts/evidence";
@@ -166,6 +167,29 @@ export async function runEvidenceSummary(
   expectedFingerprint?: string,
 ) {
   return (await loadRunEvidence(prisma, actor, runId, expectedFingerprint)).summary;
+}
+
+/** One tool-result record by id, for a goal condition's support link. */
+export async function runEvidenceRecord(
+  prisma: PrismaClient,
+  actor: Actor,
+  recordId: string,
+): Promise<EvidenceRecordView> {
+  const record = await prisma.evidenceRecord.findFirst({
+    where: { id: recordId, spaceId: actor.spaceId },
+  });
+  if (!record) throw new ORPCError("NOT_FOUND");
+  return {
+    id: record.id,
+    runId: record.runId,
+    receiptId: record.receiptId,
+    kid: record.kid,
+    toolName: record.toolName,
+    verdict: record.verdict,
+    decisionKind: record.decisionKind,
+    sha256: record.sha256,
+    createdAt: record.createdAt.toISOString(),
+  };
 }
 
 type EvidenceKeyRow = {

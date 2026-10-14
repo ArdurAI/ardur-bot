@@ -4,10 +4,12 @@ import type {
   GoalAcceptInput,
   GoalBoardDeliveryState,
   GoalConditionReviewInput,
+  GoalConditionSupport,
   GoalLinkInput,
   GoalRejectInput,
   GoalStartInput,
   GoalSubmitInput,
+  GoalSupportProposalInput,
 } from "@ardurbot/contracts";
 import {
   GOAL_DEFAULT_DURATION_MS,
@@ -18,10 +20,12 @@ import {
   GOAL_FREEZE_CANCELLED,
   GOAL_MAX_DEPTH,
   GOAL_MAX_HOPS,
+  GoalConditionReviewInputSchema,
   GoalConditionSchema,
   GoalLinkInputSchema,
   GoalRevisionSchema,
   GoalStartInputSchema,
+  GoalSupportProposalInputSchema,
   GoalVerdictSchema,
   goalBudget,
   goalResultPath,
@@ -632,6 +636,8 @@ function unknownCondition(id: string, description: string) {
     actorId: null,
     reason: null,
     evidenceId: null,
+    support: [],
+    proposedSupport: [],
     createdAt: null,
   };
 }
@@ -1014,6 +1020,62 @@ export async function submitGoalFromCoordinator(
   });
 }
 
+export class GoalConditionSupportError extends Error {
+  constructor(public readonly reason: "missing-record" | "stale-record" | "run-outside-goal") {
+    super(
+      reason === "missing-record"
+        ? "A supporting record was not found"
+        : reason === "stale-record"
+          ? "A supporting record changed since it was named"
+          : "A supporting run record does not belong to this goal's work",
+    );
+  }
+}
+
+/**
+ * Every support link must live in this space, exist, and name the revision that
+ * was actually reviewed. A run record must belong to this goal's own work.
+ * Cross-scope rows refuse with IsolationError, like every other scope check.
+ */
+async function validateGoalConditionSupport(
+  tx: Prisma.TransactionClient,
+  goal: Pick<TeamGoal, "id" | "spaceId" | "userId" | "rootTaskId">,
+  support: readonly GoalConditionSupport[],
+) {
+  for (const link of support) {
+    if (link.kind === "artifact") {
+      const artifact = await tx.artifact.findFirst({
+        where: { id: link.recordId },
+        select: { spaceId: true, userId: true, hash: true },
+      });
+      if (!artifact) throw new GoalConditionSupportError("missing-record");
+      if (artifact.spaceId !== goal.spaceId || artifact.userId !== goal.userId)
+        throw new IsolationError();
+      // The artifact revision is immutable: the named hash must be the one on file.
+      if (!link.revision || artifact.hash !== link.revision)
+        throw new GoalConditionSupportError("stale-record");
+    } else if (link.kind === "tool-result") {
+      const record = await tx.evidenceRecord.findFirst({
+        where: { id: link.recordId },
+        select: { spaceId: true, sha256: true },
+      });
+      if (!record) throw new GoalConditionSupportError("missing-record");
+      if (record.spaceId !== goal.spaceId) throw new IsolationError();
+      if (!link.revision || record.sha256 !== link.revision)
+        throw new GoalConditionSupportError("stale-record");
+    } else {
+      const run = await tx.run.findFirst({
+        where: { id: link.recordId },
+        select: { spaceId: true, userId: true, goalId: true, delegationRootTaskId: true },
+      });
+      if (!run) throw new GoalConditionSupportError("missing-record");
+      if (run.spaceId !== goal.spaceId || run.userId !== goal.userId) throw new IsolationError();
+      if (run.goalId !== goal.id && run.delegationRootTaskId !== goal.rootTaskId)
+        throw new GoalConditionSupportError("run-outside-goal");
+    }
+  }
+}
+
 export class GoalReviewConflict extends Error {
   constructor(
     public readonly reason:
@@ -1356,9 +1418,10 @@ export async function rejectGoal(prisma: PrismaClient, actor: Actor, input: Goal
 export async function reviewGoalCondition(
   prisma: PrismaClient,
   actor: Actor,
-  input: GoalConditionReviewInput,
+  raw: GoalConditionReviewInput,
 ) {
   if (!actor.isDeploymentOwner) throw new IsolationError();
+  const input = GoalConditionReviewInputSchema.parse(raw);
   const goal = await prisma.teamGoal.findFirst({
     where: { id: input.goalId, spaceId: actor.spaceId, userId: actor.userId },
   });
@@ -1381,6 +1444,7 @@ export async function reviewGoalCondition(
     if (!conditions.success) throw new GoalReviewConflict("revision-changed");
     const index = conditions.data.findIndex((condition) => condition.id === input.conditionId);
     if (index < 0) throw new GoalReviewConflict("revision-changed");
+    await validateGoalConditionSupport(tx, currentGoal, input.support ?? []);
     const next = conditions.data.map((condition, i) =>
       i === index
         ? {
@@ -1388,9 +1452,62 @@ export async function reviewGoalCondition(
             status: input.status,
             actorId: actor.userId,
             reason: input.reason ?? null,
+            // The owner's decision attests the named records and supersedes proposals.
+            support: input.support ?? [],
+            proposedSupport: [],
             createdAt: new Date().toISOString(),
           }
         : condition,
+    );
+    const updated = await tx.goalRevision.update({
+      where: { id: revision.id },
+      data: { conditions: next },
+    });
+    return asRevision(updated);
+  });
+}
+
+/**
+ * The coordinator bot proposes records that support a condition on the revision
+ * awaiting review. Proposals are stored on proposedSupport; this path never
+ * records a verdict and never moves the goal.
+ */
+export async function proposeGoalConditionSupport(
+  prisma: PrismaClient,
+  raw: GoalSupportProposalInput,
+) {
+  const input = GoalSupportProposalInputSchema.parse(raw);
+  const goal = await prisma.teamGoal.findFirst({
+    where: {
+      id: input.goalId,
+      spaceId: input.spaceId,
+      userId: input.userId,
+      coordinatorBotId: input.coordinatorBotId,
+      threadId: input.threadId,
+    },
+  });
+  if (!goal) throw new IsolationError();
+  return prisma.$transaction(async (tx) => {
+    await lockGoalReview(tx, goal.threadId, goal.rootTaskId);
+    const currentGoal = await tx.teamGoal.findUniqueOrThrow({ where: { id: goal.id } });
+    if (currentGoal.status !== "completed") throw new GoalReviewConflict("not-awaiting");
+    const revision = await tx.goalRevision.findFirst({
+      where: { goalId: goal.id },
+      orderBy: { attempts: "desc" },
+    });
+    if (!revision || revision.id !== input.revisionId)
+      throw new GoalReviewConflict("revision-changed");
+    const verdict = await tx.goalVerdict.findFirst({
+      where: { goalId: goal.id, revisionId: revision.id },
+    });
+    if (verdict) throw new GoalReviewConflict("already-reviewed");
+    const conditions = GoalConditionSchema.array().safeParse(revision.conditions);
+    if (!conditions.success) throw new GoalReviewConflict("revision-changed");
+    const index = conditions.data.findIndex((condition) => condition.id === input.conditionId);
+    if (index < 0) throw new GoalReviewConflict("revision-changed");
+    await validateGoalConditionSupport(tx, currentGoal, input.support);
+    const next = conditions.data.map((condition, i) =>
+      i === index ? { ...condition, proposedSupport: input.support } : condition,
     );
     const updated = await tx.goalRevision.update({
       where: { id: revision.id },

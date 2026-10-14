@@ -187,6 +187,7 @@ import {
   findSpaceMemoryConfig,
   findUserModelCredentials,
   formatMessagingLinkCode,
+  GoalConditionSupportError,
   GoalReviewConflict,
   getBotCommunicationPolicy,
   getGoal,
@@ -291,6 +292,7 @@ import {
   evidenceKeyHistory,
   replaceSpaceEvidenceKey,
   revokeSpaceEvidenceKey,
+  runEvidenceRecord,
   runEvidenceSummary,
 } from "./evidence.js";
 import { listSpaceFeatures, setSpaceFeature } from "./features.js";
@@ -661,6 +663,8 @@ async function goalReviewCall<T>(action: () => Promise<T>): Promise<T> {
     return await action();
   } catch (error) {
     if (error instanceof IsolationError) throw new ORPCError("FORBIDDEN");
+    if (error instanceof GoalConditionSupportError)
+      throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
     if (error instanceof GoalReviewConflict)
       throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
@@ -6434,6 +6438,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
     },
     evidence: {
+      record: authed.evidence.record.handler(({ context, input }) =>
+        runEvidenceRecord(deps.prisma, context.actor, input.recordId),
+      ),
       runSummary: authed.evidence.runSummary.handler(({ context, input }) =>
         runEvidenceSummary(deps.prisma, context.actor, input.runId, input.expectedFingerprint),
       ),
