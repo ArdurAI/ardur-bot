@@ -120,10 +120,7 @@ function planFixture(options: {
       findMany: vi.fn(
         async (args?: {
           where?: { goalId?: string };
-          orderBy?:
-            | Record<string, string>
-            | ReadonlyArray<Record<string, string>>
-            | undefined;
+          orderBy?: Record<string, string> | ReadonlyArray<Record<string, string>> | undefined;
         }) => {
           let rows = args?.where?.goalId
             ? steps.filter((row) => row.goalId === args.where?.goalId)
@@ -699,20 +696,18 @@ describe("owner step actions wake the coordinator", () => {
       { actor: owner },
       { goalId: goal.id, stepId: "active-step", baseRevision: 3, action: "cancel" },
     );
-    expect(
-      (vi.mocked(fixture.tx.run.create).mock.calls[0]?.[0] as { data: { clientNonce: string } })
-        .data.clientNonce,
-    ).toBe(`goal-plan:${goal.id}:4`);
+    expect(vi.mocked(fixture.tx.run.create).mock.calls[0]?.[0]).toMatchObject({
+      data: { clientNonce: `goal-plan:${goal.id}:4` },
+    });
     vi.mocked(fixture.tx.run.create).mockClear();
     await settleGoalPlanStep(
       fixture.prisma,
       { actor: owner },
       { goalId: goal.id, stepId: "active-step", baseRevision: 4, action: "reopen" },
     );
-    expect(
-      (vi.mocked(fixture.tx.run.create).mock.calls[0]?.[0] as { data: { clientNonce: string } })
-        .data.clientNonce,
-    ).toBe(`goal-plan:${goal.id}:5`);
+    expect(vi.mocked(fixture.tx.run.create).mock.calls[0]?.[0]).toMatchObject({
+      data: { clientNonce: `goal-plan:${goal.id}:5` },
+    });
   });
 
   it("does not queue a wake for the chief's own step actions", async () => {
@@ -736,7 +731,11 @@ describe("owner step actions wake the coordinator", () => {
         },
         goalId: goal.id,
       },
-      { stepId: "active-step", baseRevision: 3, support: [{ kind: "run", recordId: "run-1", revision: null }] },
+      {
+        stepId: "active-step",
+        baseRevision: 3,
+        support: [{ kind: "run", recordId: "run-1", revision: null }],
+      },
     );
     expect(fixture.tx.run.create).not.toHaveBeenCalled();
   });

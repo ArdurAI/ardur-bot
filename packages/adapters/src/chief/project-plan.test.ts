@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@ardurbot/db";
-import { dispatchReadyGoalPlanSteps, goalPlanStepPrompt, updateProjectPlanFromRun } from "./project-plan.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  dispatchReadyGoalPlanSteps,
+  goalPlanStepPrompt,
+  updateProjectPlanFromRun,
+} from "./project-plan.js";
 
 const prepareDelegation = vi.hoisted(() => vi.fn());
 vi.mock("../delegation.js", () => ({
@@ -137,7 +141,12 @@ function planFixture(options: { steps?: StepRow[] } = {}) {
         ...args.data,
       })),
     },
-    task: { create: vi.fn(async (args: { data: Record<string, unknown> }) => ({ id: "task-1", ...args.data })) },
+    task: {
+      create: vi.fn(async (args: { data: Record<string, unknown> }) => ({
+        id: "task-1",
+        ...args.data,
+      })),
+    },
     delegationRoot: { findFirst: vi.fn(async () => null) },
     usageRecord: { findFirst: vi.fn(async () => null) },
     goalBoardDelivery: { findMany: vi.fn(async () => []) },
@@ -295,7 +304,10 @@ describe("dispatch revalidation under concurrent plan edits", () => {
       prerequisiteIds: ["base"],
       revision: 4,
     });
-    const fixture = dispatchFixture({ outside: [base, waitingOutside], inside: [baseInside, waitingInside] });
+    const fixture = dispatchFixture({
+      outside: [base, waitingOutside],
+      inside: [baseInside, waitingInside],
+    });
     const result = await dispatchReadyGoalPlanSteps(
       dispatchDeps(fixture.prisma),
       chiefRun,
