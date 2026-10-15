@@ -164,11 +164,12 @@ const chiefRun = {
   botId: goal.coordinatorBotId,
 };
 
-const dispatchDeps = (prisma: PrismaClient) => ({
-  prisma,
-  events: { notify: vi.fn(async () => undefined) },
-  jobs: { enqueue: vi.fn(async () => undefined) },
-});
+const dispatchDeps = (prisma: PrismaClient) =>
+  ({
+    prisma,
+    events: { notify: vi.fn(async () => undefined) },
+    jobs: { enqueue: vi.fn(async () => undefined) },
+  }) as unknown as Parameters<typeof dispatchReadyGoalPlanSteps>[0];
 
 describe("dispatch revalidation under concurrent plan edits", () => {
   function dispatchFixture(options: { outside: StepRow[]; inside: StepRow[] }) {
