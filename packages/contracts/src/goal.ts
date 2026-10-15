@@ -89,7 +89,9 @@ export type GoalBoardTransition = z.infer<typeof GoalBoardTransitionSchema>;
 
 /**
  * The owner reviewed a paused board delivery: "retry" re-queues it, "handle"
- * closes it without delivering. Both are once-only for a delivery row.
+ * closes it without delivering. Both are once-only for the pause they were
+ * reviewed against: `attempt` is the row's attempt count at review time, so an
+ * action formed against an earlier pause is refused after the worker re-pauses.
  */
 export const GoalBoardDeliveryActionSchema = z.enum(["retry", "handle"]);
 export type GoalBoardDeliveryAction = z.infer<typeof GoalBoardDeliveryActionSchema>;
@@ -98,6 +100,8 @@ export const GoalBoardDeliveryActionInputSchema = z.object({
   goalId: Id,
   deliveryId: Id,
   action: GoalBoardDeliveryActionSchema,
+  /** The row's attempt count shown with the action; binds the action to that pause. */
+  attempt: z.number().int().nonnegative(),
 });
 export type GoalBoardDeliveryActionInput = z.infer<typeof GoalBoardDeliveryActionInputSchema>;
 
@@ -286,6 +290,8 @@ export const GoalSchema = z.object({
         id: Id,
         transition: GoalBoardTransitionSchema,
         state: z.enum(["paused", "needs-owner"]),
+        /** Attempt count for the current pause; send it back with the recovery action. */
+        attempt: z.number().int().nonnegative(),
       }),
     )
     .optional(),

@@ -1551,6 +1551,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Board update pending": "看板更新待处理",
   "Retry board update": "重试看板更新",
   "Mark board update handled": "标记看板更新已处理",
+  "Could not update the board. Try again.": "无法更新看板，请重试。",
   "Could not review result. Try again.": "无法审核结果，请重试。",
   "{runs} run": "{runs} 次运行",
   "By bot": "按机器人",

@@ -71,13 +71,16 @@ function boardDeliveryState(rows: { state: string }[]): GoalBoardDeliveryState |
   return null;
 }
 
-function boardDeliveryActions(rows: { id: string; state: string; transition: string }[]) {
+function boardDeliveryActions(
+  rows: { id: string; state: string; transition: string; attempts: number }[],
+) {
   return rows
     .filter((row) => row.state === "paused" || row.state === "needs-owner")
     .map((row) => ({
       id: row.id,
       transition: row.transition as GoalBoardTransition,
       state: row.state as "paused" | "needs-owner",
+      attempt: row.attempts,
     }));
 }
 
@@ -166,7 +169,7 @@ async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) 
         });
         const deliveries = await tx.goalBoardDelivery.findMany({
           where: { goalId: row.id, spaceId: row.spaceId, userId: row.userId },
-          select: { id: true, state: true, transition: true },
+          select: { id: true, state: true, transition: true, attempts: true },
         });
         const settlement = await tx.goalSettlement.findUnique({ where: { goalId: row.id } });
         const late = settlement
@@ -1626,8 +1629,15 @@ export async function settleGoalBoardDelivery(
         if (!revision || revision.id !== row.revisionId)
           throw new GoalBoardDeliveryConflict("revision-changed");
       }
+      // Bind the claim to the pause the owner reviewed: the worker increments
+      // attempts every time it re-pauses the row, so a stale attempt refuses.
       const claimed = await tx.goalBoardDelivery.updateMany({
-        where: { id: row.id, state: { in: ["paused", "needs-owner"] }, claimToken: null },
+        where: {
+          id: row.id,
+          state: { in: ["paused", "needs-owner"] },
+          attempts: input.attempt,
+          claimToken: null,
+        },
         data: {
           state: input.action === "retry" ? "pending" : "handled",
           failure: null,

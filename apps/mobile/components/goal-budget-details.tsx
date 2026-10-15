@@ -6,6 +6,7 @@ import { Pressable, Text, View } from "react-native";
 import { rpc } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
+import { RpcError } from "../lib/rpc-error";
 
 function supportKindLabel(kind: "artifact" | "tool-result" | "run") {
   if (kind === "artifact") return "Artifact";
@@ -21,6 +22,7 @@ export function GoalBudgetDetails({ groupId }: { groupId: string }) {
   const [goal, setGoal] = useState<Goal | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [settling, setSettling] = useState<string | null>(null);
+  const [boardError, setBoardError] = useState(false);
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -42,15 +44,26 @@ export function GoalBudgetDetails({ groupId }: { groupId: string }) {
     };
   }, [groupId, expanded]);
   if (!goal || goal.groupId !== groupId) return null;
-  const settle = async (deliveryId: string, action: "retry" | "handle") => {
+  const settle = async (deliveryId: string, action: "retry" | "handle", attempt: number) => {
     if (settling) return;
     setSettling(deliveryId);
+    setBoardError(false);
     try {
-      await rpc<Goal>("goals/boardDelivery", { goalId: goal.id, deliveryId, action });
+      await rpc<Goal>("goals/boardDelivery", { goalId: goal.id, deliveryId, action, attempt });
       setGoal(await rpc<Goal | null>("goals/get", { groupId }));
-    } catch {
-      // The poll refreshes the card; a moved delivery simply clears its actions.
-      setGoal(await rpc<Goal | null>("goals/get", { groupId }).catch(() => null));
+    } catch (cause) {
+      // Expected conflicts mean the delivery moved under this view; a refresh
+      // shows the truth. Anything else says so. A failed refresh keeps the card.
+      const reason =
+        cause instanceof RpcError &&
+        cause.data &&
+        typeof cause.data === "object" &&
+        "reason" in cause.data
+          ? (cause.data as { reason?: unknown }).reason
+          : undefined;
+      const fresh = await rpc<Goal | null>("goals/get", { groupId }).catch(() => undefined);
+      if (fresh !== undefined) setGoal(fresh);
+      if (reason !== "revision-changed" && reason !== "not-awaiting") setBoardError(true);
     } finally {
       setSettling(null);
     }
@@ -135,21 +148,26 @@ export function GoalBudgetDetails({ groupId }: { groupId: string }) {
           {goal.boardDelivery && goal.boardDelivery !== "delivered" ? (
             <Text style={{ color: tokens.mutedForeground }}>{t("Board update pending")}</Text>
           ) : null}
+          {boardError ? (
+            <Text style={{ color: tokens.mutedForeground }}>
+              {t("Could not update the board. Try again.")}
+            </Text>
+          ) : null}
           {goal.boardDeliveryActions?.map((delivery) => (
             <View key={delivery.id} style={{ flexDirection: "row", gap: 16 }}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityState={{ busy: settling === delivery.transition }}
+                accessibilityState={{ busy: settling === delivery.id }}
                 disabled={settling !== null}
-                onPress={() => void settle(delivery.id, "retry")}
+                onPress={() => void settle(delivery.id, "retry", delivery.attempt)}
               >
                 <Text style={{ color: tokens.foreground }}>{t("Retry board update")}</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityState={{ busy: settling === delivery.transition }}
+                accessibilityState={{ busy: settling === delivery.id }}
                 disabled={settling !== null}
-                onPress={() => void settle(delivery.id, "handle")}
+                onPress={() => void settle(delivery.id, "handle", delivery.attempt)}
               >
                 <Text style={{ color: tokens.foreground }}>{t("Mark board update handled")}</Text>
               </Pressable>

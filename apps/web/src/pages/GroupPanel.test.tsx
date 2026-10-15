@@ -443,7 +443,9 @@ const pausedBoardGoal = {
   boardWorkspaceId: "workspace",
   boardItemId: "board-a",
   boardDelivery: "paused",
-  boardDeliveryActions: [{ id: "delivery-1", transition: "completed", state: "paused" }],
+  boardDeliveryActions: [
+    { id: "delivery-1", transition: "completed", state: "paused", attempt: 1 },
+  ],
 } as Goal;
 
 it("lets the owner retry or handle a paused board delivery", async () => {
@@ -458,6 +460,7 @@ it("lets the owner retry or handle a paused board delivery", async () => {
     goalId: goal.id,
     deliveryId: "delivery-1",
     action: "retry",
+    attempt: 1,
   });
   expect(onRefresh).toHaveBeenCalledTimes(1);
   await act(async () => button("Mark board update handled").click());
@@ -465,6 +468,7 @@ it("lets the owner retry or handle a paused board delivery", async () => {
     goalId: goal.id,
     deliveryId: "delivery-1",
     action: "handle",
+    attempt: 1,
   });
   expect(onRefresh).toHaveBeenCalledTimes(2);
 });

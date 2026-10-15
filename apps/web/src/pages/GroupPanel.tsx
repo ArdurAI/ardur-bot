@@ -632,13 +632,17 @@ export function GroupGoalStrip({
       setReviewing(false);
     }
   }
-  async function settleBoardDelivery(deliveryId: string, action: GoalBoardDeliveryAction) {
+  async function settleBoardDelivery(
+    deliveryId: string,
+    action: GoalBoardDeliveryAction,
+    attempt: number,
+  ) {
     if (reviewPending.current || boardSettling) return;
     reviewPending.current = true;
     setBoardSettling(deliveryId);
     setError(null);
     try {
-      await rpc.goals.boardDelivery({ goalId: goal.id, deliveryId, action });
+      await rpc.goals.boardDelivery({ goalId: goal.id, deliveryId, action, attempt });
       await onRefresh();
     } catch (cause) {
       const reason = cause instanceof ORPCError ? cause.data?.reason : undefined;
@@ -785,7 +789,7 @@ export function GroupGoalStrip({
               variant="outline"
               size="sm"
               disabled={boardSettling !== null}
-              onClick={() => void settleBoardDelivery(delivery.id, "retry")}
+              onClick={() => void settleBoardDelivery(delivery.id, "retry", delivery.attempt)}
             >
               <Trans>Retry board update</Trans>
             </Button>
@@ -793,7 +797,7 @@ export function GroupGoalStrip({
               variant="ghost"
               size="sm"
               disabled={boardSettling !== null}
-              onClick={() => void settleBoardDelivery(delivery.id, "handle")}
+              onClick={() => void settleBoardDelivery(delivery.id, "handle", delivery.attempt)}
             >
               <Trans>Mark board update handled</Trans>
             </Button>

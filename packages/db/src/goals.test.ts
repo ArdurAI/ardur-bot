@@ -1766,6 +1766,7 @@ function deliverySettleFixture(
     revisionId: options.revisionId ?? "revision-1",
     transition: "completed",
     state: options.state ?? "paused",
+    attempts: 1,
     claimToken: options.claimToken ?? null,
   };
   const goal = {
@@ -1811,12 +1812,15 @@ function deliverySettleFixture(
             id?: string;
             claimToken?: string | null;
             state?: { in: string[] };
+            attempts?: number;
           };
           data: Record<string, unknown>;
         }) => {
           if (where.id !== delivery.id) return { count: 0 };
           if (where.claimToken === null && delivery.claimToken !== null) return { count: 0 };
           if (where.state && !where.state.in.includes(delivery.state)) return { count: 0 };
+          if (where.attempts !== undefined && where.attempts !== delivery.attempts)
+            return { count: 0 };
           Object.assign(delivery, data);
           return { count: 1 };
         },
@@ -1846,6 +1850,7 @@ describe("goal board delivery settle", () => {
       goalId: fixture.goal.id,
       deliveryId: fixture.delivery.id,
       action: "retry",
+      attempt: 1,
     });
     expect(fixture.delivery.state).toBe("pending");
     expect(settled.boardDelivery).toBe("pending");
@@ -1858,6 +1863,7 @@ describe("goal board delivery settle", () => {
       goalId: fixture.goal.id,
       deliveryId: fixture.delivery.id,
       action: "handle",
+      attempt: 1,
     });
     expect(fixture.delivery.state).toBe("handled");
     expect(settled.boardDelivery).toBeNull();
@@ -1871,6 +1877,7 @@ describe("goal board delivery settle", () => {
         goalId: fixture.goal.id,
         deliveryId: fixture.delivery.id,
         action: "retry",
+        attempt: 1,
       }),
     ).rejects.toMatchObject({ reason: "revision-changed" });
     await expect(
@@ -1878,6 +1885,7 @@ describe("goal board delivery settle", () => {
         goalId: fixture.goal.id,
         deliveryId: fixture.delivery.id,
         action: "handle",
+        attempt: 1,
       }),
     ).resolves.toMatchObject({ id: fixture.goal.id });
     expect(fixture.delivery.state).toBe("handled");
@@ -1889,12 +1897,14 @@ describe("goal board delivery settle", () => {
       goalId: fixture.goal.id,
       deliveryId: fixture.delivery.id,
       action: "handle",
+      attempt: 1,
     });
     await expect(
       settleGoalBoardDelivery(fixture.prisma, owner, {
         goalId: fixture.goal.id,
         deliveryId: fixture.delivery.id,
         action: "handle",
+        attempt: 1,
       }),
     ).rejects.toMatchObject({ reason: "not-awaiting" });
     await expect(
@@ -1902,6 +1912,7 @@ describe("goal board delivery settle", () => {
         goalId: fixture.goal.id,
         deliveryId: fixture.delivery.id,
         action: "retry",
+        attempt: 1,
       }),
     ).rejects.toMatchObject({ reason: "not-awaiting" });
 
@@ -1911,6 +1922,7 @@ describe("goal board delivery settle", () => {
         goalId: delivered.goal.id,
         deliveryId: delivered.delivery.id,
         action: "retry",
+        attempt: 1,
       }),
     ).rejects.toMatchObject({ reason: "not-awaiting" });
 
@@ -1920,6 +1932,7 @@ describe("goal board delivery settle", () => {
         goalId: claimed.goal.id,
         deliveryId: claimed.delivery.id,
         action: "handle",
+        attempt: 1,
       }),
     ).rejects.toMatchObject({ reason: "not-awaiting" });
   });
@@ -1930,6 +1943,7 @@ describe("goal board delivery settle", () => {
       goalId: fixture.goal.id,
       deliveryId: fixture.delivery.id,
       action: "handle" as const,
+      attempt: 1,
     };
     await expect(
       settleGoalBoardDelivery(fixture.prisma, { ...owner, isDeploymentOwner: false }, input),
@@ -1938,5 +1952,39 @@ describe("goal board delivery settle", () => {
       settleGoalBoardDelivery(fixture.prisma, { ...owner, userId: "other-user" }, input),
     ).rejects.toThrow();
     expect(fixture.delivery.state).toBe("paused");
+  });
+
+  it("refuses a recovery action reviewed against an earlier pause", async () => {
+    const fixture = deliverySettleFixture();
+    // The owner retries the pause the card showed (attempt 1).
+    await settleGoalBoardDelivery(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      deliveryId: fixture.delivery.id,
+      action: "retry",
+      attempt: 1,
+    });
+    expect(fixture.delivery.state).toBe("pending");
+    // The worker re-runs the row and pauses it again, bumping the attempt count.
+    fixture.delivery.state = "paused";
+    fixture.delivery.attempts = 2;
+    // The handle action that was already waiting, formed against the old pause, refuses.
+    await expect(
+      settleGoalBoardDelivery(fixture.prisma, owner, {
+        goalId: fixture.goal.id,
+        deliveryId: fixture.delivery.id,
+        action: "handle",
+        attempt: 1,
+      }),
+    ).rejects.toMatchObject({ reason: "not-awaiting" });
+    expect(fixture.delivery.state).toBe("paused");
+    // The refreshed card shows the new pause and its action succeeds.
+    const settled = await settleGoalBoardDelivery(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      deliveryId: fixture.delivery.id,
+      action: "handle",
+      attempt: 2,
+    });
+    expect(fixture.delivery.state).toBe("handled");
+    expect(settled.boardDeliveryActions).toEqual([]);
   });
 });

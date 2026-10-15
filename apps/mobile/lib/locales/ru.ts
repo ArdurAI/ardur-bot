@@ -1620,6 +1620,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Board update pending": "Обновление доски ожидается",
   "Retry board update": "Повторить обновление доски",
   "Mark board update handled": "Отметить обновление доски обработанным",
+  "Could not update the board. Try again.": "Не удалось обновить доску. Попробуйте снова.",
   "Could not review result. Try again.": "Не удалось проверить результат. Попробуйте снова.",
   "{runs} run": "{runs} запуск",
   "By bot": "По ботам",

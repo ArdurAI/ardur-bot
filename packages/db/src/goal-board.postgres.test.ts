@@ -298,11 +298,13 @@ describePostgres("Goal board delivery outbox (PostgreSQL)", () => {
     const room = await group();
     const goal = await linkedGoal(room);
     const { row } = await pausedDelivery(goal.id);
+    const pause = row.attempts;
     const settle = (action: "retry" | "handle") =>
       settleGoalBoardDelivery(prisma, actor, {
         goalId: goal.id,
         deliveryId: row.id,
         action,
+        attempt: pause,
       });
 
     const retried = await settle("retry");
@@ -326,6 +328,44 @@ describePostgres("Goal board delivery outbox (PostgreSQL)", () => {
     await expect(settle("retry")).rejects.toMatchObject({ reason: "not-awaiting" });
   });
 
+  it("refuses a recovery action reviewed against an earlier pause", async () => {
+    const room = await group();
+    const goal = await linkedGoal(room);
+    const { row } = await pausedDelivery(goal.id);
+    const pause = row.attempts;
+    const retried = await settleGoalBoardDelivery(prisma, actor, {
+      goalId: goal.id,
+      deliveryId: row.id,
+      action: "retry",
+      attempt: pause,
+    });
+    expect(retried.boardDelivery).toBe("pending");
+    // The worker re-runs the row and pauses it again, bumping the attempt count.
+    await prisma.goalBoardDelivery.update({
+      where: { id: row.id },
+      data: { state: "paused", failure: "Board update pending", attempts: { increment: 1 } },
+    });
+    // A handle action that was already waiting, formed against the old pause, refuses.
+    await expect(
+      settleGoalBoardDelivery(prisma, actor, {
+        goalId: goal.id,
+        deliveryId: row.id,
+        action: "handle",
+        attempt: pause,
+      }),
+    ).rejects.toMatchObject({ reason: "not-awaiting" });
+    const stuck = await prisma.goalBoardDelivery.findUniqueOrThrow({ where: { id: row.id } });
+    expect(stuck.state).toBe("paused");
+    // The refreshed card shows the new pause; its action succeeds.
+    const handled = await settleGoalBoardDelivery(prisma, actor, {
+      goalId: goal.id,
+      deliveryId: row.id,
+      action: "handle",
+      attempt: stuck.attempts,
+    });
+    expect(handled.boardDelivery).toBeNull();
+  });
+
   it("accepts a revision whose completed delivery the owner handled", async () => {
     const room = await group();
     const goal = await linkedGoal(room);
@@ -334,6 +374,7 @@ describePostgres("Goal board delivery outbox (PostgreSQL)", () => {
       goalId: goal.id,
       deliveryId: row.id,
       action: "handle",
+      attempt: row.attempts,
     });
     const completed = await prisma.goalBoardDelivery.findUniqueOrThrow({ where: { id: row.id } });
     expect(completed.state).toBe("handled");
@@ -372,6 +413,7 @@ describePostgres("Goal board delivery outbox (PostgreSQL)", () => {
           goalId: goal.id,
           deliveryId: row.id,
           action: "handle",
+          attempt: row.attempts,
         },
       ),
     ).rejects.toThrow();
@@ -400,12 +442,14 @@ describePostgres("Goal board delivery outbox (PostgreSQL)", () => {
         goalId: goal.id,
         deliveryId: first.row.id,
         action: "retry",
+        attempt: first.row.attempts,
       }),
     ).rejects.toMatchObject({ reason: "revision-changed" });
     const handled = await settleGoalBoardDelivery(prisma, actor, {
       goalId: goal.id,
       deliveryId: first.row.id,
       action: "handle",
+      attempt: first.row.attempts,
     });
     const after = await prisma.goalBoardDelivery.findUniqueOrThrow({
       where: { id: first.row.id },
