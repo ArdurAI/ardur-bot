@@ -71,6 +71,7 @@ it("renders the project plan with owners, conditions and prerequisites", () => {
   expect(state).toContain("<project_plan>");
   expect(state).toContain("revision 4");
   expect(state).toContain("Draft &lt;the report&gt; [done]");
+  expect(state).toContain("id: step-draft");
   expect(state).toContain("owner: bot bot-2");
   expect(state).toContain("owner: owner");
   expect(state).toContain("after: step-draft");

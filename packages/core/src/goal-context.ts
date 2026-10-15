@@ -39,6 +39,7 @@ export function renderGoalContext(input: {
         ...plan.steps.map((step) =>
           [
             `- ${data(step.title)} [${data(step.status)}]`,
+            `  id: ${data(step.id)}`,
             `  owner: ${step.ownerIsUser ? "owner" : `bot ${data(step.ownerId)}`}`,
             `  done when: ${data(step.condition)}`,
             ...(step.prerequisiteIds.length
