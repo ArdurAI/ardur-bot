@@ -159,6 +159,36 @@ jobs:
           DATABASE_URL: postgres://ardurbot:ardurbot@127.0.0.1:5433/ardurbot
       - run: pnpm test
 
+  host-terminal-native:
+    name: Host terminal (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - name: Build Linux PTY for Electron
+        if: runner.os == 'Linux'
+        run: node apps/host-service/scripts/rebuild-linux-pty.mjs
+      - run: pnpm --filter @ardurbot/host-service build
+      - name: Check native terminals and offline lifecycle tests
+        shell: bash
+        run: TESTKIT_SKIP_ROOT_ENV=1 ./node_modules/.bin/vitest run apps/host-service/src/host-terminal-pty.test.ts apps/host-service/src/host-terminal-pty-win32.test.ts apps/host-service/src/host-terminal-process-linux.test.ts apps/host-service/src/host-terminal-pty.win32.test.ts apps/host-service/src/host-terminal-pty.linux.test.ts packages/host-runtime/src/host-terminal.test.ts packages/host-runtime/src/desktop-sandbox-guard.test.ts apps/host-service/src/native-build.test.ts
+      - name: Load staged PTY using Electron's embedded Node
+        shell: bash
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+        run: pnpm --filter @ardurbot/desktop exec electron ../host-service/scripts/smoke-platform-pty.cjs
+
   test-integration:
     name: Postgres journeys
     runs-on: ubuntu-latest

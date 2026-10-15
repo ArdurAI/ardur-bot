@@ -143,12 +143,25 @@ jobs:
         env:
           PREVIEW_SHA: ${{ needs.validate.outputs.sha }}
         run: node scripts/desktop-release.mjs stage-branch "$PREVIEW_SHA"
+      - name: Build Linux PTY against Electron headers for this release target
+        if: matrix.platform == 'linux'
+        run: node apps/host-service/scripts/rebuild-linux-pty.mjs ${{ matrix.arch }}
       # The desktop build also bundles the API, worker, and SQL migrator.
       - name: Build renderer and main process
         run: pnpm --filter @ardurbot/web build && pnpm --filter @ardurbot/desktop build
       - name: Check real macOS host terminals
         if: matrix.platform == 'mac'
         run: TESTKIT_SKIP_ROOT_ENV=1 ./node_modules/.bin/vitest run apps/host-service/src/host-terminal-pty.darwin.test.ts
+      - name: Check real Windows and Linux host terminals
+        if: matrix.platform != 'mac'
+        shell: bash
+        run: TESTKIT_SKIP_ROOT_ENV=1 ./node_modules/.bin/vitest run apps/host-service/src/host-terminal-pty.win32.test.ts apps/host-service/src/host-terminal-pty.linux.test.ts
+      - name: Load the staged PTY in Electron's embedded Node
+        if: matrix.platform != 'mac'
+        shell: bash
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+        run: pnpm --filter @ardurbot/desktop exec electron ../host-service/scripts/smoke-platform-pty.cjs
       # electron-builder's beforePack hook stages this architecture's embedded Postgres.
       - name: Package preview without an identified developer or publishing
         if: matrix.platform != 'mac' || needs.validate.outputs.signed != 'true'

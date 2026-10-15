@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 // @ts-expect-error Build script is intentionally JavaScript.
-import { stageDarwinPty, stageWindowsNativeAddons } from "../build.mjs";
+import * as nativeBuild from "../build.mjs";
+
+const { stageDarwinPty, stageLinuxPty, stageWindowsNativeAddons, stageWindowsPty } = nativeBuild;
 
 let directory: string;
 let koffiEntry: string;
@@ -114,5 +116,89 @@ describe("Windows native staging", () => {
     ]);
     expect(result.skipped[0].reason).toContain("Windows writes remain refused");
     await expect(readdir(path.join(output, "native"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+describe("Windows and Linux PTY staging", () => {
+  async function fixture() {
+    await fixtureFile("node-pty/package.json", JSON.stringify({ version: "1.1.0" }));
+    await fixtureFile("node-pty/LICENSE", "MIT fixture");
+    for (const name of [
+      "index",
+      "terminal",
+      "eventEmitter2",
+      "utils",
+      "unixTerminal",
+      "windowsTerminal",
+      "windowsPtyAgent",
+      "windowsConoutConnection",
+      "conpty_console_list_agent",
+      "shared/conout",
+      "worker/conoutSocketWorker",
+    ])
+      await fixtureFile(`node-pty/lib/${name}.js`, `loader-${name}`);
+    for (const arch of ["x64", "arm64"])
+      for (const name of [
+        "conpty.node",
+        "conpty_console_list.node",
+        "pty.node",
+        "winpty.dll",
+        "winpty-agent.exe",
+        "conpty/conpty.dll",
+        "conpty/OpenConsole.exe",
+      ])
+        await fixtureFile(`node-pty/prebuilds/win32-${arch}/${name}`, `${arch}-${name}`);
+    await fixtureFile("node-pty/build/Release/pty.node", "linux-target-build");
+    return path.join(directory, "node-pty/lib/index.js");
+  }
+  it("stages both Windows targets including the output worker and relative imports, without sources or symbols", async () => {
+    const entry = await fixture();
+    await fixtureFile("dist/native/win_x64/node-pty/stale.pdb", "stale");
+    await fixtureFile("dist/native/win_x64/koffi.node", "keep");
+    const result = await stageWindowsPty(output, entry);
+    expect(result.files).toHaveLength(38);
+    for (const arch of ["x64", "arm64"]) {
+      const root = path.join(output, `native/win_${arch}/node-pty`);
+      expect(await readFile(path.join(root, "lib/worker/conoutSocketWorker.js"), "utf8")).toBe(
+        "loader-worker/conoutSocketWorker",
+      );
+      expect(
+        await readFile(path.join(root, `prebuilds/win32-${arch}/conpty/OpenConsole.exe`), "utf8"),
+      ).toBe(`${arch}-conpty/OpenConsole.exe`);
+      expect(await readdir(root)).toEqual(
+        expect.arrayContaining(["lib", "prebuilds", "LICENSE", "package.json"]),
+      );
+      await expect(stat(path.join(root, "stale.pdb"))).rejects.toMatchObject({ code: "ENOENT" });
+    }
+    expect(await readFile(path.join(output, "native/win_x64/koffi.node"), "utf8")).toBe("keep");
+  });
+  it.each(["x64", "arm64"])(
+    "stages only the built Linux %s addon and its Unix loader",
+    async (arch) => {
+      const result = await stageLinuxPty(output, await fixture(), arch);
+      expect(result.files).toHaveLength(8);
+      const root = path.join(output, `native/linux_${arch}/node-pty`);
+      expect(await readFile(path.join(root, "build/Release/pty.node"), "utf8")).toBe(
+        "linux-target-build",
+      );
+      expect(await readdir(root)).toEqual(
+        expect.arrayContaining(["lib", "build", "LICENSE", "package.json"]),
+      );
+      expect(await readdir(path.join(root, "lib"))).not.toContain("windowsTerminal.js");
+    },
+  );
+  it("refuses missing Windows workers, prebuilds, Linux builds and wrong dependency versions", async () => {
+    const entry = await fixture();
+    await rm(path.join(directory, "node-pty/lib/worker/conoutSocketWorker.js"));
+    await expect(stageWindowsPty(output, entry)).rejects.toMatchObject({ code: "ENOENT" });
+    await fixture();
+    await rm(path.join(directory, "node-pty/prebuilds/win32-arm64/conpty.node"));
+    await expect(stageWindowsPty(output, entry)).rejects.toMatchObject({ code: "ENOENT" });
+    await rm(path.join(directory, "node-pty/build/Release/pty.node"));
+    await expect(stageLinuxPty(output, entry, "x64")).rejects.toMatchObject({ code: "ENOENT" });
+    await fixtureFile("node-pty/package.json", JSON.stringify({ version: "0.0.0" }));
+    await expect(stageWindowsPty(output, entry)).rejects.toThrow("pinned");
+    await expect(stageLinuxPty(output, entry, "x64")).rejects.toThrow("pinned");
+    await expect(stageLinuxPty(output, entry, "ia32")).rejects.toThrow("Unsupported");
   });
 });

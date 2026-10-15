@@ -42,7 +42,7 @@ it("builds one relocatable JavaScript file without server modules or workspace i
       );
       for (const native of metadata.native.files) {
         expect(native).toMatch(
-          /^native\/(?:win_(?:x64|arm64|ia32)\/koffi\.node|mac_(?:arm64|x64)\/node-pty\/(?:lib\/\w+\.js|prebuilds\/darwin-(?:arm64|x64)\/(?:pty\.node|spawn-helper)|LICENSE|package\.json))$/,
+          /^native\/(?:win_(?:x64|arm64|ia32)\/koffi\.node|(?:mac|win|linux)_(?:arm64|x64)\/node-pty\/(?:lib\/(?:\w+\/)*\w+\.js|prebuilds\/(?:darwin|win32)-(?:arm64|x64)\/(?:conpty\/)?[\w.-]+|build\/Release\/pty\.node|LICENSE|package\.json))$/,
         );
         expect((await readFile(path.join(directory, native))).length).toBeGreaterThan(0);
       }

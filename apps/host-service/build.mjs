@@ -51,6 +51,85 @@ export async function stageDarwinPty(directory, ptyEntry = hostRequire.resolve("
   return { files };
 }
 
+/** Keep upstream's relative loader, worker and binary paths outside asar. */
+async function stagePtyTarget(directory, root, targetName, jsFiles, binaries) {
+  const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+  if (manifest.version !== "1.1.0") throw new Error("Expected the pinned node-pty 1.1.0 runtime.");
+  const relative = `native/${targetName}/node-pty`;
+  const target = path.join(directory, relative);
+  await rm(target, { recursive: true, force: true });
+  const files = [];
+  for (const file of [...jsFiles.map((name) => `lib/${name}.js`), ...binaries, "LICENSE"]) {
+    await mkdir(path.dirname(path.join(target, file)), { recursive: true });
+    await copyFile(path.join(root, file), path.join(target, file));
+    files.push(`${relative}/${file}`);
+  }
+  await writeFile(
+    path.join(target, "package.json"),
+    `${JSON.stringify({
+      name: "node-pty",
+      version: manifest.version,
+      main: "lib/index.js",
+      license: "MIT",
+    })}\n`,
+  );
+  files.push(`${relative}/package.json`);
+  return files;
+}
+const commonPtyJs = ["index", "terminal", "eventEmitter2", "utils"];
+export async function stageWindowsPty(directory, ptyEntry = hostRequire.resolve("node-pty")) {
+  const root = path.dirname(path.dirname(ptyEntry));
+  const files = [];
+  for (const arch of ["x64", "arm64"]) {
+    const prebuild = `prebuilds/win32-${arch}`;
+    files.push(
+      ...(await stagePtyTarget(
+        directory,
+        root,
+        `win_${arch}`,
+        [
+          ...commonPtyJs,
+          "windowsTerminal",
+          "windowsPtyAgent",
+          "windowsConoutConnection",
+          "conpty_console_list_agent",
+          "shared/conout",
+          "worker/conoutSocketWorker",
+        ],
+        [
+          "conpty.node",
+          "conpty_console_list.node",
+          "pty.node",
+          "winpty.dll",
+          "winpty-agent.exe",
+          "conpty/conpty.dll",
+          "conpty/OpenConsole.exe",
+        ].map((name) => `${prebuild}/${name}`),
+      )),
+    );
+  }
+  return { files };
+}
+export async function stageLinuxPty(
+  directory,
+  ptyEntry = hostRequire.resolve("node-pty"),
+  arch = process.arch,
+) {
+  if (!["x64", "arm64"].includes(arch)) throw new Error("Unsupported Linux PTY target.");
+  // Release runners build this addon with node-gyp against Electron headers before
+  // bundling. No compiler, headers, install script or package manager ships at runtime.
+  const root = path.dirname(path.dirname(ptyEntry));
+  return {
+    files: await stagePtyTarget(
+      directory,
+      root,
+      `linux_${arch}`,
+      [...commonPtyJs, "unixTerminal"],
+      ["build/Release/pty.node"],
+    ),
+  };
+}
+
 export async function stageWindowsNativeAddons(
   directory,
   koffiEntry = adapterRequire.resolve("koffi"),
@@ -142,6 +221,9 @@ export async function bundleHostService(
     throw new Error("Host bundle includes a server or native-addon dependency.");
   const native = await stageWindowsNativeAddons(path.dirname(outfile));
   const pty = await stageDarwinPty(path.dirname(outfile));
+  const windowsPty = await stageWindowsPty(path.dirname(outfile));
+  const linuxPty =
+    process.platform === "linux" ? await stageLinuxPty(path.dirname(outfile)) : { files: [] };
   const python = path.join(path.dirname(outfile), "python");
   await mkdir(python, { recursive: true });
   for (const name of [
@@ -156,7 +238,13 @@ export async function bundleHostService(
       path.join(python, name),
     );
   await smokeDarwinPty(path.dirname(outfile));
-  return { ...result.metafile, native: { ...native, files: [...native.files, ...pty.files] } };
+  return {
+    ...result.metafile,
+    native: {
+      ...native,
+      files: [...native.files, ...pty.files, ...windowsPty.files, ...linuxPty.files],
+    },
+  };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const metadata = await bundleHostService();
