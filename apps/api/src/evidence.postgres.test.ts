@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { EncryptedSecretStore } from "@ardurbot/adapters";
+import { EncryptedSecretStore } from "@ardurbot/adapters";
 import { verifyChain, verifySeal } from "@ardurbot/adapters/evidence-format";
 import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
@@ -238,12 +238,7 @@ describePostgres("signing key rotation and revocation (PostgreSQL)", () => {
   let close: () => Promise<void>;
   let runId: string;
   let fixtureKeys: ReturnType<typeof signedRunFixture>["keys"];
-  const secrets: Pick<EncryptedSecretStore, "put"> = {
-    put: async (_plaintext, _context, recordId) => ({
-      id: recordId,
-      ciphertext: "fixture-ciphertext",
-    }),
-  };
+  const secrets = new EncryptedSecretStore("test-only-encryption-material");
   const actor = (id: string): Actor => ({
     userId: id,
     spaceId,
@@ -401,9 +396,16 @@ describePostgres("signing key rotation and revocation (PostgreSQL)", () => {
     const before = await evidenceKeyHistory(prisma, actor(ownerId), "session-1");
     const kid = await headKeyId();
     await replaceSpaceEvidenceKey({ prisma, secrets }, actor(ownerId), "session-1", kid);
+    // EvidenceKey owns the persisted ciphertext; put() itself only encrypts.
+    const secretCount = await prisma.evidenceKey.count({
+      where: { spaceId, privateKeyCiphertext: { not: "" } },
+    });
     await expect(
       replaceSpaceEvidenceKey({ prisma, secrets }, actor(ownerId), "session-1", kid),
     ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(
+      await prisma.evidenceKey.count({ where: { spaceId, privateKeyCiphertext: { not: "" } } }),
+    ).toBe(secretCount);
     const after = await evidenceKeyHistory(prisma, actor(ownerId), "session-1");
     expect(after.keys).toHaveLength(before.keys.length + 1);
     expect(after.keys.filter((entry) => entry.state === "active")).toHaveLength(1);
