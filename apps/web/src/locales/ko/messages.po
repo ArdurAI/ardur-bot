@@ -3496,6 +3496,10 @@ msgstr "이 컴퓨터를 업데이트하지 못했습니다. 설정을 확인하
 msgid "Could not update the computer. Check the connection and try again."
 msgstr ""
 
+#: src/lib/goal-plan-phone-copy.ts
+msgid "Could not update the plan. Try again."
+msgstr "계획을 업데이트하지 못했습니다. 다시 시도하세요."
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Could not update this computer. Try again."
 msgstr ""
@@ -5801,6 +5805,10 @@ msgstr "읽지 않음으로 표시"
 #: src/pages/GroupPanel.tsx
 msgid "Mark board update handled"
 msgstr "보드 업데이트 처리 완료로 표시"
+
+#: src/lib/goal-plan-phone-copy.ts
+msgid "Mark done"
+msgstr "완료로 표시"
 
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"

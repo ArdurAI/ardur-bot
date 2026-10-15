@@ -3496,6 +3496,10 @@ msgstr "Could not update the computer. Check its settings and try again."
 msgid "Could not update the computer. Check the connection and try again."
 msgstr "Could not update the computer. Check the connection and try again."
 
+#: src/lib/goal-plan-phone-copy.ts
+msgid "Could not update the plan. Try again."
+msgstr "Could not update the plan. Try again."
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Could not update this computer. Try again."
 msgstr "Could not update this computer. Try again."
@@ -5801,6 +5805,10 @@ msgstr "Mark as Unread"
 #: src/pages/GroupPanel.tsx
 msgid "Mark board update handled"
 msgstr "Mark board update handled"
+
+#: src/lib/goal-plan-phone-copy.ts
+msgid "Mark done"
+msgstr "Mark done"
 
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"

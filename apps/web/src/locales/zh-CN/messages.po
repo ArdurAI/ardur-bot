@@ -3496,6 +3496,10 @@ msgstr "无法更新此计算机，请检查设置后重试。"
 msgid "Could not update the computer. Check the connection and try again."
 msgstr ""
 
+#: src/lib/goal-plan-phone-copy.ts
+msgid "Could not update the plan. Try again."
+msgstr "无法更新计划，请重试。"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Could not update this computer. Try again."
 msgstr ""
@@ -5801,6 +5805,10 @@ msgstr "标为未读"
 #: src/pages/GroupPanel.tsx
 msgid "Mark board update handled"
 msgstr "标记看板更新已处理"
+
+#: src/lib/goal-plan-phone-copy.ts
+msgid "Mark done"
+msgstr "标记完成"
 
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"

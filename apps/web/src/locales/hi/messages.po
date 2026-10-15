@@ -3496,6 +3496,10 @@ msgstr "यह कंप्यूटर अपडेट नहीं हो स�
 msgid "Could not update the computer. Check the connection and try again."
 msgstr ""
 
+#: src/lib/goal-plan-phone-copy.ts
+msgid "Could not update the plan. Try again."
+msgstr "योजना अपडेट नहीं हो सकी। फिर से कोशिश करें।"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Could not update this computer. Try again."
 msgstr ""
@@ -5801,6 +5805,10 @@ msgstr "अपठित चिह्नित करें"
 #: src/pages/GroupPanel.tsx
 msgid "Mark board update handled"
 msgstr "बोर्ड अपडेट को संभाला गया चिह्नित करें"
+
+#: src/lib/goal-plan-phone-copy.ts
+msgid "Mark done"
+msgstr "पूर्ण चिह्नित करें"
 
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"

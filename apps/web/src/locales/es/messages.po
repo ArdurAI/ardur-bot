@@ -3496,6 +3496,10 @@ msgstr "No se pudo actualizar este equipo. Revisa la configuración e inténtalo
 msgid "Could not update the computer. Check the connection and try again."
 msgstr ""
 
+#: src/lib/goal-plan-phone-copy.ts
+msgid "Could not update the plan. Try again."
+msgstr "No se pudo actualizar el plan. Inténtalo de nuevo."
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Could not update this computer. Try again."
 msgstr ""
@@ -5801,6 +5805,10 @@ msgstr "Marcar como no leído"
 #: src/pages/GroupPanel.tsx
 msgid "Mark board update handled"
 msgstr "Marcar actualización del tablero como gestionada"
+
+#: src/lib/goal-plan-phone-copy.ts
+msgid "Mark done"
+msgstr "Marcar como hecho"
 
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"

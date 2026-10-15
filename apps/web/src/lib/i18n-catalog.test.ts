@@ -639,6 +639,26 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("catalogs each phone project-plan sentence once, from its one shared definition", () => {
+    const sentences = ["Mark done", "Could not update the plan. Try again."];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        const entries = catalog.split(`msgid ${JSON.stringify(sentence)}\n`).length - 1;
+        expect(entries, `${locale}: ${sentence}`).toBe(1);
+        expect(catalog, `${locale}: ${sentence}`).toContain(
+          `#: src/lib/goal-plan-phone-copy.ts\nmsgid ${JSON.stringify(sentence)}`,
+        );
+        expect(catalog, `${locale}: ${sentence}`).not.toContain(
+          `msgid ${JSON.stringify(sentence)}\nmsgstr ""`,
+        );
+      }
+    }
+  });
+
   it("translates every group model control and status in each supported catalog", () => {
     const messages = [
       "Could not save group model.",
