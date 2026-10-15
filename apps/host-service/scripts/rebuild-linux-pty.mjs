@@ -10,8 +10,7 @@ if (!["x64", "arm64"].includes(arch) || arch !== process.arch)
 const desktop = createRequire(new URL("../../desktop/package.json", import.meta.url));
 const host = createRequire(new URL("../package.json", import.meta.url));
 const { devDependencies } = desktop("./package.json");
-const builder = createRequire(desktop.resolve("electron-builder"));
-const nodeGyp = builder.resolve("node-gyp/bin/node-gyp.js");
+const nodeGyp = host.resolve("node-gyp/bin/node-gyp.js");
 const root = path.dirname(path.dirname(host.resolve("node-pty")));
 const built = spawnSync(
   process.execPath,

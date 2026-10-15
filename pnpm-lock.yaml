@@ -205,6 +205,9 @@ importers:
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
+      node-gyp:
+        specifier: 12.4.0
+        version: 12.4.0
       tsx:
         specifier: 4.23.13
         version: 4.23.13

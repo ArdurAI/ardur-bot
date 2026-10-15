@@ -216,6 +216,9 @@ class PosixTree {
     const live = new Set(
       rows.filter((row) => this.owned.get(row.pid) === row.birth).map((r) => r.pid),
     );
+    // Session adoption is safe against PID reuse: the kernel does not hand out a PID
+    // while live processes still use it as their session ID, so while an owned member
+    // keeps this session, no unrelated leader can start a session with the same ID.
     const ownSession =
       this.operations.requireSessionLeader &&
       rows.some((row) => live.has(row.pid) && row.session === this.root);

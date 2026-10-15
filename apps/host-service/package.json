@@ -19,6 +19,7 @@
   "devDependencies": {
     "esbuild": "0.28.2",
     "@types/ws": "8.18.1",
+    "node-gyp": "12.4.0",
     "typescript": "7.0.2",
     "tsx": "4.23.13",
     "vitest": "4.1.11"
