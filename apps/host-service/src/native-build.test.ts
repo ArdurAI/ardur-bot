@@ -35,7 +35,7 @@ describe("macOS PTY staging", () => {
     await fixtureFile("node-pty/prebuilds/linux-x64/pty.node", "excluded");
     return path.join(directory, "node-pty/lib/index.js");
   }
-  it("stages the pinned loader, license and both macOS prebuilds with an executable helper", async () => {
+  it("stages the pinned loader, license and both macOS prebuilds", async () => {
     const entry = await ptyFixture();
     const staged = await stageDarwinPty(output, entry);
     expect(staged.files).toHaveLength(18);
@@ -44,12 +44,26 @@ describe("macOS PTY staging", () => {
       const root = path.join(output, "native", `mac_${arch}`, "node-pty");
       const helper = path.join(root, "prebuilds", `darwin-${arch}`, "spawn-helper");
       expect(await readFile(helper, "utf8")).toBe(`fixture-${arch}-spawn-helper`);
-      expect((await stat(helper)).mode & 0o111).toBe(0o111);
       expect(JSON.parse(await readFile(path.join(root, "package.json"), "utf8"))).toMatchObject({
         version: "1.1.0",
         main: "lib/index.js",
       });
       expect(await readdir(path.join(root, "prebuilds"))).toEqual([`darwin-${arch}`]);
+    }
+  });
+  // Windows has no Unix executable permission bits.
+  it.skipIf(process.platform === "win32")("makes both macOS spawn helpers executable", async () => {
+    await stageDarwinPty(output, await ptyFixture());
+    for (const arch of ["arm64", "x64"]) {
+      const helper = path.join(
+        output,
+        "native",
+        `mac_${arch}`,
+        "node-pty/prebuilds",
+        `darwin-${arch}`,
+        "spawn-helper",
+      );
+      expect((await stat(helper)).mode & 0o111).toBe(0o111);
     }
   });
   it("clears stale PTY files without removing the other native platform", async () => {
