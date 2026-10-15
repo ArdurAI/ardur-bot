@@ -48,6 +48,9 @@ import {
   DelegationSnapshotSchema,
   isAttachmentImageMimeType,
   ListBotsInputSchema,
+  ChiefPlanStepActionInputSchema,
+  ChiefPlanStepOutcomeInputSchema,
+  ChiefPlanUpdateInputSchema,
   mcpCredentialConflict,
   OLLAMA_NO_IMAGES,
   OPENAI_COMPATIBLE_PROVIDER_ID,
@@ -155,6 +158,7 @@ import {
   listDelegations,
   loadBotPresence,
   loadChiefSelectionContext,
+  loadGoalPlan,
   loadRunHistoryMessages,
   type McpServer,
   noteBotMessageReadUnconfirmed,
@@ -254,6 +258,12 @@ import {
 } from "./browser-tools.js";
 import { agentConnectionTools, builtinAgentTools } from "./builtin-tools.js";
 import { finishGoalFromRun } from "./chief/report-goal-done.js";
+import {
+  dispatchReadyGoalPlanSteps,
+  recordPlanStepOutcomeFromRun,
+  settlePlanStepFromRun,
+  updateProjectPlanFromRun,
+} from "./chief/project-plan.js";
 import { chiefActivityFeed } from "./chief-activity.js";
 import {
   chiefVerificationRead,
@@ -2898,7 +2908,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             : null;
         const goalContext = goalRoom
           ? await (async () => {
-              const [group, root, assignments] = await Promise.all([
+              const [group, root, assignments, plan] = await Promise.all([
                 deps.prisma.chatGroup.findUnique({
                   where: { id: goalRoom.groupId },
                   select: {
@@ -2921,6 +2931,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   orderBy: { createdAt: "asc" },
                   select: { actingName: true, status: true, createdAt: true },
                 }),
+                loadGoalPlan(deps.prisma, goalRoom.id),
               ]);
               return redactSecrets(
                 renderGoalContext({
@@ -2933,11 +2944,32 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   tokenLimit: goalRoom.tokenLimit,
                   untilAt: goalRoom.untilAt,
                   now: new Date(),
+                  plan,
                 }),
                 runSecrets,
               );
             })()
           : undefined;
+        // Ready plan steps are handed out mechanically before the model turn;
+        // the dispatcher is idempotent, so a restart cannot duplicate a handout.
+        if (goalRoom) {
+          await dispatchReadyGoalPlanSteps(
+            {
+              ...deps,
+              resolveDelegationPin: (target) =>
+                resolvePin(
+                  run,
+                  target,
+                  undefined,
+                  undefined,
+                  true,
+                  DELEGATION_LIMITS.reservationTokens,
+                ),
+            },
+            run,
+            goalRoom.id,
+          ).catch((error) => getLogger().error("goal plan dispatch", error));
+        }
         const peerGoal =
           peerReadOnly && run.goalId
             ? await deps.prisma.teamGoal.findUnique({
@@ -5794,6 +5826,79 @@ export function createRunExecutor(deps: ExecutorDeps) {
               }).catch((error) => getLogger().error("goal board delivery", error));
             return finish(submitted);
           }
+          if (name === "update_project_plan") {
+            if (!thread.groupId || !goalRoom)
+              return finish({ error: "update_project_plan requires an active group goal" });
+            const parsed = ChiefPlanUpdateInputSchema.safeParse(args);
+            if (!parsed.success)
+              return finish({ error: "update_project_plan needs baseRevision and steps" });
+            const updated = await updateProjectPlanFromRun(
+              {
+                ...deps,
+                resolveDelegationPin: (target) =>
+                  resolvePin(
+                    run,
+                    target,
+                    undefined,
+                    undefined,
+                    true,
+                    DELEGATION_LIMITS.reservationTokens,
+                  ),
+              },
+              run,
+              { goalId: goalRoom.id, threadId: thread.id, raw: parsed.data },
+            );
+            if (!updated.ok) return finish(updated);
+            return finish({
+              ok: true,
+              revision: updated.revision,
+              dispatched: updated.dispatched,
+              text: `Plan updated to revision ${updated.revision}. ${updated.dispatched} ready step(s) handed out.`,
+            });
+          }
+          if (name === "record_plan_step_outcome") {
+            if (!thread.groupId || !goalRoom)
+              return finish({ error: "record_plan_step_outcome requires an active group goal" });
+            const parsed = ChiefPlanStepOutcomeInputSchema.safeParse(args);
+            if (!parsed.success)
+              return finish({ error: "record_plan_step_outcome needs stepId, baseRevision and support" });
+            const recorded = await recordPlanStepOutcomeFromRun(
+              {
+                ...deps,
+                resolveDelegationPin: (target) =>
+                  resolvePin(
+                    run,
+                    target,
+                    undefined,
+                    undefined,
+                    true,
+                    DELEGATION_LIMITS.reservationTokens,
+                  ),
+              },
+              run,
+              { goalId: goalRoom.id, threadId: thread.id, raw: parsed.data },
+            );
+            if (!recorded.ok) return finish(recorded);
+            return finish({
+              ok: true,
+              dispatched: recorded.dispatched,
+              text: `Step outcome recorded. ${recorded.dispatched} newly ready step(s) handed out.`,
+            });
+          }
+          if (name === "set_plan_step") {
+            if (!thread.groupId || !goalRoom)
+              return finish({ error: "set_plan_step requires an active group goal" });
+            const parsed = ChiefPlanStepActionInputSchema.safeParse(args);
+            if (!parsed.success)
+              return finish({ error: "set_plan_step needs stepId, baseRevision and an action" });
+            const settled = await settlePlanStepFromRun(deps, run, {
+              goalId: goalRoom.id,
+              threadId: thread.id,
+              raw: parsed.data,
+            });
+            if (!settled.ok) return finish(settled);
+            return finish({ ok: true, text: `Step ${String(args.stepId ?? "")} updated.` });
+          }
           if (name === "ask_members") {
             if (!thread.groupId || !roomCanAsk)
               return finish({ error: "ask_members is only for this group's coordinator" });
@@ -8233,6 +8338,9 @@ export function selectBuiltinToolsForRun(options: {
     (tool) =>
       (tool.name !== "assign" || options.goalCoordinator) &&
       (tool.name !== "finish_goal" || options.goalCoordinator) &&
+      (tool.name !== "update_project_plan" || options.goalCoordinator) &&
+      (tool.name !== "record_plan_step_outcome" || options.goalCoordinator) &&
+      (tool.name !== "set_plan_step" || options.goalCoordinator) &&
       (tool.name !== "ask_members" || (options.roomCoordinator && Boolean(options.groupId))) &&
       (!options.messagingChannelRun ||
         (!["remember", "save_memory", "recall_memory", "forget_memory"].includes(tool.name) &&

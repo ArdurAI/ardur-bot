@@ -98,6 +98,7 @@ describe("goal scheduling", () => {
       },
       usageRecord: { findFirst: vi.fn(async () => null) },
       goalSettlement: { findUnique: vi.fn(async () => null) },
+      goalPlanStep: { findMany: vi.fn(async () => []) },
       run: { create: runCreate, findFirst: vi.fn(async () => null) },
       goalBoardDelivery: { findMany: vi.fn(async () => []) },
       thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
@@ -416,6 +417,7 @@ function reviewFixture() {
     goalSettlementDiscrepancy: {
       aggregate: vi.fn(async () => ({ _sum: { tokens: 0 }, _count: 0 })),
     },
+    goalPlanStep: { findMany: vi.fn(async () => []) },
     goalBoardDelivery: {
       findMany: vi.fn(async () => []),
       create: vi.fn(),
@@ -1671,6 +1673,7 @@ function boardLinkFixture() {
     usageRecord: { findFirst: vi.fn(async () => null) },
     run: { findFirst: vi.fn(async () => null) },
     goalSettlement: { findUnique: vi.fn(async () => null) },
+    goalPlanStep: { findMany: vi.fn(async () => []) },
   };
   const prisma = {
     $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
@@ -1836,6 +1839,7 @@ function deliverySettleFixture(
     usageRecord: { findFirst: vi.fn(async () => null) },
     run: { findFirst: vi.fn(async () => null) },
     goalSettlement: { findUnique: vi.fn(async () => null) },
+    goalPlanStep: { findMany: vi.fn(async () => []) },
   };
   const prisma = {
     $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),

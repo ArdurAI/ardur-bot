@@ -2,6 +2,9 @@ import type { ConnectorTool } from "@ardurbot/adapter-kit";
 import {
   BotSecretDestination,
   BotSecretName,
+  ChiefPlanStepActionInputSchema,
+  ChiefPlanStepOutcomeInputSchema,
+  ChiefPlanUpdateInputSchema,
   GoalConditionSupportSchema,
   ListBotsInputSchema,
   ReconcileChiefActionInputSchema,
@@ -28,6 +31,9 @@ export const DELEGATION_TOOL_NAMES = new Set([
   "handoff_to_bot",
   "assign",
   "finish_goal",
+  "update_project_plan",
+  "record_plan_step_outcome",
+  "set_plan_step",
   "ask_members",
   "message_bot",
 ]);
@@ -1038,6 +1044,24 @@ export const builtinAgentTools: ConnectorTool[] = [
       },
       required: ["summary"],
     },
+  },
+  {
+    name: "update_project_plan",
+    description:
+      "For the active group goal coordinator only: replace the ordered project plan. Every step names its owner (a current room member or the owner), its completion condition, and the ids of steps that must be done first. A previously known step missing here is cancelled, never deleted. Owners and prerequisites are validated and dependency cycles refuse; send the plan revision from the goal state as baseRevision. Ready steps are handed out by the backend after the update.",
+    inputSchema: z.toJSONSchema(ChiefPlanUpdateInputSchema),
+  },
+  {
+    name: "record_plan_step_outcome",
+    description:
+      "For the active group goal coordinator only: finish one project plan step by naming at least one record of this goal's work that supports it (an artifact revision, a tool-result record, or a run record). Text alone never finishes a step. Steps that become ready are handed out by the backend afterwards.",
+    inputSchema: z.toJSONSchema(ChiefPlanStepOutcomeInputSchema),
+  },
+  {
+    name: "set_plan_step",
+    description:
+      "For the active group goal coordinator only: cancel or reopen one project plan step. Cancelling is explicit and recorded; reopening clears the recorded outcome and dispatch so the step is handed out afresh.",
+    inputSchema: z.toJSONSchema(ChiefPlanStepActionInputSchema),
   },
   {
     name: "handoff_to_bot",

@@ -8,6 +8,11 @@ import type {
   GoalConditionReviewInput,
   GoalConditionSupport,
   GoalLinkInput,
+  GoalPlan,
+  GoalPlanStepActionInput,
+  GoalPlanStepInput,
+  GoalPlanStepOutcomeInput,
+  GoalPlanUpdateInput,
   GoalRejectInput,
   GoalStartInput,
   GoalSubmitInput,
@@ -26,6 +31,7 @@ import {
   GoalConditionReviewInputSchema,
   GoalConditionSchema,
   GoalLinkInputSchema,
+  GoalPlanStepSchema,
   GoalRevisionSchema,
   GoalStartInputSchema,
   GoalSupportProposalInputSchema,
@@ -60,6 +66,7 @@ type GoalRow = Prisma.TeamGoalGetPayload<{ include: { revisions: true } }> &
     settlement: GoalSettlementRow | null;
     boardDelivery: GoalBoardDeliveryState | null;
     boardDeliveryActions: Goal["boardDeliveryActions"];
+    plan: Goal["plan"];
   };
 
 function boardDeliveryState(rows: { state: string }[]): GoalBoardDeliveryState | null {
@@ -172,6 +179,10 @@ async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) 
           select: { id: true, state: true, transition: true, attempts: true },
         });
         const settlement = await tx.goalSettlement.findUnique({ where: { goalId: row.id } });
+        const planSteps = await tx.goalPlanStep.findMany({
+          where: { goalId: row.id },
+          orderBy: { createdAt: "asc" },
+        });
         const late = settlement
           ? await tx.goalSettlementDiscrepancy.aggregate({
               where: { settlementId: settlement.id },
@@ -192,11 +203,58 @@ async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) 
               : null,
           boardDelivery: boardDeliveryState(deliveries),
           boardDeliveryActions: boardDeliveryActions(deliveries),
+          plan: planSteps.length
+            ? { revision: row.planRevision, steps: planSteps.map((stepRow) => asPlanStep(stepRow)) }
+            : null,
         });
       },
       { isolationLevel: "RepeatableRead" },
     ),
   );
+}
+
+export { loadGoal };
+
+export function asPlanStep(row: Prisma.GoalPlanStepGetPayload<object>) {
+  return GoalPlanStepSchema.parse({
+    id: row.clientId,
+    title: row.title,
+    ownerId: row.ownerId,
+    ownerIsUser: row.ownerIsUser,
+    condition: row.condition,
+    status: row.status,
+    prerequisiteIds: row.prerequisiteIds,
+    outcome: row.outcome,
+    dispatch: row.dispatch,
+    updatedAt: row.updatedAt.toISOString(),
+  });
+}
+
+/** The persisted plan under one goal, null when the goal has no steps yet. */
+export async function loadGoalPlan(
+  prisma: Pick<PrismaClient, "goalPlanStep" | "teamGoal">,
+  goalId: string,
+): Promise<GoalPlan | null> {
+  const goal = await prisma.teamGoal.findFirst({
+    where: { id: goalId },
+    select: { id: true, planRevision: true },
+  });
+  if (!goal) return null;
+  const rows = await prisma.goalPlanStep.findMany({
+    where: { goalId: goal.id },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!rows.length) return null;
+  return {
+    revision: goal.planRevision,
+    steps: rows.map((row) => asPlanStep(row)),
+  };
+}
+
+async function loadGoalWithPlan(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) {
+  const goal = await loadGoal(prisma, where);
+  if (!goal) return null;
+  return { ...goal, plan: await loadGoalPlan(prisma, goal.id) };
 }
 
 export function goalExhaustionReason(
@@ -644,7 +702,7 @@ export async function submitGoal(prisma: PrismaClient, actor: Actor, input: Goal
   });
 }
 
-async function lockGoalReview(tx: Prisma.TransactionClient, threadId: string, rootTaskId: string) {
+export async function lockGoalReview(tx: Prisma.TransactionClient, threadId: string, rootTaskId: string) {
   await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
   await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${rootTaskId} FOR UPDATE`;
 }
@@ -1060,7 +1118,7 @@ export class GoalConditionSupportError extends Error {
  * owner's own ungrouped artifacts). A run record must belong to this goal's own
  * work. Cross-scope rows refuse with IsolationError, like every other scope check.
  */
-async function validateGoalConditionSupport(
+export async function validateGoalConditionSupport(
   tx: Prisma.TransactionClient,
   goal: Pick<TeamGoal, "id" | "spaceId" | "userId" | "rootTaskId" | "groupId">,
   support: readonly GoalConditionSupport[],

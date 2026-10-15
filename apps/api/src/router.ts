@@ -189,6 +189,7 @@ import {
   formatMessagingLinkCode,
   GoalBoardDeliveryConflict,
   GoalConditionSupportError,
+  GoalPlanConflict,
   GoalReviewConflict,
   getBotCommunicationPolicy,
   getGoal,
@@ -212,6 +213,9 @@ import {
   requestCancel,
   resetBriefRetriesForConnection,
   reviewGoalCondition,
+  recordGoalPlanStepOutcome,
+  settleGoalPlanStep,
+  updateGoalPlan,
   SPACE_DELETION_CLAIM_TIMEOUT_MS,
   SpaceDeletionInProgressError,
   SpaceLimitError,
@@ -670,6 +674,8 @@ async function goalReviewCall<T>(action: () => Promise<T>): Promise<T> {
     if (error instanceof GoalBoardDeliveryConflict)
       throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
     if (error instanceof GoalReviewConflict)
+      throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
+    if (error instanceof GoalPlanConflict)
       throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
       throw new ORPCError("CONFLICT", { data: { reason: "already-reviewed" } });
@@ -6622,6 +6628,39 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
         return goalReviewCall(() => reviewGoalCondition(deps.prisma, context.actor, input));
+      }),
+      planUpdate: authed.goals.planUpdate.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const goal = await goalReviewCall(() =>
+          updateGoalPlan(deps.prisma, { actor: context.actor }, input),
+        );
+        const wake = await deps.prisma.run.findUnique({
+          where: {
+            spaceId_clientNonce: {
+              spaceId: context.actor.spaceId,
+              clientNonce: `goal-plan:${goal.id}:${goal.plan?.revision ?? 0}`,
+            },
+          },
+          select: { id: true, status: true },
+        });
+        if (wake?.status === "queued")
+          await deps.jobs.enqueue(runContinueJob(wake.id)).catch((error) => {
+            getLogger().error("goal plan wake enqueue", error);
+          });
+        return goal;
+      }),
+      planStep: authed.goals.planStep.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return goalReviewCall(() => settleGoalPlanStep(deps.prisma, { actor: context.actor }, input));
+      }),
+      planOutcome: authed.goals.planOutcome.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return goalReviewCall(() =>
+          recordGoalPlanStepOutcome(deps.prisma, { actor: context.actor }, input),
+        );
       }),
       start: authed.goals.start.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)

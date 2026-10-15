@@ -21,6 +21,7 @@ export * from "./events.js";
 export * from "./evidence.js";
 export * from "./external-conversations.js";
 export * from "./goals.js";
+export * from "./goal-plan.js";
 export * from "./group-asks.js";
 export * from "./groups.js";
 export * from "./memory-config.js";

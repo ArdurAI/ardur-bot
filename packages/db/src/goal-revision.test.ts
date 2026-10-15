@@ -83,6 +83,7 @@ function prisma() {
         run: { findFirst: async () => null },
         goalBoardDelivery: { findMany: async () => [] },
         goalSettlement: { findUnique: async () => null },
+        goalPlanStep: { findMany: async () => [] },
       }),
   } as unknown as PrismaClient;
 }
