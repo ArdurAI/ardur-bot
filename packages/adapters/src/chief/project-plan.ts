@@ -325,7 +325,14 @@ export async function updateProjectPlanFromRun(
     };
     const updated = await updateGoalPlan(
       deps.prisma,
-      { scope: planToolScope(run, input.threadId), goalId: input.goalId },
+      {
+        scope: planToolScope(run, input.threadId),
+        goalId: input.goalId,
+        // The done-step guard compares stored text under this run's current
+        // secret list, so a step stored before a secret became known is not
+        // refused as redefined when the list grows.
+        secrets,
+      },
       raw,
     );
     const { dispatched } = await dispatchReadyGoalPlanSteps(deps, run, input.goalId);

@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "@ardurbot/db";
-import { finalizeRun, loadGoal } from "@ardurbot/db";
+import { finalizeRun, loadGoal, recordGoalPlanStepOutcome } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   dispatchReadyGoalPlanSteps,
@@ -467,6 +467,65 @@ describe("dispatch revalidation under concurrent plan edits", () => {
 });
 
 describe("plan update secret redaction", () => {
+  it("accepts an unchanged done step after the secret list grows past its stored text", async () => {
+    // The plan is stored before the run knows the secret, so the durable text
+    // keeps it in clear; once the list grows, resubmitting the same plan must
+    // not be refused as a redefinition of the done step.
+    const fixture = planFixture();
+    const deps = dispatchDeps(fixture.prisma);
+    const actor = {
+      spaceId: goal.spaceId,
+      userId: goal.userId,
+      email: "owner@example.test",
+      isDeploymentOwner: true,
+    };
+    const raw = (baseRevision: number, condition: string) => ({
+      baseRevision,
+      steps: [
+        {
+          id: "a",
+          title: `Use ${secret} in the draft`,
+          ownerId: "bot-writer",
+          ownerIsUser: false,
+          condition,
+          prerequisiteIds: [],
+        },
+      ],
+    });
+    const stored = await updateProjectPlanFromRun(deps, chiefRun, {
+      goalId: goal.id,
+      threadId: goal.threadId,
+      secrets: [],
+      raw: raw(3, `The draft never leaks ${secret}`),
+    });
+    expect(stored.ok).toBe(true);
+    await recordGoalPlanStepOutcome(
+      fixture.prisma,
+      { actor },
+      { goalId: goal.id, stepId: "a", baseRevision: 4, support: [] },
+    );
+    const resubmitted = await updateProjectPlanFromRun(deps, chiefRun, {
+      goalId: goal.id,
+      threadId: goal.threadId,
+      secrets: [secret],
+      raw: raw(5, `The draft never leaks ${secret}`),
+    });
+    expect(resubmitted).toEqual({ ok: true, revision: 6, dispatched: 0 });
+    expect(JSON.stringify(fixture.steps)).not.toContain(secret);
+    // A real definition change is still refused.
+    const changed = await updateProjectPlanFromRun(deps, chiefRun, {
+      goalId: goal.id,
+      threadId: goal.threadId,
+      secrets: [secret],
+      raw: raw(6, "Published and verified"),
+    });
+    expect(changed.ok).toBe(false);
+    expect(changed).toEqual({
+      ok: false,
+      error: "The step is already done or cancelled",
+    });
+  });
+
   it("redacts free-text plan fields before persistence and before the dispatch prompt", async () => {
     const fixture = planFixture();
     const updated = await updateProjectPlanFromRun(dispatchDeps(fixture.prisma), chiefRun, {
