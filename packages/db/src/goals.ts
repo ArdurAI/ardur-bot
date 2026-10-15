@@ -178,7 +178,7 @@ async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) 
         const settlement = await tx.goalSettlement.findUnique({ where: { goalId: row.id } });
         const planSteps = await tx.goalPlanStep.findMany({
           where: { goalId: row.id },
-          orderBy: { createdAt: "asc" },
+          orderBy: [{ position: "asc" }, { id: "asc" }],
         });
         const late = settlement
           ? await tx.goalSettlementDiscrepancy.aggregate({

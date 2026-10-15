@@ -15,6 +15,7 @@ CREATE TABLE "goal_plan_steps" (
     "condition" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'pending',
     "prerequisiteIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    "position" INTEGER NOT NULL DEFAULT 0,
     "outcome" JSONB,
     "dispatchRunId" TEXT,
     "dispatchDelegationId" TEXT,

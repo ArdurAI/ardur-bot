@@ -353,6 +353,23 @@ describePostgres("Chief project plan (PostgreSQL)", () => {
     ).toEqual(["one"]);
   });
 
+  it("keeps the submitted step order across plan updates and goal reads", async () => {
+    const room = await runningGoal();
+    await updateGoalPlan(
+      prisma,
+      { actor },
+      { goalId: room.goalId, baseRevision: 1, steps: [step("one"), step("two")] },
+    );
+    const swapped = await updateGoalPlan(
+      prisma,
+      { actor },
+      { goalId: room.goalId, baseRevision: 2, steps: [step("two"), step("one")] },
+    );
+    expect(swapped.plan?.steps.map((entry) => entry.id)).toEqual(["two", "one"]);
+    const viewed = await getGoal(prisma, actor, room.groupId);
+    expect(viewed?.plan?.steps.map((entry) => entry.id)).toEqual(["two", "one"]);
+  });
+
   it("projects the plan on goal reads and freezes it with the goal", async () => {
     const room = await runningGoal();
     await updateGoalPlan(

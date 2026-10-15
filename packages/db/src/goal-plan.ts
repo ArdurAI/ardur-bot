@@ -219,10 +219,11 @@ async function commitPlanUpdate(
     new Map(existing.map((row) => [row.clientId, row.prerequisiteIds])),
   );
 
-  for (const step of input.steps) {
+  for (const [index, step] of input.steps.entries()) {
     const prior = byClientId.get(step.id);
     const data = {
       revision,
+      position: index,
       title: step.title,
       ownerId: step.ownerId,
       ownerIsUser: step.ownerIsUser,
@@ -234,7 +235,9 @@ async function commitPlanUpdate(
     if (prior) {
       await tx.goalPlanStep.update({ where: { id: prior.id }, data });
     } else {
-      await tx.goalPlanStep.create({ data: { goalId: goal.id, clientId: step.id, ...data } });
+      await tx.goalPlanStep.create({
+        data: { goalId: goal.id, clientId: step.id, ...data },
+      });
     }
   }
   // Leaving the plan cancels outstanding work instead of deleting its record.

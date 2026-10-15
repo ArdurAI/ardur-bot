@@ -42,6 +42,7 @@ type StepRow = {
   goalId: string;
   clientId: string;
   revision: number;
+  position: number;
   title: string;
   ownerId: string;
   ownerIsUser: boolean;
@@ -59,6 +60,7 @@ function stepRow(overrides: Partial<StepRow> & { clientId: string }): StepRow {
     id: `row-${overrides.clientId}`,
     goalId: goal.id,
     revision: goal.planRevision,
+    position: 0,
     title: `Step ${overrides.clientId}`,
     ownerId: memberBot.botId,
     ownerIsUser: false,
@@ -115,7 +117,37 @@ function planFixture(options: {
       }),
     },
     goalPlanStep: {
-      findMany: vi.fn(async () => steps),
+      findMany: vi.fn(
+        async (args?: {
+          where?: { goalId?: string };
+          orderBy?:
+            | Record<string, string>
+            | ReadonlyArray<Record<string, string>>
+            | undefined;
+        }) => {
+          let rows = args?.where?.goalId
+            ? steps.filter((row) => row.goalId === args.where?.goalId)
+            : [...steps];
+          const clauses = args?.orderBy
+            ? Array.isArray(args.orderBy)
+              ? args.orderBy
+              : [args.orderBy]
+            : [];
+          for (const clause of [...clauses].reverse()) {
+            const entries = Object.entries(clause);
+            rows = [...rows].sort((a, b) => {
+              for (const [key, dir] of entries) {
+                const av = String((a as Record<string, unknown>)[key] ?? "");
+                const bv = String((b as Record<string, unknown>)[key] ?? "");
+                const cmp = av.localeCompare(bv);
+                if (cmp !== 0) return dir === "desc" ? -cmp : cmp;
+              }
+              return 0;
+            });
+          }
+          return rows;
+        },
+      ),
       findFirst: vi.fn(async (args: { where: { id?: string; clientId?: string } }) =>
         steps.find((row) => row.id === args.where.id || row.clientId === args.where.clientId),
       ),
@@ -309,6 +341,25 @@ describe("plan update application", () => {
     );
     expect(fixture.steps.find((row) => row.clientId === "base")?.status).toBe("cancelled");
     expect(fixture.steps.find((row) => row.clientId === "next")?.status).toBe("blocked");
+  });
+
+  it("stores the submitted order and reads steps back in it", async () => {
+    const a = stepRow({ clientId: "a" });
+    const b = stepRow({ clientId: "b" });
+    const fixture = planFixture({ steps: [a, b] });
+    await updateGoalPlan(
+      fixture.prisma,
+      { actor: owner },
+      { goalId: goal.id, baseRevision: 3, steps: [stepInput("a"), stepInput("b")] },
+    );
+    const swapped = await updateGoalPlan(
+      fixture.prisma,
+      { actor: owner },
+      { goalId: goal.id, baseRevision: 4, steps: [stepInput("b"), stepInput("a")] },
+    );
+    expect(fixture.steps.find((row) => row.clientId === "a")?.position).toBe(1);
+    expect(fixture.steps.find((row) => row.clientId === "b")?.position).toBe(0);
+    expect(swapped.plan?.steps.map((step) => step.id)).toEqual(["b", "a"]);
   });
 
   it("keeps a recorded outcome on a carried done step", async () => {

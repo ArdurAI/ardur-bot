@@ -2830,6 +2830,8 @@ model GoalPlanStep {
   condition String
   status String @default("pending")
   prerequisiteIds String[] @default([])
+  /// The submitted array position, starting at 0; reads order by this with the row id as tie-breaker.
+  position Int @default(0)
   /// The recorded outcome (actor, support links, time) that moved the step to done.
   outcome Json?
   /// Exactly-once dispatch guards: set together, cleared only by an explicit reopen.
