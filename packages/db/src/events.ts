@@ -890,8 +890,13 @@ async function commitAnswerRunInput(
         });
     }
   }
-  // Thread row first, then run and task rows — the same order as clearThread and finalizeRun, so a
-  // concurrent clear cannot deadlock against this transaction.
+  // Credential storage takes the bot row lock. Take it before the thread, matching
+  // run/brief admission and clear/finalize, so a fast card answer cannot deadlock
+  // with maintenance of the paused run. Composer text answers have no secret writer.
+  if (runSecretWriter) {
+    await tx.$queryRaw`SELECT id FROM bots WHERE id = (SELECT "botId" FROM runs WHERE id = ${input.runId} AND "spaceId" = ${input.spaceId}) FOR UPDATE`;
+  }
+  // Thread before run and task rows, after any parent bot/policy locks.
   await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
   const runThreadId = await delegationAnswerThread(tx, input);
   const run = await tx.run.findFirst({
