@@ -2221,6 +2221,8 @@ model TeamGoal {
   verdicts GoalVerdict[]
   settlements GoalSettlement[]
   boardDeliveries GoalBoardDelivery[]
+  planSteps GoalPlanStep[]
+  planRevision Int @default(1)
 
   @@index([spaceId, userId, groupId, status])
   @@index([threadId, status])
@@ -2812,6 +2814,36 @@ model GoalSettlementDiscrepancy {
 }
 
 /// Durable board update for one goal revision. Acceptance is never inferred from a worker.
+/// One step of the goal's revisioned project plan. Plan-local identity is clientId;
+/// rows are never deleted: leaving the plan cancels a step, finishing records an outcome.
+model GoalPlanStep {
+  id String @id @default(cuid())
+  goalId String
+  goal TeamGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  clientId String
+  /// The plan revision that last changed this step; every change names the revision it was based on.
+  revision Int
+  title String
+  /// A group member bot id, or the owner's user id when ownerIsUser.
+  ownerId String
+  ownerIsUser Boolean @default(false)
+  condition String
+  status String @default("pending")
+  prerequisiteIds String[] @default([])
+  /// The recorded outcome (actor, support links, time) that moved the step to done.
+  outcome Json?
+  /// Exactly-once dispatch guards: set together, cleared only by an explicit reopen.
+  dispatchRunId String?
+  dispatchDelegationId String?
+  dispatch Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([goalId, clientId])
+  @@index([goalId])
+  @@map("goal_plan_steps")
+}
+
 model GoalBoardDelivery {
   id String @id @default(cuid())
   goalId String

@@ -204,6 +204,107 @@ export const GoalVerdictSchema = z.object({
 });
 export type GoalVerdict = z.infer<typeof GoalVerdictSchema>;
 
+export const GoalPlanStepStatusSchema = z.enum([
+  "pending",
+  "active",
+  "blocked",
+  "done",
+  "cancelled",
+]);
+export type GoalPlanStepStatus = z.infer<typeof GoalPlanStepStatusSchema>;
+
+/**
+ * The recorded proof that finished a plan step. Bots must name at least one
+ * immutable record (an artifact revision, a tool-result record, or a run of
+ * this goal's work); model text alone never completes a step. The owner's own
+ * attestation is itself the recorded outcome and may carry no links.
+ */
+export const GoalPlanStepOutcomeSchema = z.object({
+  actorId: z.string(),
+  support: z.array(GoalConditionSupportSchema),
+  recordedAt: IsoDate,
+});
+export type GoalPlanStepOutcome = z.infer<typeof GoalPlanStepOutcomeSchema>;
+
+/** The exactly-once dispatch of a ready step to its owner bot. */
+export const GoalPlanStepDispatchSchema = z.object({
+  runId: Id,
+  delegationId: Id,
+  dispatchedAt: IsoDate,
+});
+export type GoalPlanStepDispatch = z.infer<typeof GoalPlanStepDispatchSchema>;
+
+export const GoalPlanStepSchema = z.object({
+  /** Plan-local identity assigned by the editor; prerequisites name these ids. */
+  id: z.string(),
+  title: z.string(),
+  /** A group member bot id, or the owner's user id when ownerIsUser. */
+  ownerId: z.string(),
+  ownerIsUser: z.boolean(),
+  condition: z.string(),
+  status: GoalPlanStepStatusSchema,
+  prerequisiteIds: z.array(z.string()),
+  outcome: GoalPlanStepOutcomeSchema.nullable(),
+  dispatch: GoalPlanStepDispatchSchema.nullable(),
+  updatedAt: IsoDate,
+});
+export type GoalPlanStep = z.infer<typeof GoalPlanStepSchema>;
+
+/** The chief's ordered project plan under one goal, one revision number per goal. */
+export const GoalPlanSchema = z.object({
+  revision: z.number().int().positive(),
+  steps: z.array(GoalPlanStepSchema),
+});
+export type GoalPlan = z.infer<typeof GoalPlanSchema>;
+
+export const GoalPlanStepInputSchema = z.object({
+  id: z.string().trim().min(1).max(200),
+  title: z.string().trim().min(1).max(300),
+  ownerId: z.string().trim().min(1).max(200),
+  ownerIsUser: z.boolean(),
+  condition: z.string().trim().min(1).max(500),
+  prerequisiteIds: z.array(z.string().trim().min(1).max(200)).max(20).default([]),
+});
+export type GoalPlanStepInput = z.infer<typeof GoalPlanStepInputSchema>;
+
+/** Replaces the plan's shape; a previously known step missing here is cancelled, never deleted. */
+export const GoalPlanUpdateInputSchema = z.object({
+  goalId: Id,
+  /** The plan revision this change was based on; a stale number refuses the change. */
+  baseRevision: z.number().int().positive(),
+  steps: z.array(GoalPlanStepInputSchema).max(50),
+});
+export type GoalPlanUpdateInput = z.infer<typeof GoalPlanUpdateInputSchema>;
+
+/** Records the outcome that finished a step. */
+export const GoalPlanStepOutcomeInputSchema = z.object({
+  goalId: Id,
+  stepId: z.string().trim().min(1).max(200),
+  baseRevision: z.number().int().positive(),
+  support: z.array(GoalConditionSupportSchema).max(20).default([]),
+});
+export type GoalPlanStepOutcomeInput = z.infer<typeof GoalPlanStepOutcomeInputSchema>;
+
+export const GoalPlanStepActionSchema = z.enum(["cancel", "reopen"]);
+export type GoalPlanStepAction = z.infer<typeof GoalPlanStepActionSchema>;
+
+/** Explicit, recorded owner/chief control of one step's status. */
+export const GoalPlanStepActionInputSchema = z.object({
+  goalId: Id,
+  stepId: z.string().trim().min(1).max(200),
+  baseRevision: z.number().int().positive(),
+  action: GoalPlanStepActionSchema,
+});
+export type GoalPlanStepActionInput = z.infer<typeof GoalPlanStepActionInputSchema>;
+
+/** Chief tool inputs: the active goal comes from the coordinator run, never the model. */
+export const ChiefPlanUpdateInputSchema = GoalPlanUpdateInputSchema.omit({ goalId: true });
+export type ChiefPlanUpdateInput = z.infer<typeof ChiefPlanUpdateInputSchema>;
+export const ChiefPlanStepOutcomeInputSchema = GoalPlanStepOutcomeInputSchema.omit({ goalId: true });
+export type ChiefPlanStepOutcomeInput = z.infer<typeof ChiefPlanStepOutcomeInputSchema>;
+export const ChiefPlanStepActionInputSchema = GoalPlanStepActionInputSchema.omit({ goalId: true });
+export type ChiefPlanStepActionInput = z.infer<typeof ChiefPlanStepActionInputSchema>;
+
 export const GoalSubmitInputSchema = z.object({
   goalId: Id,
   summary: z.string().trim().min(1).max(10_000),
@@ -295,6 +396,8 @@ export const GoalSchema = z.object({
       }),
     )
     .optional(),
+  /** The chief's ordered project plan, when the goal has one. */
+  plan: GoalPlanSchema.nullable().optional(),
 });
 export type Goal = z.infer<typeof GoalSchema>;
 
@@ -370,6 +473,9 @@ export const goalsContract = {
   reject: oc.input(GoalRejectInputSchema).output(GoalVerdictSchema),
   reviewCondition: oc.input(GoalConditionReviewInputSchema).output(GoalRevisionSchema),
   link: oc.input(GoalLinkInputSchema).output(GoalSchema),
+  planUpdate: oc.input(GoalPlanUpdateInputSchema).output(GoalSchema),
+  planStep: oc.input(GoalPlanStepActionInputSchema).output(GoalSchema),
+  planOutcome: oc.input(GoalPlanStepOutcomeInputSchema).output(GoalSchema),
   boardDelivery: oc.input(GoalBoardDeliveryActionInputSchema).output(GoalSchema),
   boardResult: oc
     .input(z.object({ workspaceId: Id, itemId: BoardItemIdSchema }))
