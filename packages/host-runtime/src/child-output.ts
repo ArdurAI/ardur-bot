@@ -27,14 +27,18 @@ export interface CaptureChildOutputOptions {
   logger: ChildOutputLogger;
   /** Capture stdout too; stderr is always captured. */
   captureStdout?: boolean;
+  /** Retain a redacted tail for a terminal failure, without enabling debug output. */
+  retainFailureDetails?: boolean;
 }
 
 export interface CapturedChildOutput {
   /** Redacted debug detail only; empty unless detailed process logging is enabled. */
   tail(): string;
+  /** Explicitly requested failure detail; empty for ordinary captures. */
+  failureTail(): string;
   /** Content-free facts, safe at every log level. */
   facts(): Record<string, unknown>;
-  /** Stop listening and release private output; detailed redacted tails remain available. */
+  /** Stop listening and release private output; explicitly retained redacted tails remain. */
   close(): void;
 }
 
@@ -96,6 +100,7 @@ export function captureChildOutput(
 ): CapturedChildOutput {
   const secrets = options.secrets ?? [];
   const detailed = detailedProcessLogsEnabled();
+  const retain = detailed || options.retainFailureDetails === true;
   const lines: string[] = [];
   let bytes = 0;
   let byteCount = 0;
@@ -115,7 +120,7 @@ export function captureChildOutput(
   };
   const refreshTail = () => {
     if (
-      !detailed ||
+      !retain ||
       (secrets.length === tailSecrets.length &&
         secrets.every((secret, index) => secret === tailSecrets[index]))
     )
@@ -131,7 +136,7 @@ export function captureChildOutput(
   };
   const emit = (stream: "stdout" | "stderr", raw: string) => {
     refreshTail();
-    const redacted = detailed ? redactMcpText(raw.replace(/\r+$/, ""), secrets) : raw;
+    const redacted = retain ? redactMcpText(raw.replace(/\r+$/, ""), secrets) : raw;
     const line = storeLine(redacted);
     if (!line) return;
     if (detailed && detailedProcessLogsEnabled()) {
@@ -181,7 +186,7 @@ export function captureChildOutput(
         partial = !text.endsWith("\n");
         if (partial) partialLines++;
       }
-      if (detailed) redactStream(text);
+      if (retain) redactStream(text);
       else append(text);
     };
     const onData = (chunk: Buffer | string) => {
@@ -201,13 +206,13 @@ export function captureChildOutput(
         lineCount++;
         partial = false;
       }
-      if (detailed) redactStream("", true);
+      if (retain) redactStream("", true);
       if (pending || dropped) {
         if (dropped) emit(name, OVERSIZED_LINE);
         else emit(name, pending);
         pending = "";
       }
-      if (!detailed) {
+      if (!retain) {
         lines.length = 0;
         bytes = 0;
       }
@@ -221,6 +226,11 @@ export function captureChildOutput(
   return {
     tail: () => {
       if (!detailed || !detailedProcessLogsEnabled()) return "";
+      refreshTail();
+      return lines.join("\n");
+    },
+    failureTail: () => {
+      if (!options.retainFailureDetails) return "";
       refreshTail();
       return lines.join("\n");
     },
@@ -239,7 +249,7 @@ export function captureChildOutput(
         watcher.stream.off("data", watcher.onData);
         watcher.stream.off("end", watcher.onEnd);
       }
-      if (!detailed) {
+      if (!retain) {
         lines.length = 0;
         bytes = 0;
       }

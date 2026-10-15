@@ -1,11 +1,14 @@
 import type { CommandBlock } from "@ardurbot/contracts";
+import { COMMAND_REFUSALS } from "@ardurbot/contracts";
 import { setupI18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { createRoot } from "react-dom/client";
 import { ThreadCommandBlock } from "../../src/components/ThreadCommandBlock";
+import { messages as ruMessages } from "../../src/locales/ru/messages.po";
 import "../../src/styles.css";
 
-const i18n = setupI18n({ locale: "en", messages: { en: {} } });
+const translated = new URLSearchParams(window.location.search).has("translated");
+const i18n = setupI18n({ locale: translated ? "ru" : "en", messages: { en: {}, ru: ruMessages } });
 const block: CommandBlock = {
   commandId: "command-1",
   runId: "run-1",
@@ -28,11 +31,42 @@ const block: CommandBlock = {
   rerunDisabledReason: null,
 };
 
+const refusal = new URLSearchParams(window.location.search).has("refusal");
+const displayedBlock: CommandBlock = refusal
+  ? {
+      ...block,
+      command: "git rev-parse HEAD",
+      outcome: "cancelled",
+      exitCode: null,
+      durationMs: null,
+      stdout: null,
+      stderr: null,
+      error: "Run commands inside this bot's folder or a registered folder.",
+      rerunDisabledReason: "Run commands inside this bot's folder or a registered folder.",
+    }
+  : block;
+
 createRoot(document.getElementById("root")!).render(
   <I18nProvider i18n={i18n}>
     <main className="min-h-screen bg-background p-8 text-foreground">
       <div className="mx-auto max-w-3xl space-y-4">
-        <ThreadCommandBlock block={block} spaceId="space-1" />
+        <ThreadCommandBlock
+          block={
+            translated
+              ? {
+                  ...block,
+                  commandId: "refused-command",
+                  command: "python script.py",
+                  outcome: "cancelled",
+                  error: COMMAND_REFUSALS["command-size"],
+                  refusalId: "command-size",
+                  stdout: "",
+                  stderr: "",
+                }
+              : displayedBlock
+          }
+          spaceId="space-1"
+        />
         <ThreadCommandBlock
           block={{
             ...block,

@@ -22,7 +22,9 @@ const grant = {
   trustedAt: new Date("2026-09-24T05:00:00Z"),
 } as DeviceGrant;
 function fixture() {
-  let receipt: Record<string, unknown> | null = null;
+  const receipts = new Map<string, Record<string, unknown>>();
+  const receiptKey = (value: Record<string, unknown>) =>
+    JSON.stringify([value.instanceId, value.spaceId, value.deviceGrantId, value.clientNonce]);
   let run = {
     id: "run-a",
     botId: "bot-a",
@@ -49,9 +51,12 @@ function fixture() {
     $queryRaw: vi.fn(async () => []),
     deviceGrant: { findFirst: vi.fn(async () => grant) },
     dispatchReceipt: {
-      findUnique: vi.fn(async () => receipt),
+      findUnique: vi.fn(
+        async ({ where }) =>
+          receipts.get(receiptKey(where.instanceId_spaceId_deviceGrantId_clientNonce)) ?? null,
+      ),
       create: vi.fn(async ({ data }) => {
-        receipt = data;
+        receipts.set(receiptKey(data), data);
         return data;
       }),
     },
@@ -103,7 +108,7 @@ function fixture() {
     tx,
     run: () => run,
     clearReceipt: () => {
-      receipt = null;
+      receipts.clear();
     },
   };
 }
@@ -435,4 +440,25 @@ describe("delegated stop cause", () => {
       }),
     );
   });
+});
+
+it("recovers a lost response after durable admission without creating a second task", async () => {
+  const f = fixture();
+  const input = { clientNonce: "lost-response-request", text: "One task" };
+  const lostResponse = await admitDispatch(f.db, grant, input);
+  // The client receives no response, obtains a fresh signed nonce, and resubmits the same body.
+  const recovered = await admitDispatch(f.db, grant, { ...input });
+  expect(recovered).toEqual(lostResponse);
+  expect(f.tx.task.create).toHaveBeenCalledOnce();
+  expect(f.tx.run.create).toHaveBeenCalledOnce();
+});
+it("scopes identical request ids to each device rather than sharing an admission", async () => {
+  const f = fixture();
+  const input = { clientNonce: "same-request-two-devices", text: "One task" };
+  await admitDispatch(f.db, grant, input);
+  const second = { ...grant, id: "phone-b" };
+  f.tx.deviceGrant.findFirst.mockResolvedValue(second);
+  await admitDispatch(f.db, second, input);
+  expect(f.tx.task.create).toHaveBeenCalledTimes(2);
+  expect(f.tx.dispatchReceipt.create).toHaveBeenCalledTimes(2);
 });

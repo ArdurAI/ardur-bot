@@ -15,6 +15,8 @@ import type { LocalImportJob } from "@ardurbot/contracts/local-import";
 export interface AdapterContext {
   /** Supplied by the executor only after claiming the exact approved host command. */
   hostCommandApproval?: HostCommandApproval;
+  /** Server-selected relative boundary for contained host workspace file operations only. */
+  fileRoot?: string;
   toolAccessMode?: "when-needed" | "all";
   operationId: string;
   traceId: string;
@@ -462,6 +464,7 @@ export interface RequestUsageObservation {
   attemptId: string;
   parentRequestId: string | null;
   purpose: UsagePurpose;
+  /** The adapter starts a new epoch at a verified counter reset, never on a mere decrease. */
   counter: { mode: "delta" | "cumulative"; epochId: string; sequence: number };
   inputSemantics: "total-with-cache-subsets" | "additive-cache-categories" | "unknown";
   reasoningSemantics: "subset-of-output" | "separate" | "unknown";
@@ -568,6 +571,12 @@ export interface AgentRunRequest {
   ) => Promise<void>;
   resolveModel?: (provider: string, modelId: string) => Promise<AgentRunModel>;
   resumeFromCheckpoint?: string;
+  /** Provider-neutral restart context. Never includes credentials. */
+  restartState?: unknown;
+  /** Calls already spent by this run, including an interrupted intent. */
+  priorToolCalls?: number;
+  /** Await durable progress at a model/tool boundary; true asks the runtime to stop. */
+  saveCheckpoint?: (state: unknown, usage?: AgentUsage[]) => Promise<boolean>;
   script?: ScriptedTurn[];
   /**
    * FYI bot-message wakes and scheduled routines may finish with no text.
@@ -644,6 +653,10 @@ export type AgentRuntimeEvent =
 
 export interface AgentRuntimeCapabilities {
   streaming: boolean;
+  instructions?: boolean;
+  cancellation?: boolean;
+  toolAuthorization?: boolean;
+  usage?: boolean;
   compaction: boolean;
   tools: boolean;
   scripted: boolean;

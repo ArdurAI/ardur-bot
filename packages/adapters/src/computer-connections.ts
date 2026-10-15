@@ -1,9 +1,11 @@
 import type {
   AdapterContext,
   ComputerRef,
+  GitChangesResult,
   SandboxProvider,
   TerminalProvider,
 } from "@ardurbot/adapter-kit";
+import { routedTerminal } from "@ardurbot/adapter-kit";
 import type { HostLabel } from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import { ENGINE_LABELS, hostLabel, unknownCapacity } from "@ardurbot/contracts/fleet";
@@ -135,32 +137,9 @@ export class ConnectedSandboxProvider implements SandboxProvider {
     /** Names the host in the missing-engine sentence; defaults to this server's own platform. */
     private readonly hostName: () => Promise<HostLabel> = async () => hostLabel(process.platform),
   ) {
-    const sessions = new Map<string, TerminalProvider>();
-    const session = (id: string) => {
-      const provider = sessions.get(id);
-      if (!provider) throw new Error("Terminal session is unavailable.");
-      return provider;
-    };
-    this.terminal = {
-      open: async (computer, options, context) => {
-        const provider = (await this.owner(computer, context)).terminal;
-        if (!provider) throw new Error("Not available on this computer");
-        const opened = await provider.open(computer, options, context);
-        sessions.set(opened.id, provider);
-        return opened;
-      },
-      write: (id, bytes) => session(id).write(id, bytes),
-      resize: (id, cols, rows) => session(id).resize(id, cols, rows),
-      close: async (id, reason) => {
-        const provider = session(id);
-        await provider.close(id, reason);
-        sessions.delete(id);
-      },
-      output: (id) => session(id).output(id),
-      revoke: async (computer, leaseId, context) => {
-        await (await this.owner(computer, context)).terminal?.revoke(computer, leaseId, context);
-      },
-    };
+    this.terminal = routedTerminal(
+      async (computer, context) => (await this.owner(computer, context)).terminal,
+    );
   }
   async keepAlive(computer: Parameters<NonNullable<SandboxProvider["keepAlive"]>>[0]) {
     if (!computer.connectionId) {
@@ -229,6 +208,9 @@ export class ConnectedSandboxProvider implements SandboxProvider {
   async environmentNote(...args: Parameters<NonNullable<SandboxProvider["environmentNote"]>>) {
     return (await this.owner(args[0], args[1])).environmentNote?.(...args);
   }
+  async appliedLimits(...args: Parameters<NonNullable<SandboxProvider["appliedLimits"]>>) {
+    return (await this.owner(args[0], args[1])).appliedLimits?.(...args) ?? null;
+  }
   async connectScreen(...args: Parameters<SandboxProvider["connectScreen"]>) {
     return (await this.owner(args[0], args[2])).connectScreen(...args);
   }
@@ -246,6 +228,16 @@ export class ConnectedSandboxProvider implements SandboxProvider {
   }
   async readFile(...args: Parameters<SandboxProvider["readFile"]>) {
     return (await this.owner(args[0], args[2])).readFile(...args);
+  }
+  async gitChanges(
+    ...args: Parameters<NonNullable<SandboxProvider["gitChanges"]>>
+  ): Promise<GitChangesResult> {
+    const provider = await this.owner(args[0], args[2]);
+    return provider.gitChanges?.(...args) ?? { kind: "unavailable" };
+  }
+  /** The owning provider answers: only it can serve the Git observation. */
+  async canObserveGit(computer: ComputerRef, context: AdapterContext): Promise<boolean> {
+    return (await this.owner(computer, context)).gitChanges !== undefined;
   }
   async writeFile(...args: Parameters<SandboxProvider["writeFile"]>) {
     return (await this.owner(args[0], args[2])).writeFile(...args);

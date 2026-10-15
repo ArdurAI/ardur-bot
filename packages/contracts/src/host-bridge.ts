@@ -9,6 +9,8 @@ import {
   RemoteSecretSchema,
 } from "./fleet-bridge.js";
 import { HostIntegrationSchema } from "./host-integrations.js";
+import { HostTerminalActionSchema } from "./host-terminal.js";
+
 import { IDE_FILE_BYTES } from "./ide.js";
 import { LocalImportRootsSchema } from "./local-import.js";
 import { McpCredentialFlagsSchema } from "./mcp.js";
@@ -21,6 +23,8 @@ import {
   RuntimePinSchema,
   RuntimeProblemSchema,
 } from "./runtime-pins.js";
+
+export type { HostTerminalAction } from "./host-terminal.js";
 
 export const HOST_BRIDGE_VERSION = 1;
 export const HOST_FRAME_BYTES = 256 * 1024;
@@ -61,7 +65,10 @@ export const HostRuntimeInfoSchema = z.union([
   RuntimeInfoSchema,
   RuntimeInfoSchema.extend({ runtimeKind: z.literal("hermes") }),
 ]);
-export const HostRuntimeProblemSchema = RuntimeProblemSchema.extend({ pin: HostRuntimePinSchema });
+export const HostRuntimeProblemSchema = RuntimeProblemSchema.extend({
+  pin: HostRuntimePinSchema,
+  refusalId: z.string().optional(),
+});
 export type HostRuntimeProblem = z.infer<typeof HostRuntimeProblemSchema>;
 export const HOST_TOOLS = [
   "git",
@@ -200,6 +207,11 @@ export type HostMcpRegistration = z.infer<typeof HostMcpRegistrationSchema>;
 const mcpTarget = { serverId: id, revision: z.number().int().positive() };
 export const HostOperationSchema = /* @__PURE__ */ (() =>
   z.discriminatedUnion("op", [
+    z.strictObject({
+      op: z.literal("computer.terminal"),
+      homeKey: id,
+      action: HostTerminalActionSchema,
+    }),
     z.strictObject({ op: z.literal("board.run"), request: BoardRunSchema }),
     z.strictObject({ op: z.literal("import.scan"), roots: LocalImportRootsSchema.optional() }),
     z.strictObject({
@@ -298,6 +310,7 @@ export const HostHealthSchema = z.strictObject({
   capabilities: z
     .strictObject({
       providerRelay: z.literal(1),
+      hostTerminal: z.strictObject({ generation: z.uuid() }).optional(),
       hermesConfigurationProfile: z.literal("hermes-ardur-v2").optional(),
       hermesLauncherGeneration: z.literal(1).optional(),
     })
@@ -317,7 +330,7 @@ export const HostHealthSchema = z.strictObject({
 export type HostHealth = z.infer<typeof HostHealthSchema>;
 export const HOST_HEALTH_ACCEPT_HEADER = "x-ardur-host-health-accept";
 export const HOST_HEALTH_ACCEPTED =
-  "providerRelay,hermes,hermesConfigurationProfile,hermesLauncherGeneration";
+  "providerRelay,hermes,hermesConfigurationProfile,hermesLauncherGeneration,hostTerminal";
 
 /** A missing upgrade advertisement means the peer may use the original strict health schema. */
 export function negotiateHostHealth(health: HostHealth, advertisement?: string): HostHealth {
@@ -334,6 +347,9 @@ export function negotiateHostHealth(health: HostHealth, advertisement?: string):
       ? {
           capabilities: {
             providerRelay: capabilities.providerRelay,
+            ...(accepted.has("hostTerminal") && capabilities.hostTerminal
+              ? { hostTerminal: capabilities.hostTerminal }
+              : {}),
             ...(accepted.has("hermesConfigurationProfile") &&
             accepted.has("hermesLauncherGeneration") &&
             capabilities.hermesConfigurationProfile &&
@@ -391,6 +407,7 @@ export const HostFrameSchema = /* @__PURE__ */ (() =>
         "onRuntimeInfo",
         "acknowledgeInput",
         "claimSteering",
+        "saveCheckpoint",
         "provider.open",
         "provider.read",
         "provider.cancel",

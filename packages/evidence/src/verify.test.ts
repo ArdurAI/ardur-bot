@@ -47,8 +47,45 @@ function signedPayload(payload: unknown, typ = "application/ardur.er+jwt") {
 }
 
 describe("chain and seal verification", () => {
+  it("compares the independently expected fingerprint without changing integrity results", () => {
+    const { records, seal } = run();
+    for (const [expected, match] of [
+      [undefined, "no_expected_key"],
+      [keys.kid, "expected_key"],
+      [`sha256:${"0".repeat(64)}`, "different_key"],
+    ] as const) {
+      expect(verifyChain(records, keys.publicKeyPem, expected)).toMatchObject({
+        ok: true,
+        signerMatch: match,
+      });
+      expect(verifySeal(seal, records, keys.publicKeyPem, expected)).toMatchObject({
+        ok: true,
+        signerMatch: match,
+      });
+    }
+    expect(verifySeal("corrupt", records, keys.publicKeyPem, keys.kid).signerMatch).toBeNull();
+    expect(verifyChain(["corrupt"], keys.publicKeyPem, keys.kid).signerMatch).toBeNull();
+  });
+  it("detects an entirely replaced chain, seal, and key through the expected fingerprint", () => {
+    const replacement = generateEvidenceKey();
+    const replacementKey = loadEvidencePrivateKey(replacement.privateKeyPem);
+    const records = [
+      createEvidenceChain(replacementKey, replacement.kid).append(receiptInput()).jws,
+    ];
+    const seal = sealRun(
+      { records, actor: "bot-test", grantId: "grant-test", iss: "ardur:space-test:evidence" },
+      replacementKey,
+      replacement.kid,
+    );
+    expect(verifySeal(seal, records, replacement.publicKeyPem, keys.kid)).toMatchObject({
+      ok: true,
+      signerMatch: "different_key",
+    });
+    expect(verifySeal(seal, records, replacement.publicKeyPem).signerMatch).toBe("no_expected_key");
+  });
   it("rejects an empty chain with a stable list-level failure", () => {
     expect(verifyChain([], keys.publicKeyPem)).toEqual({
+      signerMatch: null,
       ok: false,
       recordCount: 0,
       headReceiptId: null,
@@ -66,10 +103,91 @@ describe("chain and seal verification", () => {
       expect.objectContaining({ index: 0, code: "receipt_chain_head_mismatch" }),
     ]);
   });
+  it("reports records signed after revocation as untrusted; earlier ones verify", () => {
+    const before = new Date("2026-09-29T12:00:00Z");
+    const revokedAt = new Date("2026-09-29T13:00:00Z");
+    const after = new Date("2026-09-29T14:00:00Z");
+    const chain = createEvidenceChain(privateKey, keys.kid);
+    const early = chain.append(receiptInput({ now: before })).jws;
+    // Offline checkers that know nothing about the revocation date keep verifying.
+    expect(verifyChain([early], keys.publicKeyPem).ok).toBe(true);
+    expect(verifyChain([early], keys.publicKeyPem, undefined, { revokedAt }).ok).toBe(true);
+    const late = chain.append(receiptInput({ now: after })).jws;
+    const untrusted = verifyChain([early, late], keys.publicKeyPem, undefined, { revokedAt });
+    expect(untrusted.ok).toBe(false);
+    expect(untrusted.failures).toEqual([
+      expect.objectContaining({ index: 1, code: "signed_after_revocation" }),
+    ]);
+    // A seal dated before revocation verifies; one dated after does not.
+    const earlySeal = sealRun(
+      {
+        records: [early],
+        actor: "bot-test",
+        grantId: "grant-test",
+        iss: "ardur:space-test:evidence",
+        now: before,
+      },
+      privateKey,
+      keys.kid,
+    );
+    expect(verifySeal(earlySeal, [early], keys.publicKeyPem, undefined, { revokedAt }).ok).toBe(
+      true,
+    );
+    const lateSeal = sealRun(
+      {
+        records: [early],
+        actor: "bot-test",
+        grantId: "grant-test",
+        iss: "ardur:space-test:evidence",
+        now: after,
+      },
+      privateKey,
+      keys.kid,
+    );
+    const lateResult = verifySeal(lateSeal, [early], keys.publicKeyPem, undefined, { revokedAt });
+    expect(lateResult.ok).toBe(false);
+    expect(lateResult.failures).toEqual([
+      expect.objectContaining({ code: "signed_after_revocation" }),
+    ]);
+  });
+  it("treats the revocation second as untrusted at millisecond precision", () => {
+    // Receipts carry whole-second timestamps: anything signed in the second the
+    // revocation happened in could postdate it, so that second is untrusted.
+    const revokedAt = new Date("2026-09-29T13:00:00.100Z");
+    const chain = createEvidenceChain(privateKey, keys.kid);
+    const early = chain.append(receiptInput({ now: new Date("2026-09-29T12:59:59.900Z") })).jws;
+    // Signed one millisecond after the revocation, inside its second.
+    const late = chain.append(receiptInput({ now: new Date("2026-09-29T13:00:00.101Z") })).jws;
+    const untrusted = verifyChain([early, late], keys.publicKeyPem, undefined, { revokedAt });
+    expect(untrusted.ok).toBe(false);
+    expect(untrusted.failures).toEqual([
+      expect.objectContaining({ index: 1, code: "signed_after_revocation" }),
+    ]);
+    const seal = sealRun(
+      {
+        records: [early, late],
+        actor: "bot-test",
+        grantId: "grant-test",
+        iss: "ardur:space-test:evidence",
+        now: new Date("2026-09-29T13:00:00.101Z"),
+      },
+      privateKey,
+      keys.kid,
+    );
+    const sealResult = verifySeal(seal, [early, late], keys.publicKeyPem, undefined, { revokedAt });
+    expect(sealResult.ok).toBe(false);
+    expect(sealResult.failures).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "signed_after_revocation" })]),
+    );
+    // The second before the revocation stays trusted.
+    const before = verifyChain([early], keys.publicKeyPem, undefined, { revokedAt });
+    expect(before.ok).toBe(true);
+  });
   it("accepts the full sealed run", () => {
     const { records, seal } = run();
     const last = decodeCompact(records[3]).payload as { receipt_id: string };
     expect(verifyChain(records, keys.publicKeyPem)).toEqual({
+      signerMatch: "no_expected_key",
       ok: true,
       recordCount: 4,
       headReceiptId: last.receipt_id,

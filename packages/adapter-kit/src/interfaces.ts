@@ -1,4 +1,5 @@
-import type { CapacitySnapshot } from "@ardurbot/contracts";
+import type { CapacitySnapshot, ComputerLimitsObservation } from "@ardurbot/contracts";
+import type { GitChangesResult } from "./git-observation.js";
 import type { TerminalProvider } from "./terminal.js";
 import type {
   AdapterContext,
@@ -84,6 +85,11 @@ import type {
 } from "./types.js";
 
 export interface SandboxProvider {
+  /** Inspect the existing running computer; never activate it to report limits. */
+  appliedLimits?(
+    computer: ComputerRef,
+    context: AdapterContext,
+  ): Promise<ComputerLimitsObservation | null>;
   /** Target capacity; older hosted providers may explicitly leave it unreported. */
   capacity(context: AdapterContext): Promise<CapacitySnapshot>;
   terminal?: TerminalProvider;
@@ -152,6 +158,23 @@ export interface SandboxProvider {
     request: ComputerActionRequest,
     context: AdapterContext,
   ): Promise<ComputerActionResult>;
+  /**
+   * Read-only Git worktree observation (status, or one file's diff) rooted at the
+   * computer's own workspace. Absent means this provider cannot observe Git.
+   * Never runs Git through a shell and never widens into a command runner.
+   */
+  gitChanges?(
+    computer: ComputerRef,
+    request: { path?: string },
+    context: AdapterContext,
+  ): Promise<GitChangesResult>;
+  /**
+   * Whether this provider can serve `gitChanges` for the computer. Routing
+   * wrappers answer from the provider that owns the computer; a provider
+   * without `gitChanges` reports false. Lets the workspace offer the Git
+   * changes view only where it can work.
+   */
+  canObserveGit?(computer: ComputerRef, context: AdapterContext): Promise<boolean>;
   listFiles(
     computer: ComputerRef,
     path: string,
@@ -285,6 +308,9 @@ export interface JobPublisher {
 }
 
 export interface JobWorkerHost {
+  /** Close admission and wait for handlers within the deadline. Resume on a cancelled restart. */
+  drain?(timeoutMs: number): Promise<boolean>;
+  resume?(): void;
   start(handlers: BackgroundJobHandlers): Promise<void>;
   stop(): Promise<void>;
 }

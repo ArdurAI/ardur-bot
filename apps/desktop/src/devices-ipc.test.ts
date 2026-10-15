@@ -26,11 +26,14 @@ vi.mock("./local-stack.js", () => ({
 
 import { installDevices } from "./devices-ipc.js";
 
+const FAKE_DEVELOPMENT_TOKEN = "a".repeat(64);
+const FAKE_MANAGED_TOKEN = "b".repeat(64);
+
 beforeEach(() => {
   vi.clearAllMocks();
   fake.app.isPackaged = false;
   vi.stubEnv("ARDURBOT_DESKTOP_STACK_TOKEN", "");
-  fake.readToken.mockResolvedValue("test-managed-token");
+  fake.readToken.mockResolvedValue(FAKE_MANAGED_TOKEN);
   fake.fetch.mockResolvedValue({
     ok: true,
     json: async () => ({
@@ -78,7 +81,7 @@ function fixture(mode: DesktopInstanceMode = "existing", target = "http://127.0.
 describe("Devices main-process boundary", () => {
   it("reports existing-instance pairing as unavailable without the development token", async () => {
     const f = fixture();
-    expect(f.state()).toMatchObject({
+    expect(await f.state()).toMatchObject({
       available: false,
       mode: "existing",
       reason: "Phone pairing needs a home run by this app. Set up This computer to use it.",
@@ -89,37 +92,37 @@ describe("Devices main-process boundary", () => {
   it.each(["http://127.0.0.1:5173", "http://localhost:5173", "http://[::1]:5173"])(
     "allows development pairing only to the selected loopback origin %s",
     async (target) => {
-      vi.stubEnv("ARDURBOT_DESKTOP_STACK_TOKEN", "test-dev-token");
+      vi.stubEnv("ARDURBOT_DESKTOP_STACK_TOKEN", FAKE_DEVELOPMENT_TOKEN);
       const f = fixture("existing", target);
-      expect(f.state()).toMatchObject({ available: true });
+      expect(await f.state()).toMatchObject({ available: true });
       await expect(f.set(true)).resolves.toMatchObject({ enabled: true });
       expect(fake.fetch).toHaveBeenCalledWith(
         `${target}/local/device-listener`,
         expect.objectContaining({
-          headers: { [LOCAL_SETTINGS_TOKEN_HEADER]: "test-dev-token" },
+          headers: { [LOCAL_SETTINGS_TOKEN_HEADER]: FAKE_DEVELOPMENT_TOKEN },
           redirect: "error",
         }),
       );
       expect(f.listener.start).toHaveBeenCalledWith(expect.objectContaining({ target }));
       expect(fake.readToken).not.toHaveBeenCalled();
       expect(f.stack.matchesDesiredStack).not.toHaveBeenCalled();
-      expect(JSON.stringify(f.state())).not.toContain("test-dev-token");
+      expect(JSON.stringify(await f.state())).not.toContain(FAKE_DEVELOPMENT_TOKEN);
       await expect(f.set(false)).resolves.toMatchObject({ enabled: false });
     },
   );
   it.each(["http://192.168.1.2:5173", "https://example.test"])(
     "never sends the development token to %s",
     async (target) => {
-      vi.stubEnv("ARDURBOT_DESKTOP_STACK_TOKEN", "test-dev-token");
+      vi.stubEnv("ARDURBOT_DESKTOP_STACK_TOKEN", FAKE_DEVELOPMENT_TOKEN);
       const f = fixture("existing", target);
-      expect(f.state()).toMatchObject({ available: false });
+      expect(await f.state()).toMatchObject({ available: false });
       await expect(f.set(true)).rejects.toThrow();
       expect(fake.fetch).not.toHaveBeenCalled();
     },
   );
   it("never enables the development exception in a packaged app", async () => {
     fake.app.isPackaged = true;
-    vi.stubEnv("ARDURBOT_DESKTOP_STACK_TOKEN", "test-dev-token");
+    vi.stubEnv("ARDURBOT_DESKTOP_STACK_TOKEN", FAKE_DEVELOPMENT_TOKEN);
     const f = fixture();
     await expect(f.set(true)).rejects.toThrow();
     expect(fake.fetch).not.toHaveBeenCalled();
@@ -134,7 +137,7 @@ describe("Devices main-process boundary", () => {
     await expect(f.set(true)).rejects.toThrow("Start your home before pairing a phone.");
   });
   it("rejects other windows and subframes before reading credentials", async () => {
-    vi.stubEnv("ARDURBOT_DESKTOP_STACK_TOKEN", "test-dev-token");
+    vi.stubEnv("ARDURBOT_DESKTOP_STACK_TOKEN", FAKE_DEVELOPMENT_TOKEN);
     const f = fixture();
     await expect(
       f.set(true, {
@@ -145,4 +148,99 @@ describe("Devices main-process boundary", () => {
     await expect(f.set(true, { ...f.event, sender: {} } as IpcMainInvokeEvent)).rejects.toThrow();
     expect(fake.fetch).not.toHaveBeenCalled();
   });
+});
+
+it("publishes desktop hints only after binding and clears them when stopped", async () => {
+  vi.stubEnv("ARDURBOT_DESKTOP_STACK_TOKEN", FAKE_DEVELOPMENT_TOKEN);
+  const f = fixture();
+  await f.set(true);
+  expect(fake.fetch).toHaveBeenCalledWith(
+    "http://127.0.0.1:5173/local/device-listener-state",
+    expect.objectContaining({
+      body: JSON.stringify({ enabled: true, hints: [] }),
+      headers: {
+        [LOCAL_SETTINGS_TOKEN_HEADER]: FAKE_DEVELOPMENT_TOKEN,
+        "content-type": "application/json",
+      },
+    }),
+  );
+  const calls = fake.fetch.mock.calls.length;
+  await f.state();
+  expect(fake.fetch.mock.calls.length).toBe(calls + 1);
+  await f.set(false);
+  expect(fake.fetch.mock.calls.at(-1)?.[1].body).toBe(
+    JSON.stringify({ enabled: false, hints: [] }),
+  );
+});
+it("stops the desktop listener when the home refuses approval", async () => {
+  vi.stubEnv("ARDURBOT_DESKTOP_STACK_TOKEN", FAKE_DEVELOPMENT_TOKEN);
+  const f = fixture();
+  fake.fetch
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        certificate: "test-cert",
+        privateKey: "test-key",
+        certificateFingerprint: "test-pin",
+      }),
+    })
+    .mockResolvedValue({ ok: false });
+  await expect(f.set(true)).rejects.toThrow("Update your home");
+  expect(f.listener.stop).toHaveBeenCalledOnce();
+  expect(await f.state()).toMatchObject({ enabled: false });
+});
+
+it.each([
+  ["network failure", new Error("Fixture network unavailable")],
+  ["timeout", new DOMException("Fixture request timed out", "TimeoutError")],
+  ["HTTP refusal", null],
+])(
+  "keeps local listener state after a publication %s and retries on the next poll",
+  async (_, error) => {
+    vi.stubEnv("ARDURBOT_DESKTOP_STACK_TOKEN", FAKE_DEVELOPMENT_TOKEN);
+    const f = fixture();
+    await f.set(true);
+    fake.fetch.mockClear();
+    if (error) fake.fetch.mockRejectedValueOnce(error);
+    else fake.fetch.mockResolvedValueOnce({ ok: false });
+
+    await expect(f.state()).resolves.toMatchObject({ enabled: true, available: true });
+    expect(f.listener.stop).not.toHaveBeenCalled();
+    await expect(f.state()).resolves.toMatchObject({ enabled: true, available: true });
+    expect(fake.fetch).toHaveBeenCalledTimes(2);
+    expect(fake.fetch.mock.calls[1]?.[1]).toMatchObject({
+      body: JSON.stringify({ enabled: true, hints: [] }),
+      redirect: "error",
+    });
+  },
+);
+
+it.each([null, new Error("Fixture token temporarily unreadable")])(
+  "keeps managed listener state when its publication token is unavailable",
+  async (error) => {
+    fake.app.isPackaged = true;
+    const f = fixture("new", "http://127.0.0.1:45173");
+    await f.set(true);
+    fake.fetch.mockClear();
+    if (error) fake.readToken.mockRejectedValueOnce(error);
+    else fake.readToken.mockResolvedValueOnce(undefined);
+
+    await expect(f.state()).resolves.toMatchObject({ enabled: true, available: true });
+    expect(fake.fetch).not.toHaveBeenCalled();
+    expect(f.listener.stop).not.toHaveBeenCalled();
+    await expect(f.state()).resolves.toMatchObject({ enabled: true, available: true });
+    expect(fake.fetch).toHaveBeenCalledOnce();
+  },
+);
+
+it("rejects untrusted state polls before reading credentials or publishing", async () => {
+  const f = fixture("new", "http://127.0.0.1:45173");
+  await f.set(true);
+  fake.fetch.mockClear();
+  fake.readToken.mockClear();
+  await expect(
+    fake.handlers.get("desktop.devices.state")!({ ...f.event, sender: {} } as IpcMainInvokeEvent),
+  ).rejects.toThrow("Open Devices on your Mac.");
+  expect(fake.readToken).not.toHaveBeenCalled();
+  expect(fake.fetch).not.toHaveBeenCalled();
 });

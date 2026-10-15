@@ -2,6 +2,42 @@ import { describe, expect, it } from "vitest";
 import { executionBlocksUserTakeover, toComputerStatus } from "./computer-status.js";
 
 describe("toComputerStatus", () => {
+  it("separates limits from capacity and discards old observations", () => {
+    const computer = {
+      kind: "docker",
+      state: "running",
+      scope: "team",
+      controlHolder: "none",
+      homeRevision: "saved",
+    };
+    const limits = {
+      observedAt: new Date().toISOString(),
+      cpuCores: 1.5,
+      memoryBytes: 512_000_000,
+      processes: 100,
+    };
+    expect(toComputerStatus("bot", computer, null, undefined, limits)).toMatchObject({
+      appliedLimits: limits,
+      executionBoundary: "container",
+    });
+    expect(
+      toComputerStatus("bot", computer, null, undefined, {
+        ...limits,
+        observedAt: new Date(Date.now() - 60_001).toISOString(),
+      }).appliedLimits,
+    ).toBeNull();
+    expect(
+      toComputerStatus("bot", { ...computer, state: "stopped" }, null, undefined, limits)
+        .appliedLimits,
+    ).toBeNull();
+    expect(toComputerStatus("bot", { ...computer, kind: "ssh" }).executionBoundary).toBe(
+      "host-account",
+    );
+    expect(toComputerStatus("bot", { ...computer, kind: "desktop" }).executionBoundary).toBe(
+      "host-account",
+    );
+    expect(toComputerStatus("bot", computer).appliedLimits).toBeNull();
+  });
   it.each([
     { kind: "desktop", connectionId: null, host: true },
     { kind: "desktop", connectionId: "docker", host: false },

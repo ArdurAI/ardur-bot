@@ -8,6 +8,7 @@ import {
   FailureCategoryIdSchema,
   failureCategory,
   failureCategoryFromText,
+  RUN_STALLED_MESSAGE,
   runtimeNames,
 } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
@@ -30,6 +31,7 @@ export function ProviderErrorMessage({
   text,
   providerErrorKind,
   onChangeModel,
+  onRetry,
   runtimeProblem,
   catalog,
   onConnect,
@@ -42,6 +44,7 @@ export function ProviderErrorMessage({
   text: string;
   providerErrorKind?: ProviderErrorKind;
   onChangeModel?: () => void;
+  onRetry?: () => void;
   runtimeProblem?: RuntimeProblem;
   catalog?: ModelCatalogEntry[];
   onConnect?: () => void;
@@ -53,6 +56,20 @@ export function ProviderErrorMessage({
   onOpenSpaceModels?: () => void;
 }) {
   const { t, i18n } = useLingui();
+  if (text === RUN_STALLED_MESSAGE) {
+    return (
+      <>
+        <span className="min-w-0 flex-1">
+          <Trans>The bot stopped responding. Retry the run.</Trans>
+        </span>
+        {onRetry ? (
+          <Button variant="link" size="xs" onClick={onRetry}>
+            <Trans>Retry</Trans>
+          </Button>
+        ) : null}
+      </>
+    );
+  }
   if (runtimeProblem) {
     // A classified runtime refusal shows its category's sentence — the setting that said
     // no, with this bot's and the runtime's names — plus one button per table action.
@@ -134,6 +151,7 @@ export function ProviderErrorMessage({
     const provider =
       entry?.providerName ??
       catalog?.find((item) => item.provider === pin.provider)?.providerName ??
+      failureCategoryFromText(runtimeProblem.reason)?.params.provider ??
       pin.provider ??
       "an unset provider";
     const model = entry?.label ?? pin.modelId ?? "an unset model";
@@ -194,14 +212,14 @@ export function ProviderErrorMessage({
       const runtime = runtimeNames[pin.runtimeKind];
       const byId = FailureCategoryIdSchema.safeParse(runtimeProblem.reasonId);
       if (byId.success)
-        return i18n._({ ...failureCategoryMessages[byId.data], values: { runtime } });
+        return i18n._({ ...failureCategoryMessages[byId.data], values: { runtime, provider } });
       const legacy = failureCategoryFromText(runtimeProblem.reason, {
         runtimes: Object.values(runtimeNames),
       });
       if (legacy)
         return i18n._({
           ...failureCategoryMessages[legacy.id],
-          values: { runtime: legacy.params.runtime ?? runtime },
+          values: { ...legacy.params, runtime: legacy.params.runtime ?? runtime, provider },
         });
       return null;
     })();
@@ -216,14 +234,21 @@ export function ProviderErrorMessage({
             </Trans>
           )}
         </span>
-        {pin.runtimeKind === "pi" && runtimeProblem.code === "pin-credential-missing" ? (
+        {runtimeProblem.actions.includes("retry") && onRetry ? (
+          <Button variant="link" size="xs" className="text-destructive" onClick={onRetry}>
+            <Trans>Retry</Trans>
+          </Button>
+        ) : null}
+        {runtimeProblem.actions.includes("connect") ? (
           <Button variant="link" size="xs" className="text-destructive" onClick={onConnect}>
             <Trans>Connect</Trans>
           </Button>
         ) : null}
-        <Button variant="link" size="xs" className="text-destructive" onClick={onChangeModel}>
-          <Trans>Change pin</Trans>
-        </Button>
+        {runtimeProblem.actions.includes("change-pin") ? (
+          <Button variant="link" size="xs" className="text-destructive" onClick={onChangeModel}>
+            <Trans>Change pin</Trans>
+          </Button>
+        ) : null}
       </>
     );
   }

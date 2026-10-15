@@ -83,6 +83,8 @@ export function fixture() {
   };
   const tx = {
     $queryRaw: vi.fn(async () => []),
+    spaceModelPreference: { findFirst: vi.fn(async () => null) },
+    userModelCredential: { findFirst: vi.fn(async () => null) },
     usageRecord: {
       aggregate: vi.fn(async () => ({ _sum: { inputTokens: 0, outputTokens: 0 } })),
       findMany: vi.fn(async () => []),

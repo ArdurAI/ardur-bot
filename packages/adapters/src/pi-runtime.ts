@@ -6,6 +6,7 @@ import type {
   AgentRuntimeEvent,
   AgentToolCompletion,
   AgentToolExecutionResult,
+  AgentUsage,
   ConnectorTool,
 } from "@ardurbot/adapter-kit";
 import { RuntimePinError, runtimePinProblem, usableModelId } from "@ardurbot/contracts";
@@ -259,6 +260,7 @@ export class PiAgentRuntime implements AgentRuntime {
         const nestedAgents = new Set<Agent>();
         const completionModel = modelForCompletion(model, request.model.maxTokens);
         trackedBudget = toolCallBudgetFor(request.runId);
+        trackedBudget.count = Math.max(trackedBudget.count, request.priorToolCalls ?? 0);
         const host: ToolHost = {
           queue,
           request,
@@ -316,6 +318,7 @@ export class PiAgentRuntime implements AgentRuntime {
           }
         }
 
+        const checkpointUsage: AgentUsage[] = [];
         let agent: Agent;
         agent = new Agent({
           sessionId: conversationSessionId(request.threadId, request.botId),
@@ -330,6 +333,7 @@ export class PiAgentRuntime implements AgentRuntime {
               (next) => models.streamSimple(m, ctx, next),
               (usage) => {
                 host.usageRequestId = usage.request?.requestId;
+                checkpointUsage.push(usage);
                 queue.push({ type: "usage", ...usage });
               },
             ),
@@ -362,6 +366,17 @@ export class PiAgentRuntime implements AgentRuntime {
             return undefined;
           },
           prepareRequest: async () => {
+            if (
+              await request.saveCheckpoint?.(
+                pruneComputerScreenshotContext(
+                  pruneStalePageStateContext(agent.state.messages),
+                  request.model.maxImagesPerPrompt,
+                ),
+              )
+            ) {
+              agent.abort();
+              throw new Error("Turn suspended for restart.");
+            }
             if (initialInputPending) {
               initialInputPending = false;
               if (request.inputReceipt?.deliveryIds.length)
@@ -412,6 +427,22 @@ export class PiAgentRuntime implements AgentRuntime {
         agent.subscribe(async (event) => {
           if (event.type === "message_end") {
             await piSession?.appendMessage(event.message);
+            if (
+              (event.message.role === "assistant" &&
+                !["aborted", "error"].includes(event.message.stopReason)) ||
+              event.message.role === "toolResult"
+            ) {
+              if (
+                await request.saveCheckpoint?.(
+                  pruneComputerScreenshotContext(
+                    pruneStalePageStateContext(agent.state.messages),
+                    request.model.maxImagesPerPrompt,
+                  ),
+                  checkpointUsage.splice(0),
+                )
+              )
+                agent.abort();
+            }
           }
           if (event.type === "tool_execution_start") {
             if (host.toolCallBudget.exceeded) return;

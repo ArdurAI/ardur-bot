@@ -39,6 +39,9 @@ import {
   BotSecretName,
   BotSecretSubmission,
   CapabilityPreferencesSchema,
+  ChiefPlanStepActionInputSchema,
+  ChiefPlanStepOutcomeInputSchema,
+  ChiefPlanUpdateInputSchema,
   ContextBudgetsSchema,
   computerCapabilities,
   computerProfileNote,
@@ -71,6 +74,7 @@ import {
   applyJudgeDecision,
   askRoundForRun,
   assertTransition,
+  beforeDeadline,
   botInstructionText,
   botMessageAllowsSilence,
   capabilityAllowsTool,
@@ -102,12 +106,15 @@ import {
   peerEffectResourceRef,
   planActionGate,
   promptInvokesSkill,
+  RESTART_ACTION_MESSAGE,
+  RESTART_SESSION_MESSAGE,
   redactSecrets,
   redactTaskValue,
   renderGoalContext,
   resolveActionApprovalDetail,
   roomCoordinatorInstructions,
   runNotificationCategory,
+  StepDeadlineExceeded,
   type ToolCallStreak,
   toolRequiresApproval,
   toolRequiresExplicitApproval,
@@ -127,8 +134,11 @@ import type { Pool } from "@ardurbot/db";
 import {
   acceptDelegation,
   admitChiefAction,
+  admitGoalRunEffect,
   appendEventInTransaction,
   type ClaimedSteeringMessage,
+  cancelRunHeldByFrozenGoal,
+  claimGoalRunEffect,
   claimQuietBotMessages,
   confirmDispatchStop,
   createEvidenceStore,
@@ -142,11 +152,13 @@ import {
   goalBotAuthorityFingerprint,
   goalExhaustionReason,
   InvalidSpaceNameError,
+  isGoalRunEffectFrozen,
   isSteeringContinuationClientNonce,
   isTooManyDatabaseConnections,
   listDelegations,
   loadBotPresence,
   loadChiefSelectionContext,
+  loadGoalPlan,
   loadRunHistoryMessages,
   type McpServer,
   noteBotMessageReadUnconfirmed,
@@ -222,6 +234,7 @@ import {
   resolveAutoReviewProviderKind,
 } from "./auto-review.js";
 import { createAutoReviewProvider } from "./auto-review-factory.js";
+import { deliverPendingGoalBoardUpdates } from "./board/goal-delivery.js";
 import { BoardService } from "./board/service.js";
 import { BOARD_TOOL_NAMES, executeBoardTool, finishBoardRun } from "./board/tools.js";
 import { applyBoardToolAccess, botUpkeepPrompt, resolveBoardAccess } from "./board/upkeep.js";
@@ -244,6 +257,13 @@ import {
   browserSnapshotFromTool,
 } from "./browser-tools.js";
 import { agentConnectionTools, builtinAgentTools } from "./builtin-tools.js";
+import {
+  dispatchReadyGoalPlanSteps,
+  recordPlanStepOutcomeFromRun,
+  settlePlanStepFromRun,
+  updateProjectPlanFromRun,
+} from "./chief/project-plan.js";
+import { finishGoalFromRun } from "./chief/report-goal-done.js";
 import { chiefActivityFeed } from "./chief-activity.js";
 import {
   chiefVerificationRead,
@@ -292,7 +312,7 @@ import {
 import { observationToolResult, parseComputerActions } from "./computer-tools.js";
 import { checkpointRunComputerWorkspace, isHostAbsolutePath } from "./computer-workspace.js";
 import { sanitizeConnectorError } from "./connector-safety.js";
-import { assembleTurnContext } from "./context/assemble.js";
+import { assembleTurnContext, runIdentityText } from "./context/assemble.js";
 import { claimBotRun } from "./context/concurrency.js";
 import {
   persistBrokerContextUsage,
@@ -417,6 +437,8 @@ import {
 } from "./remote-execution.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import { agentHistoryTurn, loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
+import type { RestartDrain } from "./restart-drain.js";
+import { RESTART_DRAIN_MS } from "./restart-drain.js";
 import { logRunFailure } from "./run-failure-log.js";
 import { resolveRunModelPin } from "./run-model-pin.js";
 import {
@@ -429,12 +451,14 @@ import {
   secretPausedToolResult,
   tryCompleteConnectionWithCode,
 } from "./run-secret.js";
-import { brokerRunAllowance, recordRunUsage } from "./run-usage.js";
+import { brokerRunAllowance, recordFirstReply, recordRunUsage } from "./run-usage.js";
 import { runtimeComputerLocation } from "./runtime-computer-location.js";
+import { withRuntimeRecovery } from "./runtime-recovery.js";
 import type { DetachedRuntime, RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRegistry, detachedRuntimeRequest } from "./runtime-registry.js";
 import { reportRuntimeWaits, withRuntimeCleanup } from "./runtime-stream.js";
 import { accountRuntimeUsage } from "./runtime-usage.js";
+import { createRuntimeWatchdog, watchRuntimeActivity } from "./runtime-watchdog.js";
 import { NATIVE_HOST_OWNER_MESSAGE, nativeHostOwner } from "./runtimes/native-host.js";
 import { runtimeSession } from "./runtimes/runtime-session.js";
 import {
@@ -493,6 +517,13 @@ import {
 } from "./thread-artifacts.js";
 import { advanceToolCallLoopGuard } from "./tool-loop.js";
 import { textContentArg } from "./tool-text.js";
+import type { TurnCheckpoint } from "./turn-progress.js";
+import {
+  resumedTurnHistory,
+  saveTurnProgress,
+  suspendTurn,
+  TurnProgress,
+} from "./turn-progress.js";
 import {
   botMessageOutcomeFromMidTurn,
   clampUserProgressMessage,
@@ -559,6 +590,8 @@ function priorToolCalls(events: readonly { type: string; payload: unknown }[]) {
 
 const modelCredentialLocks = new Map<string, Promise<void>>();
 const READ_ONLY_AGENT_TOOLS = new Set([
+  // Submission owns its revision/outbox transaction; it must not hold itself as an external effect.
+  "finish_goal",
   "board_ready",
   "board_show",
   "computer_observe",
@@ -812,6 +845,7 @@ export interface ExecutorDeps {
   autoReview?: AutoReviewProvider;
   /** Aborted when createApp stop() begins so in-flight continueRun boot waits exit promptly. */
   shutdownSignal?: AbortSignal;
+  restartDrain?: RestartDrain;
 }
 
 function isAuditableToolResult(value: unknown): value is {
@@ -1081,6 +1115,32 @@ export function buildApprovalContinuation(
 }
 
 export function createRunExecutor(deps: ExecutorDeps) {
+  // A runtime abort still drains already-emitted text. Only service shutdown's
+  // deadline (after preparation was closed) interrupts persistence/cleanup waits.
+  const shutdownDeadline = new AbortController();
+  const onShutdown = () => {
+    if (deps.restartDrain?.preparationSignal?.aborted) shutdownDeadline.abort();
+  };
+  if (deps.shutdownSignal?.aborted) onShutdown();
+  else deps.shutdownSignal?.addEventListener("abort", onShutdown, { once: true });
+  const runStep = async <T>(step: string, work: () => Promise<T>): Promise<T> => {
+    try {
+      return await beforeDeadline(
+        step,
+        Date.now() + RESTART_DRAIN_MS,
+        work,
+        shutdownDeadline.signal,
+      );
+    } catch (error) {
+      if (error instanceof StepDeadlineExceeded) getLogger().warn("run.step.timed_out", { step });
+      throw error;
+    }
+  };
+  const finalizeTurn = (input: Parameters<ExecutorDeps["events"]["finalizeRun"]>[0]) => {
+    const deadlineAt = Date.now() + RESTART_DRAIN_MS;
+    return runStep("persist", () => deps.events.finalizeRun({ ...input, deadlineAt }));
+  };
+
   const evidenceRecorder = deps.evidenceRecorder ?? createNoopEvidenceRecorder();
   // Capture the injected runtime capability once for stable peer admission.
   const scriptedRuntimeAvailable = Boolean(deps.runtime?.describe().capabilities.scripted);
@@ -1279,6 +1339,19 @@ export function createRunExecutor(deps: ExecutorDeps) {
           ),
         expiresAt: Date.now() + config.limits.timeoutMs,
         active,
+        admit: async () => {
+          const goal = await deps.prisma.teamGoal.findFirst({
+            where: {
+              spaceId: source.spaceId,
+              userId: source.userId,
+              ...(source.goalId
+                ? { id: source.goalId }
+                : { rootTaskId: source.delegationRootTaskId ?? source.taskId }),
+            },
+            select: { status: true },
+          });
+          return !goal || goal.status === "running";
+        },
         record: async (usage) => {
           await recordAndForwardBrokerUsage(
             deps,
@@ -1491,7 +1564,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       runId,
     );
   };
-  return {
+  const executor = {
     refreshBrief,
     async resolveCompactionRuntime(threadId: string) {
       const run = await deps.prisma.run.findFirst({
@@ -1733,9 +1806,20 @@ export function createRunExecutor(deps: ExecutorDeps) {
     },
 
     async continueRun(runId: string, workerId: string) {
+      const leave = deps.restartDrain?.enter();
+      if (deps.restartDrain && !leave) return;
+      try {
+        return await executor.continueRunInternal(runId, workerId);
+      } finally {
+        leave?.();
+      }
+    },
+
+    async continueRunInternal(runId: string, workerId: string) {
       const run = await deps.prisma.run.findUnique({ where: { id: runId } });
       if (!run) return;
       if (isTerminal(run.status as RunStatus)) return;
+      const recoveringActiveTurn = ["running", "leased"].includes(run.status);
       if (!run.delegationId && !run.goalId) {
         const goal = await deps.prisma.teamGoal?.findFirst({
           where: {
@@ -1766,6 +1850,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
       }
+      // The admission freeze holds at resume, recovery and retry, not only at
+      // submission: a goal run that is queued, waiting, or holding an expired lease
+      // must not be claimed while the goal awaits owner review. In-flight leases
+      // survive and finish their call.
+      if (
+        (run.goalId || run.delegationRootTaskId) &&
+        (await cancelRunHeldByFrozenGoal(deps.prisma, run))
+      )
+        return;
       // A stop that lands while the run waits must hold, whatever startedAt says:
       // a retried run has started before, and claiming it again would re-lease it,
       // emit run.started and reach a provider call before the stop is confirmed.
@@ -1819,8 +1912,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
         botId: run.botId,
         threadId: run.threadId,
         now,
-        claim: (tx) =>
-          tx.run.updateMany({
+        claim: async (tx) => {
+          if (deps.restartDrain && !(await deps.restartDrain.admits(tx))) return { count: 0 };
+          return tx.run.updateMany({
             where: {
               id: runId,
               ...continueRunClaimFence(run),
@@ -1841,7 +1935,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               checkpoint: null,
               providerRetryAt: null,
             },
-          }),
+          });
+        },
       });
       if (leased.queued) {
         tracePoint(runId, "wait.capacity", { attempt: fence });
@@ -1884,11 +1979,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
       });
       if (started.count !== 1) return;
       current.queueWaitMs ??= Math.max(0, Date.now() - run.createdAt.getTime());
+      const preparationSignal = deps.restartDrain?.preparationSignal;
       if (!current.startedAt && !run.runtimeComputer && deps.placement) {
         try {
-          if (!(await deps.placement(runId, deps.shutdownSignal ?? new AbortController().signal)))
-            return;
+          const signals = [deps.shutdownSignal, preparationSignal].filter(
+            (signal): signal is AbortSignal => Boolean(signal),
+          );
+          if (!(await deps.placement(runId, AbortSignal.any(signals)))) return;
         } catch {
+          if (preparationSignal?.aborted) {
+            await requeueComputerRun(
+              deps,
+              runId,
+              workerId,
+              fence,
+              resumeCheckpoint,
+              heldForTakeover,
+            );
+            return;
+          }
           const placementAttempt = await deps.prisma.$transaction(async (tx) => {
             const active = await tx.run.updateMany({
               where: {
@@ -1904,7 +2013,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             return tx.attempt.create({ data: { runId, fence, status: "running" } });
           });
           if (placementAttempt) {
-            const failed = await deps.events.finalizeRun({
+            const failed = await finalizeTurn({
               onCommitted: () =>
                 tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "failed" }),
               spaceId: run.spaceId,
@@ -1967,6 +2076,42 @@ export function createRunExecutor(deps: ExecutorDeps) {
           throw error;
         });
 
+      let usageCollectionFailed = false;
+      const recordAttemptUsage = async (...args: Parameters<typeof recordRunUsage>) => {
+        try {
+          return await recordRunUsage(...args);
+        } catch (error) {
+          usageCollectionFailed = true;
+          throw error;
+        }
+      };
+      let checkpointWrite: Promise<void> = Promise.resolve();
+      let pendingCheckpointSaves = 0;
+      let checkpointSavesAbandoned = false;
+      // Only the drain deadline abandons saves; an ordinary runtime abort still flushes.
+      // Cleanup must not start another 60-second wait.
+      const settleProgressSaves = async (): Promise<boolean> => {
+        const signal = deps.restartDrain?.deadlineSignal;
+        if (!signal) {
+          await checkpointWrite;
+          return true;
+        }
+        if (signal.aborted) return pendingCheckpointSaves === 0;
+        let interrupt!: () => void;
+        const interrupted = new Promise<false>((resolve) => {
+          interrupt = () => resolve(false);
+          signal.addEventListener("abort", interrupt, { once: true });
+        });
+        try {
+          return await Promise.race([checkpointWrite.then(() => true), interrupted]);
+        } finally {
+          signal.removeEventListener("abort", interrupt);
+        }
+      };
+      const flushProgressSaves = async () => {
+        if (!(await settleProgressSaves())) throw deps.restartDrain?.deadlineSignal.reason;
+      };
+      let suspendedForRestart = false;
       let leaseValid = true;
       let lastLeaseCheckAt = 0;
       let retainComputerLease = false;
@@ -1976,6 +2121,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       let briefToolResults = "";
       let recordRecallCall: (() => Promise<unknown>) | undefined;
       let chiefFeed: ReturnType<typeof chiefActivityFeed> | undefined;
+      const runtimeWatchdog = createRuntimeWatchdog(runAbortController, shutdownDeadline.signal);
       const controlWatch = new AbortController();
       const controlWatcher = watchChiefControl({
         prisma: deps.prisma,
@@ -2275,7 +2421,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 spaceId: run.spaceId,
                 botId: bot.id,
                 computerId: bot.computerId,
-                instructions: botInstructionText(bot, accountContext),
+                instructions: [
+                  runIdentityText({ name: bot.name, pin: selected.pin }),
+                  botInstructionText(bot, accountContext),
+                ]
+                  .filter(Boolean)
+                  .join("\n\n"),
                 historyGeneration: thread.historyCompactionGeneration,
                 pin: selected.pin,
                 pinSource: run.runtimePinSource as RuntimePinSource | null,
@@ -2569,7 +2720,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
               },
             },
           });
-        const computer = await provisionComputer(deps, storedComputer.id, context, "bot");
+        const computer = await provisionComputer(
+          deps,
+          storedComputer.id,
+          preparationSignal
+            ? { ...context, signal: AbortSignal.any([context.signal, preparationSignal]) }
+            : context,
+          "bot",
+        );
         screenRelease = { computer, context };
         if (run.cancelRequestedAt) throw new DispatchStopRequested();
         await scheduleComputerSleep(deps, storedComputer.id);
@@ -2683,7 +2841,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               )
             : [];
         } catch (error) {
-          await workspaceCheckpoint.flush().catch(() => undefined);
+          await runStep("workspace", () => workspaceCheckpoint.flush()).catch(() => undefined);
           throw error;
         }
         const attachedFilesPrompt = currentTurnFilesInstruction(currentTurnFiles);
@@ -2750,7 +2908,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             : null;
         const goalContext = goalRoom
           ? await (async () => {
-              const [group, root, assignments] = await Promise.all([
+              const [group, root, assignments, plan] = await Promise.all([
                 deps.prisma.chatGroup.findUnique({
                   where: { id: goalRoom.groupId },
                   select: {
@@ -2773,6 +2931,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   orderBy: { createdAt: "asc" },
                   select: { actingName: true, status: true, createdAt: true },
                 }),
+                loadGoalPlan(deps.prisma, goalRoom.id),
               ]);
               return redactSecrets(
                 renderGoalContext({
@@ -2785,11 +2944,32 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   tokenLimit: goalRoom.tokenLimit,
                   untilAt: goalRoom.untilAt,
                   now: new Date(),
+                  plan,
                 }),
                 runSecrets,
               );
             })()
           : undefined;
+        // Ready plan steps are handed out mechanically before the model turn;
+        // the dispatcher is idempotent, so a restart cannot duplicate a handout.
+        if (goalRoom) {
+          await dispatchReadyGoalPlanSteps(
+            {
+              ...deps,
+              resolveDelegationPin: (target) =>
+                resolvePin(
+                  run,
+                  target,
+                  undefined,
+                  undefined,
+                  true,
+                  DELEGATION_LIMITS.reservationTokens,
+                ),
+            },
+            run,
+            goalRoom.id,
+          ).catch((error) => getLogger().error("goal plan dispatch", error));
+        }
         const peerGoal =
           peerReadOnly && run.goalId
             ? await deps.prisma.teamGoal.findUnique({
@@ -3072,6 +3252,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         };
         let pendingProgress = "";
         let tracedText = false;
+        let firstReplyObserved = false;
         let tracedSafe = false;
         let tracedRuntime = false;
         let lastProgressAt = 0;
@@ -3188,7 +3369,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             runId,
             tool: name,
             pause: async (reason, action) => {
-              await workspaceCheckpoint.flush();
+              await runStep("workspace", () => workspaceCheckpoint.flush());
+              await flushProgressSaves();
               const paused = await deps.events.pauseRunForInput({
                 spaceId: run.spaceId,
                 threadId: run.threadId,
@@ -3723,6 +3905,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   executionId,
                   consumedEffectIds,
                 );
+          if (applied?.frozen) return { error: GOAL_FROZEN_EFFECT_ERROR };
 
           const runAutoReview = async () => {
             if (!injectedReview && !checker) return;
@@ -3929,7 +4112,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const recordingError = await recordEvidence(allowKind, allowRuleId, allowDecisionId);
             if (recordingError) return recordingError;
             const claim = from === "approved" ? claimApprovedEffect : claimIntendedEffect;
-            if (await claim(deps.prisma, applied!.effect.id)) {
+            const claimed =
+              run.goalId || run.delegationRootTaskId
+                ? await claimGoalRunEffect(deps.prisma, {
+                    spaceId: run.spaceId,
+                    userId: run.userId,
+                    goalId: run.goalId,
+                    rootTaskId: run.delegationRootTaskId,
+                    effectId: applied!.effect.id,
+                    from,
+                  })
+                : await claim(deps.prisma, applied!.effect.id);
+            if (claimed) {
               claimedEffect = true;
               return undefined;
             }
@@ -3951,8 +4145,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
               // Another worker owns the run now; exit without leaving a local pause card.
               return pauseForApproval();
             }
-            await workspaceCheckpoint.flush();
+            await runStep("workspace", () => workspaceCheckpoint.flush());
             await bindDeviceApproval(deps.prisma, run, applied!.effect);
+            await flushProgressSaves();
             const paused = await deps.events.pauseRunForInput({
               helperDelegationId: helperToolDelegations.get(executionId),
               spaceId: run.spaceId,
@@ -5008,6 +5203,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 }
               }
               const recordedEffect = await recordEffect(deps, run, name, effectKey, args);
+              if (recordedEffect.frozen) return { error: GOAL_FROZEN_EFFECT_ERROR };
               if (recordedEffect?.duplicate) {
                 const gate = resolveDuplicateEffectGate(recordedEffect.effect, name);
                 if (gate.action === "execute") {
@@ -5064,6 +5260,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               });
             }
             const recordedForAsk = await recordEffect(deps, run, name, effectKey, args);
+            if (recordedForAsk.frozen) return { error: GOAL_FROZEN_EFFECT_ERROR };
             const missingSecretAction = resolveMissingRunSecretAction(recordedForAsk.effect);
             if (missingSecretAction.action === "return") return missingSecretAction.result;
             const connectionId = args.connectionId ? String(args.connectionId) : undefined;
@@ -5115,7 +5312,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if (!(await renewRunLease(deps, runId, workerId, fence))) {
               return pauseForSecret();
             }
-            await workspaceCheckpoint.flush();
+            await runStep("workspace", () => workspaceCheckpoint.flush());
+            await flushProgressSaves();
             const paused = await deps.events.pauseRunForInput({
               spaceId: run.spaceId,
               threadId: run.threadId,
@@ -5466,7 +5664,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 });
               }
             }
-            await flushProgress();
+            await runStep("progress", () => flushProgress());
             await publishMidTurnNarration();
             await publishMessage(
               deps,
@@ -5601,6 +5799,107 @@ export function createRunExecutor(deps: ExecutorDeps) {
               },
             );
             return finish(result);
+          }
+          if (name === "finish_goal") {
+            if (!thread.groupId || !goalRoom)
+              return finish({ error: "finish_goal requires an active group goal" });
+            const submitted = await finishGoalFromRun(deps.prisma, {
+              goalId: goalRoom.id,
+              spaceId: run.spaceId,
+              userId: run.userId,
+              coordinatorBotId: run.botId,
+              threadId: thread.id,
+              summary: String(args.summary ?? ""),
+              secrets: runSecrets,
+              support: Array.isArray(args.support)
+                ? args.support.slice(0, 20).map((entry) => ({
+                    conditionId: String(entry?.conditionId ?? ""),
+                    support: Array.isArray(entry?.support) ? entry.support : [],
+                  }))
+                : undefined,
+            });
+            if (submitted.ok)
+              void deliverPendingGoalBoardUpdates({
+                prisma: deps.prisma,
+                dataDir: deps.dataDir ?? "./data",
+                lockPool: deps.lockPool,
+              }).catch((error) => getLogger().error("goal board delivery", error));
+            return finish(submitted);
+          }
+          if (name === "update_project_plan") {
+            if (!thread.groupId || !goalRoom)
+              return finish({ error: "update_project_plan requires an active group goal" });
+            const parsed = ChiefPlanUpdateInputSchema.safeParse(args);
+            if (!parsed.success)
+              return finish({ error: "update_project_plan needs baseRevision and steps" });
+            const updated = await updateProjectPlanFromRun(
+              {
+                ...deps,
+                resolveDelegationPin: (target) =>
+                  resolvePin(
+                    run,
+                    target,
+                    undefined,
+                    undefined,
+                    true,
+                    DELEGATION_LIMITS.reservationTokens,
+                  ),
+              },
+              run,
+              { goalId: goalRoom.id, threadId: thread.id, raw: parsed.data, secrets: runSecrets },
+            );
+            if (!updated.ok) return finish(updated);
+            return finish({
+              ok: true,
+              revision: updated.revision,
+              dispatched: updated.dispatched,
+              text: `Plan updated to revision ${updated.revision}. ${updated.dispatched} ready step(s) handed out.`,
+            });
+          }
+          if (name === "record_plan_step_outcome") {
+            if (!thread.groupId || !goalRoom)
+              return finish({ error: "record_plan_step_outcome requires an active group goal" });
+            const parsed = ChiefPlanStepOutcomeInputSchema.safeParse(args);
+            if (!parsed.success)
+              return finish({
+                error: "record_plan_step_outcome needs stepId, baseRevision and support",
+              });
+            const recorded = await recordPlanStepOutcomeFromRun(
+              {
+                ...deps,
+                resolveDelegationPin: (target) =>
+                  resolvePin(
+                    run,
+                    target,
+                    undefined,
+                    undefined,
+                    true,
+                    DELEGATION_LIMITS.reservationTokens,
+                  ),
+              },
+              run,
+              { goalId: goalRoom.id, threadId: thread.id, raw: parsed.data },
+            );
+            if (!recorded.ok) return finish(recorded);
+            return finish({
+              ok: true,
+              dispatched: recorded.dispatched,
+              text: `Step outcome recorded. ${recorded.dispatched} newly ready step(s) handed out.`,
+            });
+          }
+          if (name === "set_plan_step") {
+            if (!thread.groupId || !goalRoom)
+              return finish({ error: "set_plan_step requires an active group goal" });
+            const parsed = ChiefPlanStepActionInputSchema.safeParse(args);
+            if (!parsed.success)
+              return finish({ error: "set_plan_step needs stepId, baseRevision and an action" });
+            const settled = await settlePlanStepFromRun(deps, run, {
+              goalId: goalRoom.id,
+              threadId: thread.id,
+              raw: parsed.data,
+            });
+            if (!settled.ok) return finish(settled);
+            return finish({ ok: true, text: `Step ${String(args.stepId ?? "")} updated.` });
           }
           if (name === "ask_members") {
             if (!thread.groupId || !roomCanAsk)
@@ -5891,6 +6190,91 @@ export function createRunExecutor(deps: ExecutorDeps) {
           // The first lease has no earlier tool calls. A settled card's commandId is loaded on
           // its own, never its stdout/stderr, only to let adoption skip a card that already
           // finished, never to feed the model.
+          const savedTurn = run.turnCheckpoint
+            ? (JSON.parse(
+                deps.secretStore.load(run.turnCheckpoint, `turn:${runId}`),
+              ) as TurnCheckpoint)
+            : undefined;
+          if (savedTurn && savedTurn.version !== 1)
+            throw new Error("Unsupported turn checkpoint version.");
+          const resumeTurn =
+            savedTurn && (savedTurn.suspended || recoveringActiveTurn) ? savedTurn : undefined;
+          const turnProgress = new TurnProgress(
+            resumeTurn ?? {
+              runtimeKind: selected.pin.runtimeKind,
+              pin: selected.pin,
+              history: [],
+              prompt: task.prompt,
+            },
+          );
+          // A failed write must not poison later saves: snapshots are cumulative, so the next
+          // save supersedes a lost one. Callers that await still see that save's own failure.
+          const saveProgress = () => {
+            const snapshot = redactTaskValue(turnProgress.snapshot(), runSecrets);
+            pendingCheckpointSaves++;
+            const write = checkpointWrite
+              .then(async () => {
+                if (checkpointSavesAbandoned) return;
+                const stored = await deps.secretStore.put(
+                  JSON.stringify(snapshot),
+                  context,
+                  `turn:${runId}`,
+                );
+                await saveTurnProgress(deps.prisma, runId, workerId, fence, stored.ciphertext);
+                tracePoint(runId, "restart.saved", { attempt: fence });
+              })
+              .finally(() => {
+                pendingCheckpointSaves--;
+              });
+            checkpointWrite = write.catch((error: unknown) => {
+              getLogger().warn("restart.turn.checkpoint.failed", {
+                runId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            });
+            return write;
+          };
+          // Boundaries that need no happens-before edge (pre-model, post-effect, done) queue
+          // the save off the turn's critical path; the chain preserves write order and the
+          // flush before finalize settles every queued write while the lease is still held.
+          const queueProgressSave = () => {
+            void saveProgress().catch(() => {});
+          };
+          const suspendAtBoundary = async () => {
+            if (!deps.restartDrain || !(await deps.restartDrain.requested())) return false;
+            turnProgress.snapshot().suspended = true;
+            await saveProgress();
+            suspendedForRestart = await suspendTurn(deps.prisma, runId, workerId, fence);
+            if (suspendedForRestart) {
+              leaseValid = false;
+              runAbortController?.abort();
+              tracePoint(runId, "restart.suspended", { attempt: fence });
+              getLogger().info("restart.turn.saved", { runId, failed: 0, cancelled: 0 });
+              await deps.events.append({
+                spaceId: run.spaceId,
+                threadId: run.threadId,
+                botId: run.botId,
+                runId,
+                type: "run.suspended",
+                payload: { reason: "restart" },
+              });
+            }
+            return suspendedForRestart;
+          };
+          if (resumeTurn) {
+            turnProgress.snapshot().suspended = false;
+            await deps.events.append({
+              spaceId: run.spaceId,
+              threadId: run.threadId,
+              botId: run.botId,
+              runId,
+              type: "run.resumed",
+              payload: { freshSession: true, notice: RESTART_SESSION_MESSAGE },
+            });
+            messageSegments.push({ kind: "progress", text: RESTART_SESSION_MESSAGE });
+            getLogger().info("restart.turn.resumed", { runId, freshSession: true });
+            tracePoint(runId, "restart.resumed", { attempt: fence });
+          }
           const [priorToolEvents, priorFinishedCommandIds] =
             fence > 1
               ? await Promise.all([
@@ -5914,6 +6298,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 ])
               : [[], new Set<string>()];
           const priorCalls = priorToolCalls(priorToolEvents);
+          const priorRecordedCalls = new Map(priorCalls.recorded);
           for (const executionId of priorCalls.finished) finishedCommands.add(executionId);
           adoptOpenCommands(
             openCommands,
@@ -6060,7 +6445,52 @@ export function createRunExecutor(deps: ExecutorDeps) {
             let chiefUncertain = true;
             let chiefFailed = false;
             try {
+              const digest = deps.secretStore.digest("restart-effect", stableJsonValue(args));
+              const replay = turnProgress.replay(name, digest);
+              const recordedCommand =
+                name === "shell" &&
+                (resumes !== undefined ||
+                  sameToolCall(priorRecordedCalls.get(executionId), {
+                    name,
+                    argumentDigest: deps.secretStore.digest(
+                      "tool-call-arguments",
+                      stableJsonValue(args),
+                    ),
+                  }));
+              if (replay.kind === "completed" && !recordedCommand) return replay.result;
+              if (replay.kind === "uncertain" && !recordedCommand) {
+                await flushProgressSaves();
+                const paused = await deps.events.pauseRunForInput({
+                  spaceId: run.spaceId,
+                  threadId: run.threadId,
+                  botId: run.botId,
+                  runId,
+                  attemptId: attempt.id,
+                  leaseOwner: workerId,
+                  leaseFence: fence,
+                  blocks: [
+                    {
+                      kind: "ask",
+                      text: RESTART_ACTION_MESSAGE,
+                      status: "pending",
+                    },
+                  ],
+                });
+                if (!paused)
+                  throw new Error("Turn ownership was lost while checking an interrupted action.");
+                return pauseForApproval();
+              }
+              if (await suspendAtBoundary()) throw new Error("Turn suspended for restart.");
+              turnProgress.beginEffect(executionId, name, digest);
+              await saveProgress();
               const result = await commandRecording.invoke(name, args, executionId, applyTool);
+              if (isToolPauseResult(result)) turnProgress.discardEffect(executionId);
+              else if (
+                !(result && typeof result === "object" && "uncertain" in result && result.uncertain)
+              )
+                turnProgress.finishEffect(executionId, redactTaskValue(result, runSecrets));
+              queueProgressSave();
+              await suspendAtBoundary();
               chiefUncertain = Boolean(
                 result && typeof result === "object" && "uncertain" in result && result.uncertain,
               );
@@ -6096,9 +6526,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
             executionId: string,
             delegationId?: string,
           ) => {
-            await toolCallTurn(executionId);
-            await recordToolCall({ name, args, executionId, delegationId });
-            return runRecordedTool(name, args, executionId);
+            runtimeWatchdog.touch();
+            const finishActivity =
+              name === "shell" ? runtimeWatchdog.beginTool() : () => runtimeWatchdog.touch();
+            try {
+              await toolCallTurn(executionId);
+              await recordToolCall({ name, args, executionId, delegationId });
+              return await runRecordedTool(name, args, executionId);
+            } finally {
+              finishActivity();
+            }
           };
           const runRuntime: AgentRuntime["run"] = commandReplay
             ? () => commandReplayEvents(commandReplay, runId, runRecordedTool)
@@ -6321,6 +6758,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const turnContext = await assembleTurnContext({
             peerReadOnly,
             instructions: comparisonRun ? "" : stableInstructions,
+            // Controlled comparisons deliberately have no bot persona or stable instructions.
+            identity: comparisonRun ? undefined : { name: bot.name, pin: selected.pin },
             tools: comparisonRun ? "none" : tools,
             brief: groupBrief?.content,
             summary: comparisonRun ? null : compactedHistory.summary,
@@ -6440,10 +6879,28 @@ export function createRunExecutor(deps: ExecutorDeps) {
             });
           if (await checkDelegationExecution(deps.prisma, runId)) throw new DispatchStopRequested();
           context.signal.throwIfAborted();
+          turnProgress.snapshot().history = resumeTurn?.history ?? turnContext.history;
+          turnProgress.snapshot().prompt = resumeTurn?.prompt ?? turnContext.prompt;
+          queueProgressSave();
+          if (await suspendAtBoundary()) return;
           const runtimeEvents = withComparisonInput(
             deps,
             run,
-            runRuntime,
+            comparisonRun || scripted || commandReplay
+              ? runRuntime
+              : withRuntimeRecovery(
+                  runRuntime,
+                  turnProgress,
+                  saveProgress,
+                  (retry, waitMs, error) => {
+                    runtimeWatchdog.touch();
+                    logRunFailure("runtime recovery scheduled", error, runSecrets, {
+                      runId,
+                      retry,
+                      waitMs,
+                    });
+                  },
+                ),
             context,
             approvalContinuation,
           )(
@@ -6483,10 +6940,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 }
               },
               sourceMessageId: run.sourceMessageId,
-              prompt: turnContext.prompt,
+              prompt: resumeTurn?.prompt ?? turnContext.prompt,
               instructions: turnContext.instructions,
               stablePrefix: turnContext.stablePrefix,
-              history: turnContext.history,
+              history: resumeTurn ? resumedTurnHistory(resumeTurn) : turnContext.history,
               stableHistory: turnContext.stableHistory,
               currentTurnImages: foldedImages.length
                 ? [...(currentTurnImages ?? []), ...foldedImages]
@@ -6494,6 +6951,22 @@ export function createRunExecutor(deps: ExecutorDeps) {
               tools: selected.pin.runtimeKind === "antigravity" ? "none" : tools,
               model: resolved,
               resumeFromCheckpoint: takeoverResume?.checkpoint,
+              restartState: resumeTurn?.runtimeState,
+              priorToolCalls: resumeTurn?.effects.length,
+              saveCheckpoint: async (state, usage = []) => {
+                for (const observation of usage) {
+                  const recorded = await recordAttemptUsage(deps, run, observation);
+                  if (!comparisonRun && recorded) {
+                    recordContextUsage(turnContext.snapshot, recorded);
+                    await saveContextSnapshot();
+                  }
+                }
+                if (state !== undefined) turnProgress.runtimeState = state;
+                turnProgress.snapshot().history = turnContext.history;
+                turnProgress.snapshot().prompt = turnContext.prompt;
+                await saveProgress();
+                return suspendAtBoundary();
+              },
               nativeSession: undefined,
               nativeCwd: computerRunsOnHost(computer) ? computer.providerRef : undefined,
               onRuntimeInfo: async (info) => {
@@ -6532,7 +7005,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
               emptyResponseText,
               authorizeTool: scripted
                 ? undefined
-                : async (name) => ((await checkCeiling(name)) ? undefined : pauseForApproval()),
+                : async (name) => {
+                    if (await suspendAtBoundary()) throw new Error("Turn suspended for restart.");
+                    return (await checkCeiling(name)) ? undefined : pauseForApproval();
+                  },
               admitHelper: async (executionId, name, task, card) => {
                 if (peerReadOnly) {
                   await updateTaskCard(deps, {
@@ -6598,7 +7074,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 return recordedApplyTool(name, args, executionId, id);
               },
               recordHelperUsage: async (id, usage) => {
-                await recordRunUsage(deps, { ...run, delegationId: id }, usage);
+                await recordAttemptUsage(deps, { ...run, delegationId: id }, usage);
               },
               finishHelper: (id, status, result) =>
                 completeHelper(
@@ -6646,6 +7122,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             },
             context,
           );
+          runtimeWatchdog.touch();
           const observedEvents = reportRuntimeWaits(
             scripted || commandReplay ? runtimeEvents : traceRuntime(runId, fence, runtimeEvents),
             runtimeWaits,
@@ -6660,7 +7137,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   accounting: runtime.describe().capabilities.usageAccounting,
                   signal: context.signal,
                   record: async (event) => {
-                    const recorded = await recordRunUsage(
+                    const recorded = await recordAttemptUsage(
                       deps,
                       { ...run, delegationId: event.delegationId ?? run.delegationId },
                       event,
@@ -6671,7 +7148,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     }
                   },
                 });
-          for await (const event of withRuntimeCleanup(accountedEvents, runAbortController)) {
+          for await (const event of withRuntimeCleanup(
+            watchRuntimeActivity(accountedEvents, runtimeWatchdog),
+            runAbortController,
+          )) {
             if (approvalPausePending) return;
             if (!leaseValid) return;
             const now = Date.now();
@@ -6692,6 +7172,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               }
               const releasedHold = takeoverCheckpointOf(still.checkpoint);
               if (heldForTakeover && releasedHold) {
+                await flushProgressSaves();
                 await requeueComputerRun(deps, runId, workerId, fence, releasedHold, false);
                 leaseValid = false;
                 runAbortController?.abort();
@@ -6705,6 +7186,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
             if (event.type === "text") {
               if (publishedChiefResult) continue;
+              if (!firstReplyObserved && event.text.trim()) {
+                await recordFirstReply(
+                  deps.prisma,
+                  { id: runId, spaceId: run.spaceId, userId: run.userId },
+                  { leaseOwner: workerId, leaseFence: fence },
+                  event.text,
+                );
+                firstReplyObserved = true;
+              }
               if (event.text && !tracedText) {
                 tracedText = true;
                 tracePoint(runId, "runtime.text", { attempt: fence });
@@ -6729,7 +7219,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               pendingProgress += safeDelta;
               const now = Date.now();
               if (!scripted && pendingProgress && now - lastProgressAt >= 250) {
-                await flushProgress();
+                await runStep("progress", () => flushProgress());
               }
             } else if (event.type === "progress") {
               if (publishedChiefResult) continue;
@@ -6788,7 +7278,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 id: action.id,
                 label: redactSecrets(action.label, runSecrets),
               }));
-              await workspaceCheckpoint.flush();
+              await runStep("workspace", () => workspaceCheckpoint.flush());
+              await flushProgressSaves();
               const paused = await deps.events.pauseRunForInput({
                 spaceId: run.spaceId,
                 threadId: run.threadId,
@@ -6849,7 +7340,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               await publishMessage(deps, run, "bot", [
                 { kind: "computer", state: "Needs you", text: safeReason },
               ]);
-              await workspaceCheckpoint.flush();
+              await runStep("workspace", () => workspaceCheckpoint.flush());
+              await flushProgressSaves();
               if (!(await holdComputerExecutionLeaseForTakeover(deps.prisma, computerLease))) {
                 throw new Error("Computer lease expired before takeover");
               }
@@ -6878,7 +7370,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             } else if (event.type === "tool") {
               // Preserve event ordering when the throttle still holds recent narration: the
               // client must see that text before the tool call it describes.
-              await flushProgress();
+              await runStep("progress", () => flushProgress());
               // Promote streamed narration into a durable, replyable chat message before
               // tools continue, so long turns do not look stalled and stay replyable.
               if (event.name !== "message_user") {
@@ -6897,10 +7389,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 if (messageSegments.length > 0) {
                   await publishMessage(deps, run, "bot", redactBlocks(messageSegments, runSecrets));
                 }
-                await workspaceCheckpoint.flush();
+                await runStep("workspace", () => workspaceCheckpoint.flush());
                 terminalCheckpointComplete = true;
+                await flushProgressSaves();
                 const stuckText = `I got stuck calling ${humanizeToolName(event.name)} with the same input ${toolCallStreak.count} times in a row without making progress, so I stopped early. Try rephrasing this, or ask me to try a different approach.`;
-                const stopped = await deps.events.finalizeRun({
+                const stopped = await finalizeTurn({
                   onCommitted: () =>
                     tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "success" }),
                   spaceId: run.spaceId,
@@ -6997,7 +7490,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 },
               });
             } else if (event.type === "usage") {
-              const recorded = await recordRunUsage(
+              const recorded = await recordAttemptUsage(
                 deps,
                 { ...run, delegationId: event.delegationId ?? run.delegationId },
                 event,
@@ -7022,6 +7515,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 if (stop) runAbortController?.abort(new DispatchStopRequested());
               }
             } else if (event.type === "done") {
+              const state = turnProgress.snapshot().runtimeState;
+              if (state === undefined || typeof state === "string") {
+                turnProgress.runtimeState = event.text ?? assembled;
+                queueProgressSave();
+              }
+              if (await suspendAtBoundary()) return;
               if (!assembled && event.text) {
                 if (publishedMidTurnUserMessage || discardedMidTurnNarration) {
                   // Mid-turn narration was already published or discarded (routines).
@@ -7036,10 +7535,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
 
           tracePoint(runId, "runtime.finished", { attempt: fence });
-          if (approvalPausePending || !leaseValid) return;
+          if (approvalPausePending || !leaseValid || suspendedForRestart) return;
+          if (deps.shutdownSignal?.aborted && (await suspendAtBoundary())) return;
           approvedEffectReplays.assertDrained();
           pendingProgress += progressRedactor.finish();
-          await flushProgress();
+          await runStep("progress", () => flushProgress());
+          if (deps.shutdownSignal?.aborted) return;
 
           for (const turn of comparisonRun ? [] : (script ?? [])) {
             for (const file of turn.files ?? []) {
@@ -7076,8 +7577,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
           }
 
-          await workspaceCheckpoint.flush();
+          await runStep("workspace", () => workspaceCheckpoint.flush());
           terminalCheckpointComplete = true;
+          await flushProgressSaves();
 
           flushPendingTools();
           // Only routine runs are instructed to emit NO_RESPONSE. Other
@@ -7117,12 +7619,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (containsSecret(text, runSecrets)) {
             throw new Error("refusing to persist a secret in the thread");
           }
-          if (!(await renewRunLease(deps, runId, workerId, fence))) return;
+          if (!(await runStep("lease", () => renewRunLease(deps, runId, workerId, fence)))) return;
           const botMessageOutcome =
             run.trigger === "bot_message"
               ? botMessageOutcomeFromMidTurn(text, midTurnUserTexts)
               : null;
-          const completed = await deps.events.finalizeRun({
+          const completed = await finalizeTurn({
             onCommitted: () =>
               tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "success" }),
             spaceId: run.spaceId,
@@ -7138,51 +7640,59 @@ export function createRunExecutor(deps: ExecutorDeps) {
             markUnread: !run.delegationId && completionMarksUnread(run.trigger, text),
           });
           if (!completed) return;
-          if (run.boardItemId)
-            await finishBoardRun(
-              deps,
-              {
-                userId: run.userId,
-                spaceId: run.spaceId,
-                botId: run.botId,
-                runId,
-                signal: context.signal,
-              },
-              text,
-            ).catch(() => getLogger().warn("Board outcome could not be recorded."));
-          if (completed.continuationRunId) {
-            await deps.jobs
-              .enqueue(runContinueJob(completed.continuationRunId))
-              .catch((error) => getLogger().error("steering continuation enqueue", error));
-          }
-          if (botMessageOutcome) {
-            // Prefer the final reply. If the turn only posted mid-turn progress, return that
-            // text explicitly as status. Delivery uses a stable auto-outcome key; mark
-            // botOutcomeReturnedAt only after a successful (or intentionally skipped) return
-            // so a crash or failed delivery stays visible to the reconciler.
-            await returnBotMessageOutcome(
-              deps,
-              { ...run, sourceMessageId: run.sourceMessageId },
-              { id: bot.id, name: bot.name },
-              botMessageOutcome.text,
-              botMessageOutcome.intent,
-            ).catch((error) => getLogger().error("bot message result return", error));
-          }
-          const notifyBody = completionNotificationPreview(text);
-          if (!completed.continuationRunId) {
-            await notifyRun(deps, run, {
-              kind: "completion",
-              title: `${bot.name} finished`,
-              body: notifyBody || "Finished.",
-              botId: bot.id,
-              threadId: thread.id,
-            });
-          }
-        } catch (error) {
-          const stopping = await deps.prisma.run.findUnique({
-            where: { id: runId },
-            select: { cancelRequestedAt: true },
+          await runStep("delivery", async () => {
+            if (completed.continuationRunId) {
+              await deps.jobs
+                .enqueue(runContinueJob(completed.continuationRunId))
+                .catch((error) => getLogger().error("steering continuation enqueue", error));
+            }
+            if (run.boardItemId)
+              await finishBoardRun(
+                deps,
+                {
+                  userId: run.userId,
+                  spaceId: run.spaceId,
+                  botId: run.botId,
+                  runId,
+                  signal: context.signal,
+                },
+                text,
+              ).catch(() => getLogger().warn("Board outcome could not be recorded."));
+            if (botMessageOutcome) {
+              // Prefer the final reply. If the turn only posted mid-turn progress, return that
+              // text explicitly as status. Delivery uses a stable auto-outcome key; mark
+              // botOutcomeReturnedAt only after a successful (or intentionally skipped) return
+              // so a crash or failed delivery stays visible to the reconciler.
+              await returnBotMessageOutcome(
+                deps,
+                { ...run, sourceMessageId: run.sourceMessageId },
+                { id: bot.id, name: bot.name },
+                botMessageOutcome.text,
+                botMessageOutcome.intent,
+              ).catch((error) => getLogger().error("bot message result return", error));
+            }
+            const notifyBody = completionNotificationPreview(text);
+            if (!completed.continuationRunId) {
+              await notifyRun(deps, run, {
+                kind: "completion",
+                title: `${bot.name} finished`,
+                body: notifyBody || "Finished.",
+                botId: bot.id,
+                threadId: thread.id,
+              });
+            }
+          }).catch((error) => {
+            if (!(error instanceof StepDeadlineExceeded) && !shutdownDeadline.signal.aborted)
+              throw error;
           });
+        } catch (error) {
+          if (suspendedForRestart || deps.shutdownSignal?.aborted) return;
+          const stopping = await runStep("failure-state", () =>
+            deps.prisma.run.findUnique({
+              where: { id: runId },
+              select: { cancelRequestedAt: true },
+            }),
+          );
           if (error instanceof DispatchStopRequested || stopping?.cancelRequestedAt) {
             // A genuine runtime or provider failure while stopping is still the handoff's
             // real cause: record it once so the stop confirmation labels the handoff
@@ -7206,9 +7716,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
             return;
           }
-          if (!terminalCheckpointComplete) {
-            await workspaceCheckpoint.flush().catch(() => undefined);
+          if (error instanceof StepDeadlineExceeded) runAbortController?.abort(error);
+          if (!terminalCheckpointComplete && !(error instanceof StepDeadlineExceeded)) {
+            await runStep("workspace", () => workspaceCheckpoint.flush()).catch(() => undefined);
           }
+          await flushProgressSaves();
           const message = redactSecrets(
             error instanceof Error ? error.message : String(error),
             runSecrets,
@@ -7286,7 +7798,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               return;
             }
           }
-          const failed = await deps.events.finalizeRun({
+          const failed = await finalizeTurn({
             onCommitted: () =>
               tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "failed" }),
             spaceId: run.spaceId,
@@ -7300,7 +7812,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
             outcome: "failed",
             error: message,
             providerErrorKind,
-            ...(error instanceof RuntimePinError ? { runtimeProblem: error.problem } : {}),
+            ...(error instanceof RuntimePinError
+              ? { runtimeProblem: redactTaskValue(error.problem, runSecrets) }
+              : {}),
           });
           if (!failed) return;
           // Every run failure leaves its classified cause in the worker log, once.
@@ -7308,49 +7822,72 @@ export function createRunExecutor(deps: ExecutorDeps) {
             providerErrorKind,
             ...(error instanceof RuntimePinError ? { runtimeProblem: error.problem.code } : {}),
           });
-          if (run.boardItemId)
-            await finishBoardRun(
-              deps,
-              {
-                userId: run.userId,
-                spaceId: run.spaceId,
-                botId: run.botId,
-                runId,
-                signal: context.signal,
-              },
-              message,
-            ).catch(() => getLogger().warn("Board outcome could not be recorded."));
-          if (failed.continuationRunId) {
-            await deps.jobs
-              .enqueue(runContinueJob(failed.continuationRunId))
-              .catch((error) => getLogger().error("steering continuation enqueue", error));
-          }
-          if (run.trigger === "bot_message") {
-            await returnBotMessageOutcome(
-              deps,
-              { ...run, sourceMessageId: run.sourceMessageId },
-              { id: bot.id, name: bot.name },
-              `Could not complete the delegated request: ${message}`,
-              "status",
-            ).catch((returnError) => getLogger().error("bot message failure return", returnError));
-          }
-          if (!failed.continuationRunId) {
-            await notifyRun(deps, run, {
-              kind: "failure",
-              title: `${bot.name} failed`,
-              body: message.slice(0, 180),
-              botId: bot.id,
-              threadId: thread.id,
-            });
-          }
+          await runStep("delivery", async () => {
+            if (failed.continuationRunId) {
+              await deps.jobs
+                .enqueue(runContinueJob(failed.continuationRunId))
+                .catch((error) => getLogger().error("steering continuation enqueue", error));
+            }
+            if (run.boardItemId)
+              await finishBoardRun(
+                deps,
+                {
+                  userId: run.userId,
+                  spaceId: run.spaceId,
+                  botId: run.botId,
+                  runId,
+                  // Runtime cleanup has already stopped tool work. Deliver the committed
+                  // failure under a fresh deadline, still bounded by service shutdown.
+                  signal: AbortSignal.any([
+                    shutdownDeadline.signal,
+                    AbortSignal.timeout(RESTART_DRAIN_MS),
+                  ]),
+                },
+                message,
+              ).catch(() => getLogger().warn("Board outcome could not be recorded."));
+            if (run.trigger === "bot_message") {
+              await returnBotMessageOutcome(
+                deps,
+                { ...run, sourceMessageId: run.sourceMessageId },
+                { id: bot.id, name: bot.name },
+                `Could not complete the delegated request: ${message}`,
+                "status",
+              ).catch((returnError) =>
+                getLogger().error("bot message failure return", returnError),
+              );
+            }
+            if (!failed.continuationRunId) {
+              await notifyRun(deps, run, {
+                kind: "failure",
+                title: `${bot.name} failed`,
+                body: message.slice(0, 180),
+                botId: bot.id,
+                threadId: thread.id,
+              });
+            }
+          }).catch((error) => {
+            if (!(error instanceof StepDeadlineExceeded) && !shutdownDeadline.signal.aborted)
+              throw error;
+          });
         }
       } catch (setupError) {
+        if (deps.shutdownSignal?.aborted) return;
+        await flushProgressSaves();
+        if (preparationSignal?.aborted) {
+          await requeueComputerRun(deps, runId, workerId, fence, resumeCheckpoint, heldForTakeover);
+          await deps.prisma.attempt.update({
+            where: { id: attempt.id },
+            data: { status: "setup_failed", error: null, finishedAt: new Date() },
+          });
+          return;
+        }
+        if (deps.shutdownSignal?.aborted) return;
         if (
           setupError instanceof RuntimePinError ||
           setupError instanceof CommandReplayUnavailableError ||
           setupError instanceof MissingComputerProviderError
         ) {
-          const finalized = await deps.events.finalizeRun({
+          const finalized = await finalizeTurn({
             onCommitted: () =>
               tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "failed" }),
             spaceId: run.spaceId,
@@ -7414,7 +7951,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           });
           if (previousFailures + 1 >= ASK_WAKE_SETUP_ATTEMPTS) {
             const message = "Could not sum up the answers. Ask again.";
-            const finalized = await deps.events.finalizeRun({
+            const finalized = await finalizeTurn({
               onCommitted: () =>
                 tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "failed" }),
               spaceId: run.spaceId,
@@ -7478,77 +8015,110 @@ export function createRunExecutor(deps: ExecutorDeps) {
           throw new Error("Run setup failed; retrying");
         }
       } finally {
-        controlWatch.abort();
-        await controlWatcher;
-        detachShutdown?.();
-        stopHeartbeat();
-        const stopping = await deps.prisma.run.findUnique({
-          where: { id: runId },
-          select: { cancelRequestedAt: true, status: true },
-        });
-        await chiefFeed?.settle(
-          stopping?.status === "completed"
-            ? "completed"
-            : stopping?.status === "failed"
-              ? "failed"
-              : stopping?.status === "cancelled"
-                ? "stopped"
-                : "waiting",
-        );
-        const stopConfirmed =
-          Boolean(stopping?.cancelRequestedAt) &&
-          Boolean(screenRelease) &&
-          (await stopRemoteComputerWork(
-            deps.sandbox,
-            screenRelease!.computer,
-            leaseTarget.computerId!,
+        // Keep ownership until saves settle or the existing drain deadline expires.
+        if (!(await settleProgressSaves())) {
+          checkpointSavesAbandoned = true;
+          getLogger().warn("restart.turn.checkpoint.abandoned", {
             runId,
-            screenRelease!.context,
-          ));
-        const correctionAttempt = deps.prisma.chiefAssignment
-          ? await deps.prisma.chiefAssignment.findUnique({ where: { runId } })
-          : null;
-        if (
-          (!retainComputerLease || stopping?.cancelRequestedAt) &&
-          !(correctionAttempt?.supersededAt && stopping?.cancelRequestedAt && !stopConfirmed)
-        ) {
-          if (screenRelease && !stopConfirmed) {
-            await deps.sandbox
-              .releaseScreen?.(screenRelease.computer, screenRelease.context)
-              .catch(() => undefined);
-          }
-          await releaseComputerExecutionLease(deps.prisma, computerLease).catch(() => undefined);
+            abandonedSaves: pendingCheckpointSaves,
+          });
         }
-        if (stopConfirmed && (await confirmDispatchStop(deps.prisma, runId, undefined, deps.jobs)))
-          tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "cancelled" });
-        await wakeChiefAfterControl(deps, runId).catch((error) =>
-          getLogger().error("chief control wake", error),
-        );
-        await wakeGoalAfterDelegation(deps, run.delegationId).catch((error) =>
-          getLogger().error("goal wake", error),
-        );
-        await wakeCoordinatorAfterAsk(deps, run.delegationId).catch((error) =>
-          getLogger().error("group ask wake", error),
-        );
-        await scheduleCompactionAfterTurn(deps.prisma, deps.jobs, runId).catch((error) =>
-          getLogger().error("history.compact enqueue failed", error),
-        );
-        if (deps.memoryDocuments)
-          await deps.prisma.botBrief
+        stopHeartbeat();
+        controlWatch.abort();
+        detachShutdown?.();
+        // Start lease cleanup even after the drain expired; bound the wait, not its start.
+        const cleanup = (async () => {
+          await controlWatcher;
+          // The async runtime iterator has returned (including its finally blocks),
+          // and every awaited usage callback finished. A terminal status alone is not
+          // this proof: acceptance checks this separate, per-attempt collection cut.
+          if ((run.goalId || run.delegationRootTaskId) && !usageCollectionFailed)
+            await deps.prisma.attempt
+              .updateMany({
+                where: { id: attempt.id, runId, fence },
+                data: { usageSettledAt: new Date() },
+              })
+              .catch(() => undefined);
+
+          const stopping = await deps.prisma.run.findUnique({
+            where: { id: runId },
+            select: { cancelRequestedAt: true, status: true },
+          });
+          await chiefFeed?.settle(
+            stopping?.status === "completed"
+              ? "completed"
+              : stopping?.status === "failed"
+                ? "failed"
+                : stopping?.status === "cancelled"
+                  ? "stopped"
+                  : "waiting",
+          );
+          const stopConfirmed =
+            Boolean(stopping?.cancelRequestedAt) &&
+            Boolean(screenRelease) &&
+            (await stopRemoteComputerWork(
+              deps.sandbox,
+              screenRelease!.computer,
+              leaseTarget.computerId!,
+              runId,
+              screenRelease!.context,
+            ));
+          const correctionAttempt = deps.prisma.chiefAssignment
+            ? await deps.prisma.chiefAssignment.findUnique({ where: { runId } })
+            : null;
+          if (
+            (!retainComputerLease || stopping?.cancelRequestedAt) &&
+            !(correctionAttempt?.supersededAt && stopping?.cancelRequestedAt && !stopConfirmed)
+          ) {
+            if (screenRelease && !stopConfirmed) {
+              await deps.sandbox
+                .releaseScreen?.(screenRelease.computer, screenRelease.context)
+                .catch(() => undefined);
+            }
+            await releaseComputerExecutionLease(deps.prisma, computerLease).catch(() => undefined);
+          }
+          if (
+            stopConfirmed &&
+            (await confirmDispatchStop(deps.prisma, runId, undefined, deps.jobs))
+          )
+            tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "cancelled" });
+          await wakeChiefAfterControl(deps, runId).catch((error) =>
+            getLogger().error("chief control wake", error),
+          );
+          await wakeGoalAfterDelegation(deps, run.delegationId).catch((error) =>
+            getLogger().error("goal wake", error),
+          );
+          await wakeCoordinatorAfterAsk(deps, run.delegationId).catch((error) =>
+            getLogger().error("group ask wake", error),
+          );
+          await scheduleCompactionAfterTurn(deps.prisma, deps.jobs, runId).catch((error) =>
+            getLogger().error("history.compact enqueue failed", error),
+          );
+          if (deps.memoryDocuments)
+            await deps.prisma.botBrief
+              .updateMany({
+                where: { pendingRunId: runId },
+                data: { toolResults: briefToolResults },
+              })
+              .catch(() => undefined);
+          await deps.prisma.attempt
             .updateMany({
-              where: { pendingRunId: runId },
-              data: { toolResults: briefToolResults },
+              where: { id: attempt.id, status: "running" },
+              data: { status: "interrupted", finishedAt: new Date() },
             })
             .catch(() => undefined);
-        await deps.prisma.attempt
-          .updateMany({
-            where: { id: attempt.id, status: "running" },
-            data: { status: "interrupted", finishedAt: new Date() },
-          })
-          .catch(() => undefined);
+        })();
+        // An expired drain skips the wait; still observe a late cleanup failure.
+        void cleanup.catch(() => undefined);
+        await runStep("cleanup", () => cleanup).catch((error) => {
+          if (!(error instanceof StepDeadlineExceeded) && !deps.shutdownSignal?.aborted)
+            throw error;
+        });
       }
     },
   };
+  const { continueRunInternal: _internal, ...publicExecutor } = executor;
+  return publicExecutor;
 }
 
 async function computerScreenToolResult(
@@ -7769,6 +8339,10 @@ export function selectBuiltinToolsForRun(options: {
   ).filter(
     (tool) =>
       (tool.name !== "assign" || options.goalCoordinator) &&
+      (tool.name !== "finish_goal" || options.goalCoordinator) &&
+      (tool.name !== "update_project_plan" || options.goalCoordinator) &&
+      (tool.name !== "record_plan_step_outcome" || options.goalCoordinator) &&
+      (tool.name !== "set_plan_step" || options.goalCoordinator) &&
       (tool.name !== "ask_members" || (options.roomCoordinator && Boolean(options.groupId))) &&
       (!options.messagingChannelRun ||
         (!["remember", "save_memory", "recall_memory", "forget_memory"].includes(tool.name) &&
@@ -8109,15 +8683,58 @@ async function persistMessageInTransaction(
   return { message, eventSeq: event.seq };
 }
 
+const GOAL_FROZEN_EFFECT_ERROR =
+  "This goal is awaiting owner review or already accepted, so new side effects are frozen.";
+
+type RecordedEffect =
+  | { duplicate: true; effect: Prisma.ExternalEffectGetPayload<object>; frozen: boolean }
+  | { duplicate: false; effect: Prisma.ExternalEffectGetPayload<object>; frozen: false }
+  | { duplicate: false; effect: null; frozen: true };
+
+/**
+ * A replay of a dispatchable effect (approved or intended) is held while its goal is
+ * frozen: the freeze check below runs under the same root lock as the submission, so
+ * a replay cannot dispatch into a goal the owner just sent to review. The row is left
+ * untouched — held, not dropped — so rework can execute it. Returning a completed,
+ * denied or uncertain effect's saved result is always allowed.
+ */
+async function effectReplayFrozen(
+  deps: ExecutorDeps,
+  run: {
+    spaceId: string;
+    userId: string;
+    goalId: string | null;
+    delegationRootTaskId: string | null;
+  },
+  effect: { status: string },
+): Promise<boolean> {
+  if (effect.status !== "approved" && effect.status !== "intended") return false;
+  if (!run.goalId && !run.delegationRootTaskId) return false;
+  return isGoalRunEffectFrozen(deps.prisma, {
+    spaceId: run.spaceId,
+    userId: run.userId,
+    goalId: run.goalId,
+    rootTaskId: run.delegationRootTaskId,
+  });
+}
+
 async function recordEffect(
   deps: ExecutorDeps,
-  run: { id: string; spaceId: string; threadId: string; botId: string },
+  run: {
+    id: string;
+    spaceId: string;
+    userId: string;
+    threadId: string;
+    botId: string;
+    goalId: string | null;
+    delegationRootTaskId: string | null;
+  },
   kind: string,
   idempotencyKey: string,
   request: unknown,
   legacyIdempotencyKey?: string,
   consumedIds?: Set<string>,
-) {
+): Promise<RecordedEffect> {
   const existing = await deps.prisma.externalEffect.findUnique({
     where: { idempotencyKey },
   });
@@ -8131,7 +8748,9 @@ async function recordEffect(
       runId: run.id,
       payload: { executionId: idempotencyKey, kind },
     });
-    return { duplicate: true, effect: existing };
+    if (await effectReplayFrozen(deps, run, existing))
+      return { duplicate: false, effect: null, frozen: true };
+    return { duplicate: true, effect: existing, frozen: false };
   }
 
   // Pre-fix rows used bare provider ids or scoped keys that included the
@@ -8174,7 +8793,9 @@ async function recordEffect(
           runId: run.id,
           payload: { executionId: candidate, kind, legacy: true },
         });
-        return { duplicate: true, effect: sameIdLegacy };
+        if (await effectReplayFrozen(deps, run, sameIdLegacy))
+          return { duplicate: false, effect: null, frozen: true };
+        return { duplicate: true, effect: sameIdLegacy, frozen: false };
       }
     }
   }
@@ -8208,9 +8829,42 @@ async function recordEffect(
       runId: run.id,
       payload: { executionId: legacy.idempotencyKey, kind, legacy: true },
     });
-    return { duplicate: true, effect: legacy };
+    if (await effectReplayFrozen(deps, run, legacy))
+      return { duplicate: false, effect: null, frozen: true };
+    return { duplicate: true, effect: legacy, frozen: false };
   }
 
+  // Goal runs admit new effects through the root lock the freeze and the acceptance
+  // check also take, so an effect can never slip into a completed or accepted goal.
+  const linkedGoalId =
+    run.goalId ??
+    (run.delegationRootTaskId
+      ? (
+          await deps.prisma.teamGoal.findFirst({
+            where: {
+              rootTaskId: run.delegationRootTaskId,
+              spaceId: run.spaceId,
+              userId: run.userId,
+            },
+            select: { id: true },
+          })
+        )?.id
+      : null);
+  if (linkedGoalId && run.delegationRootTaskId) {
+    const admitted = await admitGoalRunEffect(deps.prisma, {
+      spaceId: run.spaceId,
+      userId: run.userId,
+      goalId: linkedGoalId,
+      rootTaskId: run.delegationRootTaskId,
+      runId: run.id,
+      kind,
+      idempotencyKey,
+      request,
+    });
+    if (!admitted.ok) return { duplicate: false, effect: null, frozen: true };
+    consumedIds?.add(admitted.effect.id);
+    return { duplicate: false, effect: admitted.effect, frozen: false };
+  }
   const effect = await deps.prisma.externalEffect.create({
     data: {
       spaceId: run.spaceId,
@@ -8222,7 +8876,7 @@ async function recordEffect(
     },
   });
   consumedIds?.add(effect.id);
-  return { duplicate: false, effect };
+  return { duplicate: false, effect, frozen: false };
 }
 
 async function completeEffect(

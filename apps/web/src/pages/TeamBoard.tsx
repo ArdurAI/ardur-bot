@@ -11,7 +11,12 @@ import type { ReactNode } from "react";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { decodeArtifactBase64, downloadArtifactBytes } from "../lib/artifact-open";
-import { failureCategoryMessages, unknownRuntimeName } from "../lib/failure-category-copy";
+import {
+  failureCategoryMessages,
+  unknownProviderName,
+  unknownRuntimeName,
+} from "../lib/failure-category-copy";
+import { translatedGoalText } from "../lib/goal-display-text";
 import { rpc } from "../lib/rpc";
 import { localizedTeamDeliveryText } from "../lib/team-delivery-text";
 import { ComparisonList } from "./ComparePanel";
@@ -289,7 +294,7 @@ export function TeamBoardRow({
                       <li key={event.id}>
                         <time dateTime={event.at}>{new Date(event.at).toLocaleTimeString()}</time> ·{" "}
                         {event.kind}
-                        {event.text ? ` — ${event.text}` : ""}
+                        {event.text ? ` — ${translatedGoalText(event.text)}` : ""}
                       </li>
                     ))}
                   </ol>
@@ -414,7 +419,7 @@ export function TeamBoardRow({
   );
 }
 function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
-  const { i18n } = useLingui();
+  const { i18n, t } = useLingui();
   if (
     row.state !== "blocked" &&
     row.state !== "waiting-approval" &&
@@ -451,15 +456,20 @@ function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
       return (
         <Trans>
           Blocked —{" "}
-          {row.reasonCategory
-            ? i18n._({
-                ...failureCategoryMessages[row.reasonCategory],
-                values: {
-                  runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName),
-                  bot: row.botName,
-                },
-              })
-            : row.reason}
+          {row.blockerKey === "connect-linear"
+            ? t`Connect Linear or grant a team member permission to read and write.`
+            : row.blockerKey === "connect-github"
+              ? t`Connect GitHub or grant a team member permission to read and write.`
+              : row.reasonCategory
+                ? i18n._({
+                    ...failureCategoryMessages[row.reasonCategory],
+                    values: {
+                      runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName),
+                      bot: row.botName,
+                      provider: row.reasonProvider ?? i18n._(unknownProviderName),
+                    },
+                  })
+                : row.reason}
         </Trans>
       );
     case "completed":

@@ -9,6 +9,10 @@ for (const profile of Object.values(COMPUTER_PROFILES)) {
       "build",
       "--build-arg",
       `IMAGE_PROFILE=${profile.id}`,
+      // #199: CI overrides the registry; an ordinary local build keeps Dockerfile defaults.
+      ...(process.env.DOCKERHUB_LIBRARY_PREFIX
+        ? ["--build-arg", `DOCKERHUB_LIBRARY_PREFIX=${process.env.DOCKERHUB_LIBRARY_PREFIX}`]
+        : []),
       "-t",
       profile.tag,
       ...(profile.id === "base" ? ["-t", "ardurbot/computer:local"] : []),

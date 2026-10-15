@@ -330,6 +330,33 @@ describe("teaching control lease extension", () => {
     });
     expect(harness.enqueue).toHaveBeenCalled();
   });
+  it("allows cleaned-up terminal grace to expire only its exact control generation", async () => {
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const ended = { fence: 7, providerRef: "computer", screenGeneration: 2 };
+    for (const change of [{ fence: 8 }, { providerRef: "replacement" }, { screenGeneration: 3 }]) {
+      const f = controlHarness({ controlLeaseExpiresAt: new Date("2026-01-01T00:10:00.000Z") });
+      await expect(
+        expireComputerControl(f.deps, "computer-id", "lease-1", now, { ...ended, ...change }),
+      ).resolves.toBe(false);
+      expect(f.prisma.computer.updateMany).not.toHaveBeenCalled();
+      expect(f.setScreenControl).not.toHaveBeenCalled();
+    }
+    const f = controlHarness({ controlLeaseExpiresAt: new Date("2026-01-01T00:10:00.000Z") });
+    await expect(expireComputerControl(f.deps, "computer-id", "lease-1", now, ended)).resolves.toBe(
+      true,
+    );
+    expect(f.prisma.computer.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "computer-id",
+        controlLeaseId: "lease-1",
+        controlFence: 7,
+        providerRef: "computer",
+        screenGeneration: 2,
+      },
+      data: { controlHolder: "none" },
+    });
+    expect(f.setScreenControl).toHaveBeenCalledOnce();
+  });
 });
 
 function controlHarness(
@@ -350,6 +377,8 @@ function controlHarness(
     homeKey: "team-workspace",
     providerRef: "computer",
     kind: "docker",
+    controlFence: 7,
+    screenGeneration: 2,
     state: "running",
     controlHolder: "user",
     controlLeaseId: options.controlLeaseId ?? "lease-1",

@@ -1,4 +1,11 @@
-import { decodeTerminalFrame, encodeTerminalFrame, TERMINAL_FRAME_BYTES } from "@ardurbot/core";
+import {
+  decodeTerminalFrame,
+  encodeTerminalFrame,
+  parseTerminalReplaySize,
+  TERMINAL_FRAME_BYTES,
+  terminalWebLink,
+  validateTerminalSize,
+} from "@ardurbot/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import type { ITheme } from "@xterm/xterm";
@@ -7,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "../components/ui/button.js";
 import { Input } from "../components/ui/input.js";
 import { terminalInput } from "./input.js";
+import { terminalLinkProvider } from "./links.js";
 import "@xterm/xterm/css/xterm.css";
 import "./terminal.css";
 
@@ -20,6 +28,9 @@ export type TerminalLabels = {
   next: string;
   previous: string;
   terminal: string;
+  openLink?: string;
+  expired?: string;
+  earlierUnavailable?: string;
 };
 export type TerminalTicket = { sessionId: string; ticket: string; path: string };
 export interface TerminalProps {
@@ -27,11 +38,31 @@ export interface TerminalProps {
   labels: TerminalLabels;
   close(sessionId: string): Promise<unknown>;
   visible?: boolean;
+  openLink?(url: string): void;
+  onSession?(id: string): void;
+  initialSession?: string;
+  initialSize?: { cols: number; rows: number };
+  shouldDetach?(): boolean;
+  onSize?(size: { cols: number; rows: number }): void;
 }
 
 /** Imported only when the computer's Terminal tab is selected. */
-export default function ComputerTerminal({ ticket, labels, close, visible = true }: TerminalProps) {
+export default function ComputerTerminal({
+  ticket,
+  labels,
+  close,
+  visible = true,
+  openLink,
+  onSession,
+  initialSession,
+  initialSize,
+  shouldDetach,
+  onSize,
+}: TerminalProps) {
   const container = useRef<HTMLDivElement>(null);
+  const xterm = useRef<Terminal | null>(null);
+  const labelsRef = useRef(labels);
+  labelsRef.current = labels;
   const currentSession = useRef<string | undefined>(undefined);
   const reconnect = useRef<() => void>(() => {});
   const refit = useRef<() => void>(() => {});
@@ -44,6 +75,17 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
   const [state, setState] = useState<"opening" | "connecting" | "ready" | "ended">("opening");
   const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [link, setLink] = useState<string | null>(null);
+  const [truncated, setTruncated] = useState(false);
+  const activateLink = useRef<(event: MouseEvent, url: string) => void>(() => {});
+  const openLinkRef = useRef(openLink);
+  openLinkRef.current = openLink;
+  const onSessionRef = useRef(onSession);
+  onSessionRef.current = onSession;
+  const detachRef = useRef(shouldDetach);
+  detachRef.current = shouldDetach;
+  const sizeRef = useRef(onSize);
+  sizeRef.current = onSize;
   const admission = useRef<Promise<unknown>>(Promise.resolve());
   const ticketRef = useRef(ticket);
   ticketRef.current = ticket;
@@ -60,22 +102,27 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
     let connecting = false;
     let disposed = false,
       socket: WebSocket | undefined,
-      sessionId: string | undefined,
+      sessionId: string | undefined = attempt === 0 ? initialSession : undefined,
       ack = 0,
       received = 0,
       inputSeq = 0,
       ready = false;
+    let admitted = false;
+    let fresh = true,
+      replaying = false;
+    let rendering = Promise.resolve();
     let retry: ReturnType<typeof setTimeout> | undefined,
       resize: ReturnType<typeof setTimeout> | undefined,
       lostAt = 0;
     const terminal = new Terminal({
+      ...(initialSize ? { cols: initialSize.cols, rows: initialSize.rows } : {}),
       scrollback: 10_000,
       allowProposedApi: true,
       allowTransparency: false,
       screenReaderMode: true,
       convertEol: false,
       windowOptions: {},
-      linkHandler: { activate: () => {} },
+      linkHandler: { activate: (event, text) => activateLink.current(event, text) },
       theme: terminalTheme(host),
     });
     // Consume dangerous terminal-driven actions without forwarding them to browser APIs.
@@ -88,6 +135,31 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
     terminal.loadAddon(fit);
     terminal.loadAddon(finder);
     terminal.open(host);
+    xterm.current = terminal;
+    setLink(null);
+    setTruncated(false);
+    activateLink.current = (event, text) => {
+      const url = terminalWebLink(text);
+      if (
+        disposed ||
+        !ready ||
+        !visibleRef.current ||
+        !event.isTrusted ||
+        event.button !== 0 ||
+        !url
+      )
+        return;
+      event.preventDefault();
+      terminal.focus();
+      openLinkRef.current?.(url);
+    };
+    const links = terminal.registerLinkProvider(
+      terminalLinkProvider(
+        () => terminal.buffer.active,
+        (event, text) => activateLink.current(event, text),
+        (_event, text) => setLink(terminalWebLink(text)),
+      ),
+    );
     terminal.textarea?.setAttribute("aria-label", labels.terminal);
     const send = (data: string, binary = false) => {
       if (!ready || !visibleRef.current || !socket || socket.readyState !== WebSocket.OPEN) return;
@@ -113,8 +185,14 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
     const input = terminal.onData((data: string) => send(data));
     const binary = terminal.onBinary((data: string) => send(data, true));
     const fitNow = () => {
-      if (disposed || !visibleRef.current || !host.clientWidth || !host.clientHeight) return;
+      if (disposed || replaying || !visibleRef.current || !host.clientWidth || !host.clientHeight)
+        return;
       fit.fit();
+      const size = {
+        cols: Math.min(500, Math.max(2, terminal.cols)),
+        rows: Math.min(300, Math.max(1, terminal.rows)),
+      };
+      sizeRef.current?.(size);
       if (ready && socket?.readyState === WebSocket.OPEN)
         socket.send(
           JSON.stringify({
@@ -149,15 +227,17 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
           if (disposed) return;
           const granted = await requestTicket(sessionId);
           if (disposed) {
-            await closeSession(granted.sessionId);
+            if (!detachRef.current?.()) await closeSession(granted.sessionId);
             return;
           }
           sessionId = granted.sessionId;
+          admitted = true;
           return granted;
         });
         if (!grant || disposed) return;
         sessionId = grant.sessionId;
         currentSession.current = sessionId;
+        onSessionRef.current?.(sessionId);
         const url = new URL(grant.path, window.location.origin);
         if (url.origin !== window.location.origin) throw new Error("Invalid terminal origin.");
         url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
@@ -165,38 +245,95 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
         socket = next;
         next.binaryType = "arraybuffer";
         next.onopen = () =>
-          next.send(JSON.stringify({ type: "connect", ticket: grant.ticket, ack }));
+          next.send(
+            JSON.stringify({
+              type: "connect",
+              ticket: grant.ticket,
+              ack,
+              version: 2,
+              reset: fresh,
+            }),
+          );
         next.onmessage = (event) => {
-          if (disposed || socket !== next) return;
-          try {
-            if (typeof event.data === "string") {
-              const value = JSON.parse(event.data);
-              if (value.type === "ready") {
-                inputSeq = value.inputSeq;
-                ready = true;
-                lostAt = 0;
-                terminal.options.disableStdin = false;
-                setState("ready");
-                fitNow();
-                if (visibleRef.current) terminal.focus();
+          rendering = rendering.then(async () => {
+            if (disposed || socket !== next) return;
+            try {
+              if (typeof event.data === "string") {
+                const value = JSON.parse(event.data);
+                if (value.type === "ready") {
+                  if (
+                    !Number.isSafeInteger(value.inputSeq) ||
+                    value.inputSeq < 0 ||
+                    value.inputSeq > 0xffffffff
+                  )
+                    throw new Error("Invalid terminal replay.");
+                  inputSeq = value.inputSeq;
+                  replaying = value.version === 2;
+                  if (replaying) {
+                    validateTerminalSize(value.cols, value.rows);
+                    if (
+                      !Number.isSafeInteger(value.from) ||
+                      value.from < 1 ||
+                      value.from > 0x100000000 ||
+                      typeof value.truncated !== "boolean" ||
+                      typeof value.reset !== "boolean"
+                    )
+                      throw new Error("Invalid terminal replay.");
+                    if (value.reset) {
+                      received = value.from - 1;
+                      ack = received;
+                    }
+                    terminal.resize(value.cols, value.rows);
+                    setTruncated((current) => current || value.truncated);
+                  }
+                  fresh = false;
+                  ready = !replaying;
+                  lostAt = 0;
+                  terminal.options.disableStdin = replaying;
+                  if (!replaying) {
+                    setState("ready");
+                    fitNow();
+                    if (visibleRef.current) terminal.focus();
+                  }
+                } else if (value.type === "replay-size") {
+                  const size = parseTerminalReplaySize(value);
+                  if (size.seq > received + 1) throw new Error("Replay gap.");
+                  if (size.seq === received + 1) terminal.resize(size.cols, size.rows);
+                } else if (value.type === "replay-end") {
+                  if (
+                    value.version !== 2 ||
+                    !Number.isSafeInteger(value.seq) ||
+                    value.seq !== received
+                  )
+                    throw new Error("Replay gap.");
+                  replaying = false;
+                  ready = true;
+                  terminal.options.disableStdin = false;
+                  setState("ready");
+                  fitNow();
+                  if (visibleRef.current) terminal.focus();
+                }
+                return;
               }
-              return;
-            }
-            const frame = decodeTerminalFrame(new Uint8Array(event.data));
-            if (frame.seq <= received) return;
-            if (frame.seq !== received + 1) throw new Error("Replay gap.");
-            received = frame.seq;
-            terminal.write(frame.bytes, () => {
+              const frame = decodeTerminalFrame(new Uint8Array(event.data));
+              if (frame.seq <= received) {
+                if (frame.seq <= ack && next.readyState === WebSocket.OPEN)
+                  next.send(JSON.stringify({ type: "ack", seq: frame.seq }));
+                return;
+              }
+              if (frame.seq !== received + 1) throw new Error("Replay gap.");
+              received = frame.seq;
+              await new Promise<void>((resolve) => terminal.write(frame.bytes, resolve));
               ack = frame.seq;
               if (!disposed && socket === next && next.readyState === WebSocket.OPEN)
                 next.send(JSON.stringify({ type: "ack", seq: ack }));
-            });
-          } catch {
-            ready = false;
-            next.onclose = null;
-            next.close();
-            setState("ended");
-          }
+            } catch {
+              ready = false;
+              next.onclose = null;
+              next.close();
+              setState("ended");
+            }
+          });
         };
         next.onclose = () => {
           ready = false;
@@ -215,7 +352,13 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
         next.onerror = () => next.close();
       } catch (cause) {
         if (!disposed) {
-          setError(cause instanceof Error ? cause.message : null);
+          setError(
+            initialSession && fresh && labelsRef.current.expired
+              ? labelsRef.current.expired
+              : cause instanceof Error
+                ? cause.message
+                : null,
+          );
           setState("ended");
         }
       } finally {
@@ -235,11 +378,15 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
     return () => {
       disposed = true;
       ready = false;
-      if (sessionId) void serialize(() => closeSession(sessionId!)).catch(() => {});
+      const detach = detachRef.current?.() === true;
+      // A restored id is not owned until admission; StrictMode cleanup must not end it.
+      if (sessionId && admitted && !detach)
+        void serialize(() => closeSession(sessionId!)).catch(() => {});
       clearInterval(heartbeat);
       clearTimeout(retry);
       clearTimeout(resize);
-      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "close" }));
+      if (!detach && socket?.readyState === WebSocket.OPEN)
+        socket.send(JSON.stringify({ type: "close" }));
       if (socket) {
         socket.onclose = null;
         socket.onmessage = null;
@@ -249,12 +396,17 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
       themeObserver.disconnect();
       input.dispose();
       binary.dispose();
+      links.dispose();
       for (const blocker of blockers) blocker.dispose();
       terminal.dispose();
+      if (xterm.current === terminal) xterm.current = null;
       search.current = null;
       refit.current = () => {};
     };
-  }, [attempt, labels.terminal]);
+  }, [attempt]);
+  useEffect(() => {
+    xterm.current?.textarea?.setAttribute("aria-label", labels.terminal);
+  }, [labels.terminal]);
   useEffect(() => {
     if (visible) refit.current();
   }, [visible]);
@@ -286,7 +438,23 @@ export default function ComputerTerminal({ ticket, labels, close, visible = true
         <Button size="sm" variant="ghost" onClick={() => search.current?.findNext(query.current)}>
           {labels.next}
         </Button>
+        {link && openLink && labels.openLink ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            title={link}
+            disabled={state !== "ready"}
+            onClick={(event) => activateLink.current(event.nativeEvent, link)}
+          >
+            {labels.openLink}
+          </Button>
+        ) : null}
       </div>
+      {truncated && labels.earlierUnavailable ? (
+        <p role="status" className="px-3 py-1 text-xs text-muted-foreground">
+          {labels.earlierUnavailable}
+        </p>
+      ) : null}
       {state !== "ready" ? (
         <div role="status" className="flex items-center gap-3 p-3 text-sm text-muted-foreground">
           <span>

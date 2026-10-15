@@ -1,7 +1,10 @@
+// #199: Use the shared Postgres image override without changing the local default.
+
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { TEST_POSTGRES_IMAGE } from "../../postgres-image.js";
 import { contentDigest } from "../manifest.js";
 import { credentialFreeEnvironment, denyExternalTcp } from "../replay/offline.js";
 import type { ProductionApp } from "../replay/production.js";
@@ -183,7 +186,11 @@ export async function runPackagedCli(argv: string[]): Promise<number> {
       throw new Error("Packaged executable must belong to measured artifact");
   }
   // Inspect only cached images. Do not ask Testcontainers to provision an absent image.
-  for (const image of ["postgres:16-alpine", "testcontainers/ryuk:0.14.0"])
+  // #199: A disabled reaper must not require a cached Ryuk image.
+  for (const image of [
+    TEST_POSTGRES_IMAGE,
+    ...(process.env.TESTCONTAINERS_RYUK_DISABLED === "true" ? [] : ["testcontainers/ryuk:0.14.0"]),
+  ])
     execFileSync("docker", ["image", "inspect", image, "--format", "{{.Size}}"], { stdio: "pipe" });
   const mode = args.get("mode") ?? "commit";
   if (mode !== "commit" && mode !== "release") throw new Error("Unknown sample mode");

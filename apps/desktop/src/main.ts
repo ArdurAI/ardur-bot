@@ -15,9 +15,11 @@ import {
   Menu,
   nativeTheme,
   net,
+  screen,
   session,
   shell,
 } from "electron";
+import { applyDesktopAccessibilitySwitches, enableDesktopAccessibility } from "./accessibility.js";
 import {
   applicationMenuTemplate,
   applyAppShortcutMenu,
@@ -125,6 +127,13 @@ import {
   warmWindowTtlMs,
   windowBackgroundColor,
 } from "./window-options.js";
+import {
+  createWindowPlaceQuitWait,
+  restoreWindowPlace,
+  WindowPlaceStore,
+  watchWindowPlace,
+  windowWithRestoredState,
+} from "./window-place.js";
 
 const versionOutput = cliVersion(process.argv, app.getVersion());
 if (versionOutput !== null) {
@@ -156,6 +165,8 @@ let mainWindow: BrowserWindow | null = null;
 let dockBadge: ReturnType<typeof installDockBadge> | null = null;
 /** The theme the app page last showed; new main windows open in that colour. */
 let bootSnapshot: BootSnapshotStore | undefined;
+let windowPlace: WindowPlaceStore | undefined;
+let windowPlaceQuitWait: ReturnType<typeof createWindowPlaceQuitWait> | undefined;
 const unsavedFiles = new UnsavedFiles<BrowserWindow>();
 const appWindowTargets = new WeakMap<BrowserWindow, string>();
 let setupWindow: BrowserWindow | null = null;
@@ -218,8 +229,9 @@ installSmokeProgress?.stage("isolated profile configured");
 // Match the installed ardur.desktop entry for Wayland/X11 grouping while
 // retaining the legacy internal name used by encrypted storage.
 if (process.platform === "linux") app.setDesktopName("ardur");
-// Chromium ignores this switch once ready; it must be appended before that.
+// Chromium ignores these switches once ready; they must be appended before that.
 capDiskCacheSize(app.commandLine);
+applyDesktopAccessibilitySwitches(app.commandLine);
 if (!app.requestSingleInstanceLock()) {
   if (INSTALL_SMOKE) console.error("smoke: isolated profile instance lock refused");
   process.exit(INSTALL_SMOKE ? 1 : 0);
@@ -380,8 +392,16 @@ async function defaultSessionHasOriginData(origin: string): Promise<boolean> {
 function createWindow(url: string, partition: string | null) {
   markOnce("rk:main:window-create-start");
   const icon = developmentIcon();
+  const defaults = browserWindowOptions(process.platform);
+  const primaryId = screen.getPrimaryDisplay().id;
+  const placement = restoreWindowPlace(
+    windowPlace?.current,
+    screen.getAllDisplays().map((display) => ({ ...display, primary: display.id === primaryId })),
+    defaults,
+  );
   const win = new BrowserWindow({
-    ...browserWindowOptions(process.platform),
+    ...defaults,
+    ...placement.bounds,
     backgroundColor: windowBackgroundColor(bootSnapshot?.current, nativeTheme.shouldUseDarkColors),
     ...(icon ? { icon } : {}),
     webPreferences: {
@@ -398,6 +418,7 @@ function createWindow(url: string, partition: string | null) {
     },
   });
   mainWindow = win;
+  if (windowPlace) watchWindowPlace(win, windowPlace, screen, () => mainWindow === win);
   watchAppShortcutMenu(
     win.webContents,
     () => Menu.getApplicationMenu(),
@@ -508,7 +529,7 @@ function createWindow(url: string, partition: string | null) {
   if (win.isVisible()) markOnce("rk:main:window-shown");
   win.once("show", () => markOnce("rk:main:window-shown"));
   win.once("ready-to-show", () => markOnce("rk:main:ready-to-show"));
-  showMainWindowWhenPainted(win);
+  showMainWindowWhenPainted(windowWithRestoredState(win, placement));
   win.webContents.once("dom-ready", () => markOnce("rk:main:dom-ready"));
   win.webContents.once("did-finish-load", () => markOnce("rk:main:did-finish-load"));
   win.webContents.once("did-stop-loading", () => markOnce("rk:main:did-stop-loading"));
@@ -1426,6 +1447,7 @@ function safeOrigin(targetUrl: string) {
 }
 
 const startup = app.whenReady().then(async () => {
+  enableDesktopAccessibility();
   installSmokeProgress?.stage("Electron ready; IPC installing");
   registerIntegrationProtocol(app);
   const initialLink = process.argv.find((arg) => arg.startsWith("ardurbot:"));
@@ -1434,6 +1456,9 @@ const startup = app.whenReady().then(async () => {
   installDesktopNotifications({ window: () => mainWindow, target: () => currentTargetUrl });
   dockBadge = installDockBadge({ window: () => mainWindow, tray: () => desktopTray });
   const userDataDir = app.getPath("userData");
+  windowPlace = new WindowPlaceStore(userDataDir);
+  await windowPlace.load();
+  windowPlaceQuitWait = createWindowPlaceQuitWait(windowPlace, () => app.quit());
   hostService = installHostService({
     window: () => mainWindow,
     target: () => currentTargetUrl,
@@ -2164,6 +2189,7 @@ app.on("before-quit", (event) => {
  * is still open and usable.
  */
 app.on("will-quit", (event) => {
+  if (windowPlaceQuitWait?.(event)) return;
   if (guidedEngine?.running()) {
     event.preventDefault();
     void guidedEngine.cancel().finally(() => app.quit());

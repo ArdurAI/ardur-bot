@@ -1,3 +1,5 @@
+// #199: Use the shared Postgres image override without changing the local default.
+
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -26,6 +28,7 @@ import {
   roundMetric,
   summarize,
 } from "../performance-report.js";
+import { TEST_POSTGRES_IMAGE } from "../postgres-image.js";
 
 // Canonical collection is opt-in and never loads owner dotenv state or falls back to dev Electron.
 if (process.argv.includes("--canonical")) {
@@ -65,7 +68,7 @@ const apiOrigin = `http://127.0.0.1:${apiPort}`;
 const reportDirectory = path.join(root, ".context/performance");
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "ardurbot-desktop-performance-"));
 
-const container = await new PostgreSqlContainer("postgres:16-alpine").start();
+const container = await new PostgreSqlContainer(TEST_POSTGRES_IMAGE).start();
 let preview: ChildProcess | undefined;
 let server: ReturnType<typeof serve> | undefined;
 let handles: Awaited<ReturnType<typeof createApp>> | undefined;

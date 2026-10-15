@@ -1,21 +1,27 @@
+import type {
+  Bot,
+  BotCommunicationPolicy,
+  Goal,
+  GoalBoardDeliveryAction,
+  GoalCondition,
+  Group,
+  GroupMember,
+  RoomPolicyPatch,
+  SetGroupMemberModelPinInput,
+} from "@ardurbot/contracts";
 import {
-  type Bot,
-  type BotCommunicationPolicy,
-  type Goal,
+  GOAL_FINAL_REVIEW_DESCRIPTION,
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
-  type Group,
-  type GroupMember,
   parseRoomPolicy,
   ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX,
   ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN,
-  type RoomPolicyPatch,
   runtimeNames,
   runtimeSupportsTools,
-  type SetGroupMemberModelPinInput,
 } from "@ardurbot/contracts";
 import { BotAvatar, Button, Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { ORPCError } from "@orpc/client";
 import { Check, X } from "lucide-react";
 import {
   lazy,
@@ -28,12 +34,16 @@ import {
   useState,
 } from "react";
 import { BotContext } from "../components/ContextEntry";
+import { GoalConditionSupportChips, goalSupportLinkKey } from "../components/GoalConditionSupport";
 import { rpc } from "../lib/rpc";
 import type { ModelSettings } from "../lib/use-model-settings";
 import { GroupModelControl } from "./group-model-control";
 
 const StartGoalForm = lazy(() =>
   import("./GoalForm").then((module) => ({ default: module.StartGoalForm })),
+);
+const GoalBoardLink = lazy(() =>
+  import("./GoalBoardLink").then((module) => ({ default: module.GoalBoardLink })),
 );
 
 function validSelection(name: string, selected: readonly string[]) {
@@ -509,10 +519,144 @@ export function GroupSettings({
   );
 }
 
-export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Promise<void> }) {
+export function GroupGoalStrip({
+  goal,
+  members,
+  onStop,
+  onRefresh,
+  openReview = false,
+  recordedResult = false,
+}: {
+  goal: Goal;
+  members?: Group["members"];
+  onStop: () => Promise<void>;
+  onRefresh: () => Promise<void>;
+  openReview?: boolean;
+  recordedResult?: boolean;
+}) {
   const { t } = useLingui();
   const [stopping, setStopping] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [boardSettling, setBoardSettling] = useState<string | null>(null);
+  const [notes, setNotes] = useState("");
+  // Checked support-record keys per condition, overriding the attested-by-default
+  // set only while the owner is deciding; keyed by revision so rework starts clean.
+  const [supportChoice, setSupportChoice] = useState<Record<string, string[]>>({});
+  const reviewPending = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const conditionSupportLinks = (condition: GoalCondition) => {
+    const links = new Map<string, GoalCondition["support"][number]>();
+    for (const link of condition.support ?? []) links.set(goalSupportLinkKey(link), link);
+    for (const link of condition.proposedSupport ?? [])
+      if (!links.has(goalSupportLinkKey(link))) links.set(goalSupportLinkKey(link), link);
+    return [...links.values()];
+  };
+  const chosenSupport = (conditionId: string) => {
+    const key = `${goal.currentRevision?.id}:${conditionId}`;
+    const condition = goal.currentRevision?.conditions.find((item) => item.id === conditionId);
+    return supportChoice[key] ?? (condition?.support ?? []).map(goalSupportLinkKey);
+  };
+  const toggleSupport = (conditionId: string, key: string) => {
+    const choiceKey = `${goal.currentRevision?.id}:${conditionId}`;
+    const current = chosenSupport(conditionId);
+    setSupportChoice((previous) => ({
+      ...previous,
+      [choiceKey]: current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key],
+    }));
+  };
+  async function markCondition(conditionId: string, status: "pass" | "fail") {
+    if (!goal.currentRevision || reviewPending.current) return;
+    const condition = goal.currentRevision.conditions.find((item) => item.id === conditionId);
+    if (!condition) return;
+    const checked = new Set(chosenSupport(conditionId));
+    const support = conditionSupportLinks(condition).filter((link) =>
+      checked.has(goalSupportLinkKey(link)),
+    );
+    reviewPending.current = true;
+    setReviewing(true);
+    setError(null);
+    try {
+      await rpc.goals.reviewCondition({
+        goalId: goal.id,
+        revisionId: goal.currentRevision.id,
+        conditionId,
+        status,
+        support,
+      });
+      await onRefresh();
+    } catch (cause) {
+      const reason = cause instanceof ORPCError ? cause.data?.reason : undefined;
+      setError(
+        reason === "revision-changed"
+          ? t`Result changed; review again.`
+          : reason === "missing-record" ||
+              reason === "stale-record" ||
+              reason === "run-outside-goal"
+            ? t`A supporting record is missing or changed; review again.`
+            : t`Could not review result. Try again.`,
+      );
+      if (reason === "revision-changed") await onRefresh().catch(() => undefined);
+    } finally {
+      reviewPending.current = false;
+      setReviewing(false);
+    }
+  }
+  async function review(action: "accept" | "reject") {
+    if (!goal.currentRevision || reviewPending.current) return;
+    const reworkNotes = notes.trim();
+    if (action === "reject" && !reworkNotes) return;
+    reviewPending.current = true;
+    setReviewing(true);
+    setError(null);
+    try {
+      const input = { goalId: goal.id, revisionId: goal.currentRevision.id };
+      if (action === "accept") await rpc.goals.accept(input);
+      else await rpc.goals.reject({ ...input, reworkNotes });
+      await onRefresh();
+    } catch (cause) {
+      const reason = cause instanceof ORPCError ? cause.data?.reason : undefined;
+      setError(
+        reason === "revision-changed"
+          ? t`Result changed; review again.`
+          : reason === "work-active" || reason === "lease-active"
+            ? t`Work is still active.`
+            : reason === "effects-open"
+              ? t`Effects are still unsettled.`
+              : reason === "conditions-open"
+                ? t`Every condition must pass.`
+                : t`Could not review result. Try again.`,
+      );
+      if (reason === "revision-changed") await onRefresh().catch(() => undefined);
+    } finally {
+      reviewPending.current = false;
+      setReviewing(false);
+    }
+  }
+  async function settleBoardDelivery(
+    deliveryId: string,
+    action: GoalBoardDeliveryAction,
+    attempt: number,
+  ) {
+    if (reviewPending.current || boardSettling) return;
+    reviewPending.current = true;
+    setBoardSettling(deliveryId);
+    setError(null);
+    try {
+      await rpc.goals.boardDelivery({ goalId: goal.id, deliveryId, action, attempt });
+      await onRefresh();
+    } catch (cause) {
+      const reason = cause instanceof ORPCError ? cause.data?.reason : undefined;
+      // A conflict means the delivery moved under this view; a refresh shows the truth.
+      if (reason === "revision-changed" || reason === "not-awaiting")
+        await onRefresh().catch(() => undefined);
+      else setError(t`Could not update the board. Try again.`);
+    } finally {
+      reviewPending.current = false;
+      setBoardSettling(null);
+    }
+  }
   const status =
     goal.status === "running"
       ? t`Working`
@@ -529,13 +673,225 @@ export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Pro
                 : goal.status === "blocked"
                   ? t`Blocked`
                   : t`Needs you`;
+  const showResult =
+    Boolean(goal.currentRevision) && (goal.status === "completed" || recordedResult);
+  const allowDecision = goal.status === "completed" && !recordedResult;
+  // Next step first: in flight, then ready, then blocked, then finished and cancelled.
+  const planRank = (status: string) =>
+    status === "active"
+      ? 0
+      : status === "pending"
+        ? 1
+        : status === "blocked"
+          ? 2
+          : status === "done"
+            ? 3
+            : 4;
+  const planSteps = goal.plan
+    ? [...goal.plan.steps].sort((a, b) => planRank(a.status) - planRank(b.status))
+    : [];
+  const stepById = new Map(goal.plan?.steps.map((step) => [step.id, step]) ?? []);
+  const planStepStatus = (status: string) =>
+    status === "active"
+      ? t`Active`
+      : status === "blocked"
+        ? t`Blocked`
+        : status === "done"
+          ? t`Done`
+          : status === "cancelled"
+            ? t`Cancelled`
+            : t`Pending`;
+  const planBlockers = (step: (typeof planSteps)[number]) =>
+    step.prerequisiteIds.flatMap((id) => {
+      const pre = stepById.get(id);
+      return pre && pre.status !== "done" ? [pre] : [];
+    });
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-1 text-xs text-muted-foreground md:px-[22px]">
-      <span className="truncate">
-        <Trans>Goal</Trans>: {status} · {goal.usedTokens.toLocaleString()} /{" "}
-        {goal.tokenLimit.toLocaleString()} <Trans>tokens</Trans> ·{" "}
-        {new Date(goal.untilAt).toLocaleString()}
-      </span>
+      <details className="min-w-0 flex-1" open={openReview || undefined}>
+        <summary className="cursor-pointer truncate">
+          <Trans>Goal</Trans>: {status} · {goal.usedTokens?.toLocaleString() ?? t`Unknown`} /{" "}
+          {goal.tokenLimit.toLocaleString()} <Trans>tokens</Trans> ·{" "}
+          {new Date(goal.untilAt).toLocaleString()}
+        </summary>
+        {showResult && goal.currentRevision ? (
+          <div className="py-2 border-b border-border mb-2">
+            <h4 className="font-semibold mb-1">
+              <Trans>Review result</Trans>
+            </h4>
+            <p className="text-sm mb-2">{goal.currentRevision.summary}</p>
+            <ul className="text-sm list-disc pl-4 mb-3">
+              {goal.currentRevision.conditions.map((cond) => (
+                <li key={cond.id} className="mb-1">
+                  {cond.description === GOAL_FINAL_REVIEW_DESCRIPTION || cond.id === "cond-final"
+                    ? t`Final owner review`
+                    : cond.description}
+                  :
+                  {cond.status === "pass" ? (
+                    <span className="text-success ml-1">
+                      <Trans>Pass</Trans>
+                    </span>
+                  ) : cond.status === "fail" ? (
+                    <span className="text-destructive ml-1">
+                      <Trans>Fail</Trans>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground ml-1">
+                      <Trans>Unknown</Trans>
+                    </span>
+                  )}
+                  {allowDecision ? (
+                    <span className="ml-2 inline-flex gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={reviewing}
+                        onClick={() => void markCondition(cond.id, "pass")}
+                      >
+                        <Trans>Pass</Trans>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={reviewing}
+                        onClick={() => void markCondition(cond.id, "fail")}
+                      >
+                        <Trans>Fail</Trans>
+                      </Button>
+                    </span>
+                  ) : null}
+                  <GoalConditionSupportChips
+                    groupId={goal.groupId}
+                    support={cond.support ?? []}
+                    proposedSupport={cond.proposedSupport ?? []}
+                    {...(allowDecision
+                      ? {
+                          selection: {
+                            checked: new Set(chosenSupport(cond.id)),
+                            onToggle: (key: string) => toggleSupport(cond.id, key),
+                          },
+                        }
+                      : {})}
+                  />
+                </li>
+              ))}
+            </ul>
+            {allowDecision ? (
+              <>
+                <textarea
+                  aria-label={t`Rework notes`}
+                  value={notes}
+                  rows={2}
+                  maxLength={4000}
+                  disabled={reviewing}
+                  onChange={(event) => setNotes(event.target.value)}
+                  className="mb-2 w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={reviewing}
+                    onClick={() => void review("accept")}
+                  >
+                    <Trans>Accept result</Trans>
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={reviewing || notes.trim().length === 0}
+                    onClick={() => void review("reject")}
+                  >
+                    <Trans>Reject result</Trans>
+                  </Button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+        {goal.boardWorkspaceId && goal.boardItemId ? (
+          <Suspense fallback={null}>
+            <GoalBoardLink goal={goal} />
+          </Suspense>
+        ) : null}
+        {goal.boardDeliveryActions?.map((delivery) => (
+          <p key={delivery.id} className="flex flex-wrap items-center gap-2 pb-2">
+            <Trans>Board update pending</Trans>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={boardSettling !== null}
+              onClick={() => void settleBoardDelivery(delivery.id, "retry", delivery.attempt)}
+            >
+              <Trans>Retry board update</Trans>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={boardSettling !== null}
+              onClick={() => void settleBoardDelivery(delivery.id, "handle", delivery.attempt)}
+            >
+              <Trans>Mark board update handled</Trans>
+            </Button>
+          </p>
+        ))}
+        {planSteps.length ? (
+          <div className="py-2">
+            <h4 className="font-semibold mb-1">
+              <Trans>Plan</Trans>
+            </h4>
+            <ul className="mb-2">
+              {planSteps.map((step) => {
+                const blockers =
+                  step.status === "pending" || step.status === "blocked" ? planBlockers(step) : [];
+                return (
+                  <li key={step.id} className="flex flex-wrap items-baseline gap-x-2">
+                    <span className={step.status === "done" ? "line-through" : undefined}>
+                      {step.title}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {step.ownerIsUser
+                        ? t`You`
+                        : (memberName(members, step.ownerId) ?? step.ownerId)}
+                    </span>
+                    <span>{planStepStatus(step.status)}</span>
+                    {blockers.length ? (
+                      <span className="text-warning">
+                        <Trans>Waiting for</Trans> {blockers.map((pre) => pre.title).join(", ")}
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 py-2">
+          <dt>
+            <Trans>Used</Trans>
+          </dt>
+          <dd>{goal.usedTokens?.toLocaleString() ?? t`Unknown`}</dd>
+          <dt>
+            <Trans>Reserved</Trans>
+          </dt>
+          <dd>{goal.reservedTokens?.toLocaleString() ?? t`Unknown`}</dd>
+          <dt>
+            <Trans>Available</Trans>
+          </dt>
+          <dd>{goal.availableTokens?.toLocaleString() ?? t`Unknown`}</dd>
+        </dl>
+        {!goal.usageComplete ? (
+          <p className="pb-2">
+            <Trans>Usage incomplete</Trans>
+          </p>
+        ) : null}
+        {goal.settlement && goal.settlement.discrepancyCount > 0 ? (
+          <p className="pb-2 text-warning">
+            <Trans>Late usage arrived after acceptance.</Trans>{" "}
+            {goal.settlement.lateTokens.toLocaleString()} <Trans>tokens</Trans>
+          </p>
+        ) : null}
+      </details>
       {goal.status === "running" ? (
         <Button
           variant="ghost"

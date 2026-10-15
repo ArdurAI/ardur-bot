@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
 
-test("model dropdown search and provider group headers", async ({ page }, testInfo) => {
+test("model-first search across providers", async ({ page }, testInfo) => {
   const stamp = Date.now();
   const userName = `Model picker ${stamp}`;
   await signup(page, `model-picker-${stamp}@example.test`, "password12", userName);
@@ -9,11 +9,6 @@ test("model dropdown search and provider group headers", async ({ page }, testIn
 
   await openUserSettings(page, "models");
   await expect(page.getByRole("button", { name: "Close model settings" })).toBeVisible();
-
-  // OpenRouter has many models so group headers and search are obvious.
-  const providerSearch = page.getByPlaceholder("Search providers");
-  await providerSearch.fill("openrouter");
-  await page.getByRole("button", { name: /OpenRouter/ }).click();
 
   const modelCombobox = page.getByRole("combobox", { name: "Model", exact: true });
   await modelCombobox.click();
@@ -23,10 +18,7 @@ test("model dropdown search and provider group headers", async ({ page }, testIn
   await expect(modelSearch).toBeVisible();
   await expect(modelSearch).toHaveAttribute("placeholder", "Search");
   await expect(modelOptions).toBeVisible();
-  // Provider section header inside the model listbox (not the provider button).
-  await expect(modelOptions.getByText("OpenRouter", { exact: true })).toBeVisible();
-
-  await captureScreenshot(page, testInfo, "model-picker-dropdown-groups");
+  await captureScreenshot(page, testInfo, "model-picker-across-providers");
 
   await modelSearch.fill("claude");
   const optionTexts = await modelOptions.getByRole("option").allTextContents();
@@ -61,7 +53,9 @@ test("model dropdown search and provider group headers", async ({ page }, testIn
   expect(afterUp).not.toBe(afterEnd);
 
   const highlighted = page.locator(`[id="${afterUp}"]`);
-  const selectedLabel = ((await highlighted.locator("span").first().textContent()) ?? "").trim();
+  const selectedLabel = (
+    (await highlighted.locator('[data-slot="model-label"]').textContent()) ?? ""
+  ).trim();
   expect(selectedLabel.length).toBeGreaterThan(0);
   await modelSearch.press("Enter");
   await expect(modelSearch).toBeHidden();

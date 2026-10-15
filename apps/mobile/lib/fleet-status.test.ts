@@ -23,6 +23,8 @@ vi.mock("./native", () => ({
   }),
 }));
 vi.mock("react-native", () => ({
+  Pressable: ({ children, onPress }: { children: ReactNode; onPress: () => void }) =>
+    createElement("button", { type: "button", onClick: onPress }, children),
   StyleSheet: { create: (styles: unknown) => styles },
   View: ({ children, accessibilityRole }: { children: ReactNode; accessibilityRole?: string }) =>
     createElement("div", { role: accessibilityRole }, children),
@@ -66,7 +68,20 @@ it("renders capacity, unknown memory and bot placement without write controls", 
     expect(element.textContent).toContain("Memory not reported");
     expect(element.textContent).toContain("Builder");
     expect(element.querySelectorAll('[role="progressbar"]')).toHaveLength(1);
-    expect(element.querySelector("button, input, select")).toBeNull();
+    expect(element.querySelector("input, select")).toBeNull();
+    request.mockResolvedValue({
+      executionBoundary: "container",
+      appliedLimits: {
+        observedAt: new Date().toISOString(),
+        cpuCores: 1.5,
+        memoryBytes: 512 * 1024 ** 2,
+        processes: 100,
+      },
+    });
+    await act(async () => element.querySelector<HTMLButtonElement>("button")!.click());
+    expect(request).toHaveBeenCalledWith("computer/status", { botId: "bot", includeLimits: true });
+    expect(element.textContent).toContain("Applied limits");
+    expect(element.textContent).toContain("512 MiB");
   } finally {
     await act(async () => root.unmount());
   }

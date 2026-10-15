@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { MobileBot, MobileGroup } from "./api";
 import { rpc } from "./api";
+import { hasPairedDevice } from "./dispatch";
 import { presentMessageActionSheet } from "./message-action-sheet";
 
 let lastOnSaved: ((refreshed: MobileGroup) => void) | undefined;
@@ -124,6 +125,7 @@ const bots = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(hasPairedDevice).mockResolvedValue(false);
   lastOnSaved = undefined;
   lastSelectedMembers = [];
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -370,5 +372,48 @@ it("warns only while the picked coordinator's runtime can't use Ardur tools", as
   );
   expect(warning()?.textContent).toContain("Antigravity");
 
+  await act(async () => root.unmount());
+});
+
+it("reveals the shared goal ledger without start, stop or acceptance controls", async () => {
+  const original = vi.mocked(rpc).getMockImplementation()!;
+  vi.mocked(rpc).mockImplementation(async (route, input) =>
+    route === "goals/get"
+      ? {
+          id: "goal",
+          groupId: "group-1",
+          usedTokens: 10,
+          reservedTokens: 20,
+          availableTokens: 70,
+          usageComplete: false,
+        }
+      : original(route, input),
+  );
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () => root.render(createElement(GroupSettingsScreen)));
+  expect(node.textContent).not.toContain("Reserved:");
+  await act(async () =>
+    [...node.querySelectorAll("button")].find((b) => b.textContent === "Goal")!.click(),
+  );
+  expect(node.textContent).toContain("Used: 10");
+  expect(node.textContent).toContain("Reserved: 20");
+  expect(node.textContent).toContain("Available: 70");
+  expect(node.textContent).toContain("Usage incomplete");
+  expect(
+    vi
+      .mocked(rpc)
+      .mock.calls.filter(([route]) => route.startsWith("goals/"))
+      .every(([route]) => route === "goals/get"),
+  ).toBe(true);
+  await act(async () => root.unmount());
+});
+
+it("does not attempt goal RPCs from a paired-device grant", async () => {
+  vi.mocked(hasPairedDevice).mockResolvedValue(true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () => root.render(createElement(GroupSettingsScreen)));
+  expect(vi.mocked(rpc).mock.calls.some(([route]) => route.startsWith("goals/"))).toBe(false);
   await act(async () => root.unmount());
 });

@@ -1,9 +1,16 @@
-import type { CommandBlock, ThreadMessage, ToolResumedPayload } from "@ardurbot/contracts";
+import type {
+  CommandBlock,
+  CommandRefusalId,
+  ThreadMessage,
+  ToolResumedPayload,
+} from "@ardurbot/contracts";
 import {
   COMMAND_NOT_RECORDED,
   COMMAND_OUTPUT_LIMIT,
+  COMMAND_REFUSALS,
   COMMAND_TRUNCATED,
   CommandEventPayloadSchema,
+  CommandRefusalIdSchema,
   ToolResumedPayloadSchema,
 } from "@ardurbot/contracts";
 
@@ -427,8 +434,32 @@ export function commandSummaryDisplay(block: CommandBlock): string {
   return `Ran ${fields.command} in ${fields.cwd} · ${fields.duration} · exit ${fields.exitCode}`;
 }
 
+function formatCommandOutput(block: CommandBlock, error: string | null): string {
+  return `stdout:\n${block.stdout ?? COMMAND_NOT_RECORDED}\nstderr:\n${block.stderr ?? COMMAND_NOT_RECORDED}${error ? `\nerror:\n${error}` : ""}`;
+}
+
 export function commandOutput(block: CommandBlock): string {
-  return `stdout:\n${block.stdout ?? COMMAND_NOT_RECORDED}\nstderr:\n${block.stderr ?? COMMAND_NOT_RECORDED}${block.error ? `\nerror:\n${block.error}` : ""}`;
+  return formatCommandOutput(block, block.error);
+}
+
+/** Resolve only the error field, never stdout/stderr. Unknown ids do not use legacy matching. */
+export function commandDisplayError(
+  block: CommandBlock,
+  translate: (id: CommandRefusalId) => string,
+): string | null {
+  if (!block.error) return block.error;
+  const id =
+    block.refusalId ??
+    (Object.keys(COMMAND_REFUSALS) as CommandRefusalId[]).find(
+      (id) => COMMAND_REFUSALS[id] === block.error,
+    );
+  const supported = CommandRefusalIdSchema.safeParse(id);
+  return supported.success ? translate(supported.data) : block.error;
+}
+
+/** Separate display input leaves the recorded block and evidence formatter unchanged. */
+export function commandDisplayOutput(block: CommandBlock, displayError: string | null): string {
+  return formatCommandOutput(block, displayError);
 }
 
 export function searchCommandBlocks(

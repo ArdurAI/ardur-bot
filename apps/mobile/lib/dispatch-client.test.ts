@@ -8,7 +8,7 @@ import {
   WAITING_FOR_HOME,
 } from "./dispatch-client";
 
-function fixture() {
+function fixture(platform?: "ios" | "android") {
   const keys = {
     handle: "native-key",
     publicKey: "public",
@@ -31,7 +31,7 @@ function fixture() {
   let changed = false;
   const native: NativeDevices = {
     nonce: () => "random-client-nonce",
-    createKeys: async () => keys,
+    createKeys: vi.fn(async () => keys),
     sign: vi.fn(async () => "signature"),
     verifyHome: vi.fn(async () => true),
     scanQr: vi.fn(),
@@ -74,7 +74,7 @@ function fixture() {
     },
   };
   const status = vi.fn();
-  const client = createDispatchClient(native, storage, status);
+  const client = createDispatchClient(native, storage, status, platform);
   return {
     native,
     storage,
@@ -141,4 +141,74 @@ it("labels a stop only after home confirms it", () => {
   expect(dispatchReceiptLabel({ state: "running", cancelRequested: true })).toBe("Stopping");
   expect(dispatchReceiptLabel({ state: "stopped", cancelRequested: true })).toBe("Stopped");
   expect(dispatchReceiptLabel({ state: "done", cancelRequested: true })).toBe("Done");
+});
+
+describe.each(["ios", "android"] as const)("%s pin refusal at the native bridge", (platform) => {
+  it.each(["nonce", "pair", "code", "claim", "request"])(
+    "keeps the exact certificate pin and stops on /device/%s",
+    async (blockedPath) => {
+      const f = fixture(platform);
+      const acceptedPaths: string[] = [];
+      const payload = {
+        version: 1,
+        challenge: "c".repeat(32),
+        instanceId: f.home.instanceId,
+        homeName: f.home.homeName,
+        fingerprint: f.home.fingerprint,
+        certificateFingerprint: f.home.certificateFingerprint,
+        hints: [f.home.url],
+      };
+      const storedHome = f.values.get(DEVICE_HOME_KEY);
+      vi.mocked(f.native.request).mockImplementation(async (url, pin) => {
+        expect(pin).toBe(f.home.certificateFingerprint);
+        const path = new URL(url).pathname.split("/").at(-1)!;
+        // A native TLS rejection happens before this request's HTTP data leaves.
+        if (path === blockedPath) throw new Error(HOME_CHANGED);
+        acceptedPaths.push(path);
+        if (path === "nonce")
+          return {
+            status: 200,
+            body: JSON.stringify({
+              instanceId: f.home.instanceId,
+              fingerprint: f.home.fingerprint,
+              certificate: "certificate",
+              signature: "valid-relayed-home-proof",
+              nonce: "server-nonce",
+              timestamp: 123,
+            }),
+          };
+        return {
+          status: 200,
+          body: JSON.stringify(
+            path === "code" ? { pendingId: "pending" } : { grantId: "grant", spaceId: "space" },
+          ),
+        };
+      });
+      const attempt = async () => {
+        if (blockedPath === "request") return f.client.request("tasks");
+        const pairing = await f.client.pair(
+          payload,
+          f.home.url,
+          blockedPath === "code" || blockedPath === "claim" ? "TESTCODE" : undefined,
+        );
+        if (pairing.poll) return pairing.poll();
+        return pairing;
+      };
+      await expect(attempt()).rejects.toThrow(HOME_CHANGED);
+      expect(acceptedPaths).not.toContain(blockedPath);
+      expect(f.values.get(DEVICE_HOME_KEY)).toBe(storedHome);
+      expect(f.native.request).toHaveBeenCalled();
+      for (const [, pin] of vi.mocked(f.native.request).mock.calls)
+        expect(pin).toBe(f.home.certificateFingerprint);
+      if (blockedPath === "nonce") {
+        expect(f.native.verifyHome).not.toHaveBeenCalled();
+        expect(f.native.createKeys).not.toHaveBeenCalled();
+        expect(f.native.sign).not.toHaveBeenCalled();
+        expect(f.native.request).toHaveBeenCalledTimes(1);
+      } else {
+        // Even a valid signed home proof cannot waive the next connection's pin.
+        expect(f.native.verifyHome).toHaveBeenCalled();
+      }
+    },
+  );
 });

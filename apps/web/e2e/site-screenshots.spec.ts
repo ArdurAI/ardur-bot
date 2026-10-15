@@ -5,7 +5,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
 import { dashboardFixture } from "./dashboard-fixture";
-import { openWorkspaceView } from "./workspace-view";
+import { openAgentComputer, openWorkspaceView } from "./workspace-view";
 
 const outputDir = process.env.SITE_SCREENSHOTS_DIR;
 test.skip(!outputDir, "Website screenshots run in the site assets publish job.");
@@ -274,6 +274,7 @@ function showcaseData() {
     threadId: group.threadId,
     groupId: group.id,
     groupName: group.name,
+    groupRouting: { coordinatorBotId: bots[0]!.id, defaultBotId: bots[0]!.id },
     members: group.members,
     cursor: 5,
     olderCursor: null,
@@ -427,9 +428,11 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   await expect(page.getByTestId("command-block")).toContainText(
     "in /home/ardurbot/workspace · 2 s · exit 0",
   );
+  await page.getByRole("button", { name: "Views", exact: true }).click();
   await expect(
-    page.locator("main").getByRole("button", { name: "Bot settings", exact: true }),
+    page.getByRole("menuitemcheckbox", { name: "Bot settings", exact: true }),
   ).toBeVisible();
+  await page.keyboard.press("Escape");
   await captureSiteScreenshot(page, "app-chat");
 
   await page.getByTestId("bot-settings-trigger").click();
@@ -454,22 +457,36 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   await expect(page.getByTestId("group-participant-models")).toBeVisible();
   // Three members: the capture must show the separator between each pair.
   await expect(page.getByTestId("group-participant-separator")).toHaveCount(2);
+  await page.getByRole("button", { name: "Views", exact: true }).click();
   await expect(
-    page.locator("main").getByRole("button", { name: "Group settings", exact: true }),
+    page.getByRole("menuitemcheckbox", { name: "Group settings", exact: true }),
   ).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(
     page.getByText("Checks are green and the release note matches the deployed version.", {
       exact: false,
     }),
   ).toBeVisible();
+  await page.locator("textarea").fill("Who is taking the next check?");
+  await expect(page.getByTestId("composer-recipients")).toHaveText("To Chief of Staff");
   await captureSiteScreenshot(page, "group-chat");
 
   await page.goto("/app/bot");
-  await page.getByTitle("Agent computer").click();
+  await openAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await expect(page.getByText("Morning brief")).toBeVisible();
   await expect(page.getByText("Every day at 4:00 PM")).toBeVisible();
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "computer");
+  await page
+    .getByTestId("side-panel")
+    .getByRole("button", { name: "Close panel", exact: true })
+    .click();
+  await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "closed");
+  await openAgentComputer(page);
+  await expect(page.getByRole("tab", { name: "Routines", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await captureSiteScreenshot(page, "routines");
 
   await page

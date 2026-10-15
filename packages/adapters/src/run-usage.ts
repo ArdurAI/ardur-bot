@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { AgentUsage, RequestUsageObservation, UsagePurpose } from "@ardurbot/adapter-kit";
 import type { RuntimePin } from "@ardurbot/contracts";
+import { isFrozenGoalStatus } from "@ardurbot/contracts";
 import type { PrismaClient, ThreadEvents, UsageRecord } from "@ardurbot/db";
 import {
   appendEventInTransaction,
@@ -43,6 +44,28 @@ export type BrokerRunFence = {
 
 /** Only newly persisted primary-call measurements belong in the run's context metrics. */
 export type RecordedContextUsage = { inputTokens: number; cachedTokens: number | null };
+
+/** Observe reply text once, under the current run lease; never persist the text itself. */
+export async function recordFirstReply(
+  prisma: Pick<PrismaClient, "run">,
+  run: Pick<UsageRun, "id" | "spaceId" | "userId">,
+  lease: Pick<BrokerRunFence, "leaseOwner" | "leaseFence">,
+  text: string,
+  at = new Date(),
+): Promise<void> {
+  if (!text.trim()) return;
+  await prisma.run.updateMany({
+    where: {
+      ...run,
+      ...lease,
+      status: "running",
+      leaseExpiresAt: { gt: at },
+      startedAt: { not: null, lte: at },
+      firstReplyAt: null,
+    },
+    data: { firstReplyAt: at },
+  });
+}
 
 /** The first durable broker admission fixes this source run's allowance across later turns. */
 export async function brokerRunAllowance(
@@ -87,6 +110,7 @@ export async function recordRunUsage(
     botId: run.botId,
     userId: run.userId,
     runId: run.id,
+    threadId: run.threadId,
     ...legacy,
     ...identity,
   };
@@ -96,7 +120,15 @@ export async function recordRunUsage(
         await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${rootTaskId} FOR UPDATE`;
         const tokens = usage.inputTokens + usage.outputTokens;
         const persisted = await tx.usageRecord.create({ data });
-        await updateUsageBudget(tx, rootTaskId, delegation?.id, run.id, tokens);
+        await updateUsageBudget(
+          tx,
+          rootTaskId,
+          delegation?.id,
+          run.id,
+          tokens,
+          false,
+          persisted.id,
+        );
         await refreshBotMessageUsageProjectionInTransaction(tx, run.id);
         return persisted;
       })
@@ -190,7 +222,9 @@ export async function recordStandaloneUsage(
 /**
  * Outside a goal, an admitted worker is bounded by its own allowance, and reservations
  * already handed out do not block the coordinator's own provider request. A goal still
- * stops the whole tree at the owner's limit. Cancel and deadline are checked by the caller.
+ * stops the whole tree at the owner's limit. A non-goal coordinator uses the larger
+ * of its stored root limit and pinned run allowance, including after room asks resize it.
+ * Cancel and deadline are checked by the caller.
  */
 export function brokerRootTokensBlock(input: {
   goal: boolean;
@@ -199,10 +233,12 @@ export function brokerRootTokensBlock(input: {
   reservedTokens: number;
   requestTokens: number;
   tokenLimit: number;
+  coordinatorRunAllowance?: number;
 }): boolean {
   if (!input.goal) {
     if (input.delegated) return false;
-    return input.usedTokens + input.requestTokens > input.tokenLimit;
+    const limit = Math.max(input.tokenLimit, input.coordinatorRunAllowance ?? input.tokenLimit);
+    return input.usedTokens + input.requestTokens > limit;
   }
   const held = input.delegated ? 0 : input.requestTokens;
   return input.usedTokens + input.reservedTokens + held > input.tokenLimit;
@@ -372,6 +408,9 @@ async function writeRequestObservation(
     cost: totals.cost,
     pricingProvenance: totals.cost === null ? Prisma.JsonNull : { kind: "request-observations" },
     lastSequence: Math.max(existing?.lastSequence ?? -1, request.counter.sequence),
+    collectionFinishedAt:
+      existing?.collectionFinishedAt ??
+      (request.collection?.outcome && request.collection.outcome !== "started" ? new Date() : null),
   };
   const record = existing
     ? await tx.usageRecord.update({ where: { id: existing.id }, data })
@@ -538,6 +577,11 @@ async function recordRequestUsage(
         );
         if (existing === "replay") return null;
         if (request.admission && !existing) {
+          const goal = await tx.teamGoal.findFirst({
+            where: { rootTaskId, spaceId: run.spaceId, userId: run.userId },
+            select: { status: true },
+          });
+          if (goal && isFrozenGoalStatus(goal.status)) throw new Error("Broker goal is frozen");
           if (
             !brokerFence ||
             request.counter.sequence !== 0 ||
@@ -613,6 +657,7 @@ async function recordRequestUsage(
               reservedTokens: rootBudget.reservedTokens,
               requestTokens: request.admission.reservedTokens,
               tokenLimit: rootBudget.tokenLimit,
+              coordinatorRunAllowance: request.admission.maxReservedTokens,
             })
           )
             throw new Error("Broker root task allowance exhausted");
@@ -652,6 +697,7 @@ async function recordRequestUsage(
             userId: run.userId,
             botId: run.botId,
             runId: run.id,
+            threadId: run.threadId,
             runtimePin:
               usagePin !== undefined
                 ? (usagePin as Prisma.InputJsonValue)
@@ -700,6 +746,7 @@ async function recordRequestUsage(
             run.id,
             inputDelta + outputDelta,
             Boolean(historicalBrokerReceipt),
+            record.id,
           );
         }
         if (
@@ -776,12 +823,14 @@ async function updateUsageBudget(
   runId: string,
   tokens: number,
   retainedPriorAttempt = false,
+  usageRecordId?: string,
 ) {
   if (!delegationId) {
     await tx.delegationRoot.updateMany({
       where: { rootTaskId },
       data: { usedTokens: { increment: tokens } },
     });
+    await noteLateSettlementUsage(tx, rootTaskId, usageRecordId, tokens);
     return;
   }
   const current = await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } });
@@ -818,5 +867,25 @@ async function updateUsageBudget(
         decrement: active ? Math.min(tokens, Math.max(0, attemptLimit - priorAttemptTokens)) : 0,
       },
     },
+  });
+  await noteLateSettlementUsage(tx, rootTaskId, usageRecordId, tokens);
+}
+
+/**
+ * Usage that settles after the owner's acceptance stays recorded against the root's
+ * ledger, and is flagged on the goal's settlement marker as a visible discrepancy.
+ * The accepted result itself never changes.
+ */
+async function noteLateSettlementUsage(
+  tx: Prisma.TransactionClient,
+  rootTaskId: string,
+  usageRecordId: string | undefined,
+  tokens: number,
+) {
+  if (!usageRecordId || tokens <= 0) return;
+  const settlement = await tx.goalSettlement.findFirst({ where: { rootTaskId } });
+  if (!settlement) return;
+  await tx.goalSettlementDiscrepancy.create({
+    data: { settlementId: settlement.id, usageRecordId, tokens },
   });
 }

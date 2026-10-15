@@ -1,6 +1,6 @@
 import { ChatMarkdown } from "@ardurbot/chat-ui/native";
 import type { MessageBlock } from "@ardurbot/contracts";
-import { workRecordEntries, workRecordStatus } from "@ardurbot/core";
+import { RESTART_SESSION_MESSAGE, workRecordEntries, workRecordStatus } from "@ardurbot/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
@@ -209,7 +209,9 @@ export function CompactWorkRecord({
                     colorScheme={colorScheme}
                     streaming={m.evidence.outcome === "pending"}
                   >
-                    {m.block.text}
+                    {m.block.text === RESTART_SESSION_MESSAGE
+                      ? t("This run continued in a new session after a restart.")
+                      : m.block.text}
                   </ChatMarkdown>
                 </View>
               );

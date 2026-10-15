@@ -64,14 +64,17 @@ describe("window chrome", () => {
     const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "../pages");
     const shell = readFileSync(path.join(root, "Shell.tsx"), "utf8");
     expect(shell).toContain(
-      'className="app-drag flex items-center justify-between border-b border-sidebar-border',
+      'className="app-drag flex flex-nowrap items-center justify-between border-b border-sidebar-border',
     );
     expect(shell).toContain('className="app-no-drag grid h-8 w-8');
     const identityClass = shell.match(
       /data-testid="bot-settings-trigger"[\s\S]*?className="([^"]+)"/,
     )?.[1];
     expect(identityClass?.split(" ")).toContain("app-no-drag");
-    expect(shell.match(/className="app-no-drag grid h-\[30px\] w-\[34px\]/g)).toHaveLength(1);
+    const menu = readFileSync(path.join(root, "workspace/ViewControls.tsx"), "utf8");
+    const triggerClass = menu.match(/data-workspace-trigger[\s\S]*?className="([^"]+)"/)?.[1];
+    expect(triggerClass?.split(" ")).toContain("app-no-drag");
+    expect(menu.match(/data-workspace-trigger/g)).toHaveLength(1);
   });
 
   it("moves window chrome into the conversation header when the bots sidebar is collapsed", () => {

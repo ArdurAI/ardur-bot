@@ -45,8 +45,48 @@ A verified journal records decisions, not proof of safety or successful executio
 The public key in the same download is not an independent trust anchor. Before
 trusting a result, compare its fingerprint with one the owner publishes through a
 channel you already trust. A replacement bundle containing a replacement key can
-verify against itself. The app does not yet provide a public fingerprint publishing
-service, key rotation, or revocation.
+verify against itself. The app lets the owner copy or share the active signing key's
+fingerprint and export a public-only identity card separately from a bundle. The
+card contains the existing SHA-256 public-key fingerprint, its space scope, and
+the key version. Compare it through a channel you already trust; sharing it
+alongside the bundle does not create an independent trust anchor.
+
+## Replacing or revoking the signing key
+
+A space owner can replace the signing key from the **Signing identity** dialog on
+web, desktop, or the owner's phone session. Replacement is atomic against the key
+the owner saw, so two replacements cannot race. Runs already admitted keep
+signing with the key that admitted them and still verify against its retained
+public key; new runs sign with the new key.
+
+In an emergency the owner can revoke the key instead. The revocation is recorded
+with its date and reason, signing with the revoked key stops at once — an
+admitted run stops signing further records and reports the gap — and records
+signed during or after the revocation second are reported untrusted. Earlier
+records still verify against the retained public key. After a bare revocation nothing
+signs again until the owner authorizes a replacement. Paired devices and members
+cannot replace or revoke a key.
+
+Old public keys are kept for historical verification and journals are never
+rewritten. The identity card shows the key version and the key history
+(public-only): each version with its state — active, replaced, or revoked — and
+its dates.
+
+Open a run's evidence status to see **Signing identity**. Web and desktop offer
+**Copy fingerprint** and **Export identity card**. Phone offers **Share fingerprint**
+and exports the card through the native share sheet, including in paired mode.
+The card contains no public-key PEM, private key, or secret-store references.
+
+Enter the fingerprint received through a trusted channel in **Expected fingerprint**
+and choose **Check key**. The app checks the run's chain and seal and reports
+**Signed by the expected key**, **Signed by a different key**, or
+**No expected key given; self-consistent only**. A different key is not a match,
+even when its signatures verify. Failed or unsealed evidence never receives a
+successful signer result. The comparison checks the run's signing key, which may
+differ from the active identity card's key; it does not change the run-state labels.
+The `evidence.runSummary` verification option accepts `expectedFingerprint` without
+changing any signed records or bundle files. Offline package verifiers also accept
+an optional expected fingerprint.
 
 ## Run states
 
@@ -111,6 +151,6 @@ Compare all hexadecimal digits with the owner's `sha256:<hex>` fingerprint. A
 successful check against an untrusted downloaded key establishes internal
 consistency, not the identity or honesty of the signer.
 
-Not included: encrypting stored evidence, key rotation and revocation, a second
+Not included: encrypting stored evidence, a second
 signer (the computer that ran the tool), or a public place to publish the key
 fingerprint. Spend and risk gates are not implemented by decision recording.

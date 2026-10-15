@@ -1,6 +1,11 @@
 import { ChatMarkdown } from "@ardurbot/chat-ui/web";
 import type { ThreadMessage } from "@ardurbot/contracts";
-import { isApprovalAskBlock, isSecretAskBlock, selectedAskActionLabel } from "@ardurbot/core";
+import {
+  isApprovalAskBlock,
+  isSecretAskBlock,
+  RESTART_ACTION_MESSAGE,
+  selectedAskActionLabel,
+} from "@ardurbot/core";
 import { Button, Input } from "@ardurbot/ui-web";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
@@ -119,7 +124,11 @@ export function AskCard({
         </details>
       ) : (
         <div className="text-[15.5px] leading-[1.5] text-foreground">
-          <ChatMarkdown>{block.text}</ChatMarkdown>
+          <ChatMarkdown>
+            {block.text === RESTART_ACTION_MESSAGE
+              ? t`This action may already have happened. Check its outcome before trying again.`
+              : block.text}
+          </ChatMarkdown>
         </div>
       )}
       {secretInput && block.credential ? (

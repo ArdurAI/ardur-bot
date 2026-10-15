@@ -15,9 +15,14 @@ export function isAllowedDesktopPath(
   roots: string[],
   pathOperations: PathOperations = path,
 ) {
-  const resolved = pathOperations.resolve(target);
+  const windows = pathOperations.sep === "\\";
+  const normalizedTarget = windows ? windowsContainmentPath(target) : target;
+  if (normalizedTarget === undefined) return false;
+  const resolved = pathOperations.resolve(normalizedTarget);
   return roots.some((root) => {
-    const relative = pathOperations.relative(pathOperations.resolve(root), resolved);
+    const normalizedRoot = windows ? windowsContainmentPath(root) : root;
+    if (normalizedRoot === undefined) return false;
+    const relative = pathOperations.relative(pathOperations.resolve(normalizedRoot), resolved);
     return (
       relative === "" ||
       (relative !== ".." &&
@@ -25,6 +30,31 @@ export function isAllowedDesktopPath(
         !pathOperations.isAbsolute(relative))
     );
   });
+}
+
+function windowsContainmentPath(value: string): string | undefined {
+  let normalized = value.replace(/\//g, "\\");
+  // Only DOS and UNC final names are supported. Never turn a device namespace
+  // into an ordinary path by blindly stripping its prefix.
+  if (/^\\\\\?\\UNC\\/iu.test(normalized)) normalized = `\\\\${normalized.slice(8)}`;
+  else if (/^\\\\\?\\[a-z]:\\/iu.test(normalized)) normalized = normalized.slice(4);
+  if (!/^(?:[a-z]:\\|\\\\[^\\?.][^\\]*\\[^\\]+(?:\\|$))/iu.test(normalized)) return undefined;
+  const segments = normalized
+    .replace(/^[a-z]:/iu, "")
+    .split("\\")
+    .filter(Boolean);
+  if (
+    segments.some(
+      (segment) =>
+        segment === "." ||
+        segment === ".." ||
+        hasWindowsReservedCharacter(segment) ||
+        /[ .]$/u.test(segment) ||
+        WINDOWS_RESERVED_NAME.test(segment.split(".", 1)[0] ?? ""),
+    )
+  )
+    return undefined;
+  return normalized;
 }
 
 function assertPortableWindowsPath(value: string) {

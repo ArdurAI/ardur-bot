@@ -2,21 +2,32 @@ import type { AgentRunModel } from "@ardurbot/adapter-kit";
 import type {
   Actor,
   ResolvedPin,
+  RuntimeComputerLocation,
   RuntimeKind,
   RuntimePin,
   RuntimeProblem,
   ThinkingLevel,
 } from "@ardurbot/contracts";
 import {
+  failureCategoryMessage,
+  HERMES_CONTEXT_LIMIT_MESSAGE,
+  HERMES_MINIMUM_CONTEXT_TOKENS,
   normalizedThinkingLevel,
+  runtimeNames,
   runtimePinProblem,
+  runtimeSupportsLocation,
   ThinkingLevelSchema,
   usableModelId,
 } from "@ardurbot/contracts";
 import type { findDefaultModelCredential, PrismaClient } from "@ardurbot/db";
 import { findBoundModelCredential } from "@ardurbot/db";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
-import { effectiveHermesConfig, hermesConfigHash } from "./hermes-compatibility.js";
+import {
+  effectiveHermesConfig,
+  hermesCompatibility,
+  hermesConfigHash,
+} from "./hermes-compatibility.js";
+import { modelLocalityRefusedBy } from "./model-locality.js";
 import { listPiCatalog } from "./pi-models.js";
 import { modelsForRequest } from "./pi-runtime.js";
 
@@ -42,16 +53,8 @@ export function selectConfiguredModel(input: {
   }
   const scripted =
     pin.provider === "scripted" && pin.modelId === "scripted" && pin.credentialId === "scripted";
-  if (
-    !scripted &&
-    (!credential || credential.id !== pin.credentialId || credential.provider !== pin.provider)
-  ) {
-    return runtimePinProblem(
-      pin,
-      "pin-credential-missing",
-      "The pinned connection is missing or disconnected.",
-    );
-  }
+  const problem = canBotRun({ pin, connection: { credential } });
+  if (problem) return problem;
   // Custom IDs are free-form and bound when the bot is edited. A later space
   // default change must not invalidate that saved choice or a run snapshot.
   const entry = listPiCatalog().find(
@@ -94,8 +97,9 @@ export function validateRuntimePin(
   model: AgentRunModel,
   pin: RuntimePin,
 ): RuntimeProblem | undefined {
-  // Ollama capabilities and effort are checked against a fresh /api/show by resolveModelKey.
-  if (model.provider === "ollama" && model.baseUrl && model.contextWindow) return undefined;
+  // Run resolution checks Ollama capabilities against a fresh /api/show before admission.
+  // Editing an unchanged pin must not probe for capabilities or invent a context limit.
+  if (model.provider === "ollama" && model.baseUrl) return undefined;
   if (model.provider === "scripted" && model.id === "scripted") return undefined;
   if (model.provider === "openai-compatible" && !model.baseUrl) {
     return runtimePinProblem(
@@ -170,4 +174,74 @@ export async function credentialForPin(
     pin.provider !== "scripted"
     ? findBoundModelCredential(prisma, scope, pin.provider, pin.credentialId)
     : null;
+}
+
+/** Pure admission predicates shared by editing and run selection. Facts are supplied by the server. */
+export function canBotRun(input: {
+  pin: RuntimePin;
+  placement?: { computer: RuntimeComputerLocation; experimental: boolean };
+  connection?: { credential: { id: string; provider: string } | null };
+  model?: AgentRunModel;
+  /** Policy edits need only the saved destination, never live capability discovery. */
+  destinationModel?: Pick<AgentRunModel, "provider" | "id" | "baseUrl">;
+  botPolicy?: unknown;
+  spacePolicy?: unknown;
+}): RuntimeProblem | undefined {
+  const { pin, placement, connection, model } = input;
+  const params = { runtime: runtimeNames[pin.runtimeKind], bot: "this bot" };
+  if (placement) {
+    if (!runtimeSupportsLocation(pin.runtimeKind, placement.computer))
+      return runtimePinProblem(
+        pin,
+        "runtime-unsupported-computer",
+        failureCategoryMessage("computer-unsupported", params),
+        "computer-unsupported",
+      );
+    if (pin.runtimeKind !== "pi" && !placement.experimental)
+      return runtimePinProblem(
+        pin,
+        "runtime-unavailable",
+        failureCategoryMessage("experimental-off", params),
+        "experimental-off",
+      );
+  }
+  if (
+    connection &&
+    !(
+      pin.provider === "scripted" &&
+      pin.modelId === "scripted" &&
+      pin.credentialId === "scripted"
+    ) &&
+    (!connection.credential ||
+      connection.credential.id !== pin.credentialId ||
+      connection.credential.provider !== pin.provider)
+  )
+    return runtimePinProblem(
+      pin,
+      "pin-credential-missing",
+      failureCategoryMessage("connection-missing", params),
+      "connection-missing",
+    );
+  const destinationModel = model ?? input.destinationModel;
+  if (destinationModel) {
+    const refusedBy =
+      input.botPolicy !== undefined || input.spacePolicy !== undefined
+        ? modelLocalityRefusedBy(input.botPolicy, input.spacePolicy, destinationModel)
+        : null;
+    if (refusedBy) {
+      const id = refusedBy === "space" ? "destinations-space" : "destinations-bot";
+      return runtimePinProblem(pin, "locality-denied", failureCategoryMessage(id, params), id);
+    }
+  }
+  if (model) {
+    if (
+      pin.runtimeKind === "hermes" &&
+      model.contextWindow !== undefined &&
+      model.contextWindow < HERMES_MINIMUM_CONTEXT_TOKENS
+    )
+      return runtimePinProblem(pin, "runtime-configuration-invalid", HERMES_CONTEXT_LIMIT_MESSAGE);
+    if (pin.runtimeKind === "pi" || pin.runtimeKind === "hermes")
+      return hermesCompatibility(pin, model) ?? validateRuntimePin(model, pin);
+  }
+  return undefined;
 }

@@ -1,3 +1,5 @@
+// #199: Use the shared Postgres image override without changing the local default.
+
 import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -5,6 +7,7 @@ import { performance } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { MemoryAccess, MemoryDocumentStore } from "@ardurbot/adapter-kit";
 import { createDb, type Prisma } from "@ardurbot/db";
+import { TEST_POSTGRES_IMAGE } from "@ardurbot/testkit/postgres-image";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { scopeKey } from "./scope.js";
 
@@ -41,7 +44,7 @@ async function main() {
   const module = (await import(pathToFileURL(storePath).href)) as {
     PostgresDocumentStore: StoreConstructor;
   };
-  const container = await new PostgreSqlContainer("postgres:16-alpine")
+  const container = await new PostgreSqlContainer(TEST_POSTGRES_IMAGE)
     .withEnvironment({ POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=en-US" })
     .start();
   const uri = container.getConnectionUri();

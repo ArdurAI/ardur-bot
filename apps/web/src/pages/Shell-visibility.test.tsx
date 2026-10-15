@@ -90,6 +90,7 @@ const state = vi.hoisted(
       bootstrapBotId?: string;
       bootstrapGate?: Promise<void>;
       bootstrapThread?: ThreadSnapshot;
+      duplicateError?: unknown;
       takeoverRejections: number;
       takeoverFailures: number;
       terminalAvailable: boolean;
@@ -200,6 +201,12 @@ vi.mock("../lib/rpc", () => {
           ],
         };
       },
+      bots: {
+        duplicate: async () => {
+          state.calls.push("bots.duplicate");
+          throw state.duplicateError;
+        },
+      },
       spaces: {
         list: async () => ({
           current: {
@@ -306,6 +313,7 @@ vi.mock("../lib/rpc", () => {
         avatarStyle: "robot",
       }),
       models: {
+        validatePin: async () => ({ ok: true }),
         list: async () => {
           state.calls.push("models.list");
           return [];
@@ -323,6 +331,10 @@ vi.mock("../lib/rpc", () => {
       mcp: { servers: { list: record("mcp.servers.list") } },
       connectors: { summary: record("connectors.summary") },
       workspace: {
+        list: async ({ botId }: { botId: string }) => ({
+          context: state.workspaceContexts[botId],
+          entries: [],
+        }),
         describe: async ({ botId }: { botId: string }) => {
           state.calls.push("workspace.describe");
           return (
@@ -337,6 +349,18 @@ vi.mock("../lib/rpc", () => {
           );
         },
         tasks: record("workspace.tasks"),
+        git: async () => ({
+          context: {
+            botId: "bot-1",
+            computerId: "computer-bot-1",
+            rootId: "root-1",
+            generation: 1,
+            files: "live",
+            git: true,
+            observedAt: "2026-09-28T00:00:00.000Z",
+          },
+          status: "unavailable",
+        }),
       },
       terminal: {
         available: async () => ({ available: state.terminalAvailable }),
@@ -467,7 +491,9 @@ vi.mock("../components/PreferencesProvider", () => ({
   }),
 }));
 
+import { rpc } from "../lib/rpc";
 import { ShellPage } from "./Shell";
+import * as workspaceFileSessions from "./workspace/file-sessions";
 
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -481,6 +507,7 @@ let savedLayouts: Map<string, string>;
 let narrowWindow = false;
 
 beforeEach(() => {
+  state.duplicateError = undefined;
   savedLayouts = new Map();
   narrowWindow = false;
   Object.defineProperty(window, "localStorage", {
@@ -663,10 +690,7 @@ async function until(condition: () => boolean, budgetMs = 5000, step = 50) {
 const count = (name: string) => state.calls.filter((call) => call === name).length;
 const pane = () => host.querySelector('[data-testid="side-panel"]');
 const paneTab = (label: string) =>
-  [...(pane()?.querySelectorAll('[role="tab"]') ?? [])].find((tab) => tab.textContent === label) ??
-  [...host.querySelectorAll("button")].find(
-    (button) => button.getAttribute("aria-label") === label,
-  );
+  [...(pane()?.querySelectorAll('[role="tab"]') ?? [])].find((tab) => tab.textContent === label);
 const overlayTab = (label: string) =>
   [
     ...(host
@@ -703,17 +727,292 @@ async function renderShell(route: string) {
   await tick(150);
 }
 
-async function openWorkspacePane() {
-  const agentComputer = [...host.querySelectorAll("button")].find((button) =>
-    button.getAttribute("title")?.includes("Agent computer"),
+it.each(["resolve", "reject"])(
+  "accepts another composer message while an acknowledged send refresh is pending (%s)",
+  async (refreshOutcome) => {
+    state.threads["bot-1"]!.messages = [
+      {
+        id: "focus-choice",
+        threadId: "thread-bot-1",
+        seq: 0,
+        role: "bot",
+        botId: "bot-1",
+        createdAt: "2026-09-28T00:00:00Z",
+        blocks: [
+          {
+            kind: "choice",
+            question: "What do you want me on first?",
+            options: [
+              { id: "daily", letter: "A", label: "Day-to-day work" },
+              { id: "inbox", letter: "B", label: "Inbox & email" },
+              { id: "research", letter: "C", label: "Research & writing" },
+              { id: "everything", letter: "D", label: "A bit of everything" },
+            ],
+          },
+        ],
+      },
+    ];
+    await renderShell("/app/bot-1");
+    const composer = host.querySelector<HTMLTextAreaElement>('[role="combobox"]')!;
+    expect(host.textContent).toContain("What do you want me on first?");
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    let acknowledge!: () => void;
+    const acknowledgement = new Promise<void>((resolve) => {
+      acknowledge = resolve;
+    });
+    let finishRefresh!: () => void;
+    const refresh = new Promise<void>((resolve) => {
+      finishRefresh = resolve;
+    });
+    const send = vi.spyOn(rpc.threads, "send").mockImplementation(async (input) => {
+      if (send.mock.calls.length === 1) await acknowledgement;
+      const snapshot = state.threads["bot-1"]!;
+      snapshot.cursor += 1;
+      snapshot.messages = [
+        ...snapshot.messages,
+        {
+          id: `sent-${snapshot.cursor}`,
+          threadId: snapshot.threadId,
+          seq: snapshot.cursor,
+          role: "user",
+          createdAt: "2026-09-28T00:00:00Z",
+          blocks: [{ kind: "text", text: input.text ?? "" }],
+        },
+      ];
+      return { taskId: "task-1", runId: "run-1", seq: snapshot.cursor };
+    });
+    const get = vi.spyOn(rpc.threads, "get").mockImplementation(async () => {
+      const snapshot = { ...state.threads["bot-1"]! };
+      if (get.mock.calls.length === 1) {
+        await refresh;
+        if (refreshOutcome === "reject") throw new Error("Refresh unavailable");
+      }
+      return snapshot;
+    });
+    const interact = async (action: () => void) => {
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+      try {
+        await act(async () => action());
+      } finally {
+        (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+      }
+    };
+    const fill = async (text: string) => {
+      await interact(() => {
+        composer.focus();
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+          composer,
+          text,
+        );
+        composer.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+    const enter = async () => {
+      await interact(() => {
+        composer.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+        );
+      });
+    };
+    try {
+      await fill("line one\nline two");
+      await enter();
+      expect(composer.value).toBe("");
+      await fill("Fake composer regression check.");
+      await enter();
+      // An unacknowledged write still blocks a duplicate submission.
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(composer.value).toBe("Fake composer regression check.");
+      await interact(acknowledge);
+      await until(() => get.mock.calls.length === 1);
+      expect(host.querySelector('[role="combobox"]')).toBe(composer);
+      expect(document.activeElement).toBe(composer);
+      await enter();
+      expect(composer.value).toBe("");
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send.mock.calls[1]?.[0]).toMatchObject({
+        botId: "bot-1",
+        text: "Fake composer regression check.",
+      });
+      await until(() => host.querySelector('[data-message-id="sent-2"]') !== null);
+      await interact(finishRefresh);
+      await tick();
+      expect(host.querySelector('[data-message-id="sent-2"]')?.textContent).toContain(
+        "Fake composer regression check.",
+      );
+      expect(host.querySelector('[data-testid="composer-error"]')).toBeNull();
+    } finally {
+      acknowledge();
+      finishRefresh();
+      await tick();
+      send.mockRestore();
+      get.mockRestore();
+    }
+  },
+);
+
+async function headerItem(label: string) {
+  await until(() => host.querySelector("[data-workspace-trigger]") !== null);
+  click(host.querySelector("[data-workspace-trigger]"));
+  await until(() => document.querySelector('[role="menuitemcheckbox"]') !== null);
+  const item = [...document.querySelectorAll('[role="menuitemcheckbox"]')].find(
+    (element) => element.textContent?.trim() === label,
   );
-  click(agentComputer);
+  expect(item).toBeDefined();
+  return item;
+}
+
+async function selectPaneView(label: string) {
+  const tab = paneTab(label);
+  if (tab) click(tab);
+  else click(await headerItem(label));
+}
+
+async function toggleWorkspace() {
+  const item = await headerItem("Workspace pane");
+  expect(item?.hasAttribute("data-workspace-toggle")).toBe(true);
+  click(item);
+}
+
+async function openWorkspacePane() {
+  await toggleWorkspace();
   await until(() => pane()?.getAttribute("data-panel") === "computer");
   // The pane's tab strip appears once the thread snapshot is committed.
   await until(() => paneTab("Tasks") !== undefined);
   await tick(150);
   return pane();
 }
+
+function rememberWorkspaceViews(open: Array<{ type: "tasks" | "files" | "ide" }>) {
+  savedLayouts.set(
+    'ardurbot:workspace-layout:["user-1","space-1","bot-1"]',
+    JSON.stringify({
+      version: 1,
+      open,
+      active: open.at(-1)!.type,
+      visible: false,
+      expanded: false,
+      position: "right",
+      width: 480,
+      height: 280,
+    }),
+  );
+  state.workspaceContexts["bot-1"] = {
+    botId: "bot-1",
+    computerId: "computer-bot-1",
+    rootId: "root-1",
+    generation: 1,
+    files: "live",
+    observedAt: "2026-09-28T00:00:00.000Z",
+  };
+}
+
+it.each([
+  { name: "Files", open: [{ type: "files" }] },
+  { name: "IDE", open: [{ type: "ide" }] },
+  { name: "Tasks + Files", open: [{ type: "tasks" }, { type: "files" }] },
+] as const)(
+  "closes the whole workspace in one click and reopens remembered views: $name",
+  async ({ open: views }) => {
+    const open = [...views];
+    rememberWorkspaceViews(open);
+    const label = open.at(-1)!.type === "ide" ? "IDE" : "Files";
+    await renderShell("/app/bot-1");
+    click(await headerItem(label));
+    await until(() => paneTab(label)?.getAttribute("aria-selected") === "true");
+    const tabs = [...pane()!.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent);
+    click(pane()?.querySelector('[aria-label="Expand"]'));
+    await until(() => pane()?.getAttribute("data-overlay") === "true");
+    click(pane()?.querySelector('[aria-label="Back to chat"]'));
+    await until(() => pane()?.getAttribute("data-overlay") === "false");
+    click(pane()?.querySelector('[aria-label="Expand"]'));
+    await until(() => pane()?.getAttribute("data-overlay") === "true");
+    // Exercise the header X even before its accessible name is corrected.
+    const buttons = pane()!.querySelector("[data-workspace-chrome]")!.querySelectorAll("button");
+    click(buttons.item(buttons.length - 1));
+    await until(() => pane()?.getAttribute("data-panel") === "closed");
+    expect(pane()?.getAttribute("aria-hidden")).toBe("true");
+    const layout = JSON.parse(
+      savedLayouts.get('ardurbot:workspace-layout:["user-1","space-1","bot-1"]')!,
+    );
+    expect(layout).toMatchObject({ open, visible: false, expanded: false });
+    expect(document.activeElement).toBe(host.querySelector("[data-workspace-trigger]"));
+    click(await headerItem(label));
+    await until(() => pane()?.getAttribute("aria-hidden") === "false");
+    expect(paneTab(label)?.getAttribute("aria-selected")).toBe("true");
+    expect([...pane()!.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(
+      tabs,
+    );
+    expect(pane()?.getAttribute("data-overlay")).toBe("false");
+    expect(
+      pane()?.querySelector('[data-workspace-chrome] [aria-label="Close panel"]'),
+    ).not.toBeNull();
+    click(await headerItem("Tasks"));
+    await until(() => paneTab("Tasks")?.getAttribute("aria-selected") === "true");
+  },
+);
+
+it("closes the workspace with one Escape and reopens from the Views toggle", async () => {
+  rememberWorkspaceViews([{ type: "tasks" }, { type: "files" }]);
+  await renderShell("/app/bot-1");
+  click(await headerItem("Files"));
+  await until(() => paneTab("Files")?.getAttribute("aria-selected") === "true");
+  paneTab("Files")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await until(() => pane()?.getAttribute("data-panel") === "closed");
+  expect(pane()?.getAttribute("aria-hidden")).toBe("true");
+  await toggleWorkspace();
+  await until(() => pane()?.getAttribute("aria-hidden") === "false");
+  expect(paneTab("Files")?.getAttribute("aria-selected")).toBe("true");
+  expect(paneTab("Tasks")).toBeDefined();
+});
+
+it("closing one workspace tab keeps the other view open", async () => {
+  rememberWorkspaceViews([{ type: "tasks" }, { type: "files" }]);
+  await renderShell("/app/bot-1");
+  click(await headerItem("Files"));
+  await until(() => paneTab("Files")?.getAttribute("aria-selected") === "true");
+  click(pane()?.querySelector('[role="tablist"] [aria-label="Close Files"]'));
+  await until(() => pane()?.querySelectorAll('[role="tab"]').length === 1);
+  expect(pane()?.getAttribute("data-panel")).toBe("computer");
+  expect(pane()?.getAttribute("aria-hidden")).toBe("false");
+  expect(paneTab("Tasks")?.getAttribute("aria-selected")).toBe("true");
+});
+
+it.each(["Files", "IDE"])(
+  "guards panel dismissal while %s has unsaved or saving files",
+  async (label) => {
+    rememberWorkspaceViews([{ type: label === "IDE" ? "ide" : "files" }]);
+    await renderShell("/app/bot-1");
+    click(await headerItem(label));
+    await until(() => paneTab(label)?.getAttribute("aria-selected") === "true");
+    const snapshot = vi.spyOn(workspaceFileSessions, "workspaceFilesSnapshot");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      snapshot.mockReturnValue({ dirty: true, saving: true });
+      click(pane()?.querySelector('[aria-label="Close panel"]'));
+      await tick();
+      expect(pane()?.getAttribute("aria-hidden")).toBe("false");
+      expect(confirm).not.toHaveBeenCalled();
+      snapshot.mockReturnValue({ dirty: true, saving: false });
+      click(pane()?.querySelector('[aria-label="Close panel"]'));
+      await tick();
+      expect(confirm).toHaveBeenCalledExactlyOnceWith("Unsaved changes");
+      expect(pane()?.getAttribute("aria-hidden")).toBe("false");
+      paneTab(label)!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await tick();
+      expect(confirm).toHaveBeenCalledTimes(2);
+      expect(pane()?.getAttribute("aria-hidden")).toBe("false");
+      confirm.mockReturnValue(true);
+      paneTab(label)!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await until(() => pane()?.getAttribute("data-panel") === "closed");
+      expect(pane()?.getAttribute("aria-hidden")).toBe("true");
+      snapshot.mockReturnValue({ dirty: false, saving: false });
+    } finally {
+      snapshot.mockRestore();
+      confirm.mockRestore();
+    }
+  },
+);
 
 /** Delivers a thread refresh the way a live event does: event → refreshThread → threads.get. */
 async function deliverCapabilityFlip(botId: string, graphical: boolean) {
@@ -832,10 +1131,77 @@ it("opens the dashboard account popover on its first click with the existing act
   expect(document.querySelector('[data-slot="popover-content"]')).toBe(menu);
 });
 
+it("shows only one header menu and opens each available view, settings and computer", async () => {
+  state.workspaceContexts["bot-1"] = {
+    botId: "bot-1",
+    computerId: "computer-bot-1",
+    rootId: "root-1",
+    generation: 1,
+    files: "live",
+    git: true,
+    observedAt: "2026-09-28T00:00:00.000Z",
+  };
+  await renderShell("/app/bot-1");
+  await until(() => host.querySelector("[data-workspace-trigger]") !== null);
+  const trigger = host.querySelector("[data-workspace-trigger]")!;
+  const controls = trigger.parentElement!;
+  expect(controls.querySelectorAll("button")).toHaveLength(1);
+  expect(trigger.getAttribute("aria-label")).toBe("Views");
+  expect(host.querySelector("[data-workspace-toggle]")).toBeNull();
+  for (const label of [
+    "Tasks",
+    "Files",
+    "IDE",
+    "Recorded changes",
+    "Git changes",
+    "Routines",
+    "Screen",
+  ]) {
+    const item = await headerItem(label);
+    expect(item?.getAttribute("aria-checked")).toBe("false");
+    click(item);
+    await until(() => paneTab(label)?.getAttribute("aria-selected") === "true");
+    const selected = await headerItem(label);
+    expect(selected?.getAttribute("aria-checked")).toBe("true");
+    expect(document.querySelector("[data-workspace-toggle]")?.getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    click(selected);
+    await until(() => pane()?.getAttribute("aria-hidden") === "true");
+  }
+  const before = count("threads.get");
+  await openWorkspacePane();
+  expect(count("threads.get")).toBeGreaterThan(before);
+  await toggleWorkspace();
+  await until(() => pane()?.getAttribute("aria-hidden") === "true");
+  click(await headerItem("Bot settings"));
+  await until(() => pane()?.getAttribute("data-panel") === "settings");
+  const settings = await headerItem("Bot settings");
+  expect(settings?.getAttribute("aria-checked")).toBe("true");
+  click(settings);
+  await until(() => pane()?.getAttribute("aria-hidden") === "true");
+}, 30_000);
+
+it("keeps group settings as the group's only header menu item", async () => {
+  addGroupConversation();
+  await renderShell("/app/g/group-1");
+  click(host.querySelector("[data-workspace-trigger]"));
+  await until(() => document.querySelector('[role="menuitemcheckbox"]') !== null);
+  expect(
+    [...document.querySelectorAll('[role^="menuitem"]')].map((item) => item.textContent?.trim()),
+  ).toEqual(["Group settings"]);
+  click(document.querySelector('[role="menuitemcheckbox"]'));
+  await until(() => pane()?.getAttribute("data-panel") === "group-settings");
+  const settings = await headerItem("Group settings");
+  expect(settings?.getAttribute("aria-checked")).toBe("true");
+  click(settings);
+  await until(() => pane()?.getAttribute("aria-hidden") === "true");
+});
+
 it("keeps Show settings in the workspace header and Show computer returns to the selected view", async () => {
   await renderShell("/app/bot-1");
   await openWorkspacePane();
-  click(paneTab("Screen"));
+  await selectPaneView("Screen");
   await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
   const settings = pane()?.querySelector('[aria-label="Show settings"]');
   expect(settings).not.toBeNull();
@@ -874,6 +1240,7 @@ it.each([false, true])(
     await until(() => pane()?.getAttribute("data-panel") === "settings");
     await tick(200);
     expect(pane()?.getAttribute("data-panel")).toBe("settings");
+    await until(() => pane()?.querySelector("input")?.value === "Plain");
     expect(pane()?.querySelector("input")?.value).toBe("Plain");
   },
 );
@@ -885,13 +1252,13 @@ it("offers Tasks and Routines tabs on first open without overriding remembered c
     "Tasks",
     "Routines",
   ]);
-  click(paneTab("Routines"));
+  await selectPaneView("Routines");
   await until(() => paneTab("Routines")?.getAttribute("aria-selected") === "true");
   click(pane()?.querySelector('[aria-label="Close Routines"]'));
   await until(() => pane()?.querySelectorAll('[role="tab"]').length === 1);
-  click(host.querySelector("[data-workspace-toggle]"));
+  await toggleWorkspace();
   await until(() => pane()?.getAttribute("aria-hidden") === "true");
-  click(host.querySelector("[data-workspace-toggle]"));
+  await toggleWorkspace();
   await until(() => pane()?.getAttribute("aria-hidden") === "false");
   expect([...pane()!.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual([
     "Tasks",
@@ -901,7 +1268,7 @@ it("offers Tasks and Routines tabs on first open without overriding remembered c
 it("remembers distinct A/B layouts and restores focus when a view closes", async () => {
   await renderShell("/app/bot-1");
   await openWorkspacePane();
-  click(paneTab("Screen"));
+  await selectPaneView("Screen");
   await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
   const slider = pane()?.querySelector("hr");
   slider?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
@@ -920,8 +1287,8 @@ it("remembers distinct A/B layouts and restores focus when a view closes", async
     "Tasks",
     "Routines",
   ]);
-  click(paneTab("Computer"));
-  await until(() => paneTab("Computer")?.getAttribute("aria-selected") === "true");
+  await selectPaneView("Computer screen");
+  await until(() => paneTab("Computer screen")?.getAttribute("aria-selected") === "true");
   click(host.querySelector('[data-roster-bot-id="bot-1"]'));
   await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
   expect(pane()?.querySelector("hr")?.getAttribute("aria-valuenow")).toBe("500");
@@ -934,7 +1301,7 @@ it("remembers distinct A/B layouts and restores focus when a view closes", async
   click(pane()?.querySelector('[aria-label="Close Tasks"]'));
   await until(() => pane()?.getAttribute("aria-hidden") === "true");
   await tick(100);
-  expect(document.activeElement).toBe(host.querySelector("[data-workspace-toggle]"));
+  expect(document.activeElement).toBe(host.querySelector("[data-workspace-trigger]"));
   const layouts = [...savedLayouts.entries()].filter(([key]) =>
     key.startsWith("ardurbot:workspace-layout:"),
   );
@@ -954,7 +1321,7 @@ it.each([true, false])(
     };
     await renderShell("/app/bot-2");
     await openWorkspacePane();
-    click(paneTab("Terminal"));
+    await selectPaneView("Terminal");
     await until(() => host.querySelector("[data-pane-session]") !== null);
     const original = host.querySelector("[data-pane-session]");
     expect(pane()?.getAttribute("data-overlay")).toBe(String(narrow));
@@ -964,7 +1331,7 @@ it.each([true, false])(
     if (narrow) {
       expect(back).toBeDefined();
       click(back);
-    } else click(host.querySelector("[data-workspace-toggle]"));
+    } else await toggleWorkspace();
     await until(() => pane()?.getAttribute("aria-hidden") === "true");
     expect(host.querySelector("[data-pane-session]")).toBe(original);
     expect(count("session.close")).toBe(0);
@@ -972,7 +1339,7 @@ it.each([true, false])(
       (span) => span.textContent === "You control the computer",
     );
     expect(authority?.closest("aside")).toBeNull();
-    click(host.querySelector("[data-workspace-toggle]"));
+    await toggleWorkspace();
     await until(() => pane()?.getAttribute("aria-hidden") === "false");
     await until(() => document.activeElement === paneTab("Terminal"));
     expect(host.querySelector("[data-pane-session]")).toBe(original);
@@ -1169,7 +1536,7 @@ it("runs the heartbeat only while a screen surface is really rendered across cap
   expect(heartbeatInterval()).toBeUndefined();
 
   // Entering Screen starts the keep-alive: an immediate ping, then a 60s interval.
-  click(paneTab("Screen"));
+  await selectPaneView("Screen");
   await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
   await tick(100);
   const interval = heartbeatInterval();
@@ -1205,8 +1572,8 @@ it("keeps the heartbeat off the pane's Computer tab through the reverse transiti
   state.threads["bot-1"] = snapshotFor("bot-1", false);
   await renderShell("/app/bot-1");
   await openWorkspacePane();
-  click(paneTab("Computer"));
-  await until(() => paneTab("Computer")?.getAttribute("aria-selected") === "true");
+  await selectPaneView("Computer screen");
+  await until(() => paneTab("Computer screen")?.getAttribute("aria-selected") === "true");
   await until(() => heartbeatInterval() !== undefined);
   const onComputerTab = count("computer.heartbeat");
   expect(onComputerTab).toBeGreaterThan(0);
@@ -1214,7 +1581,7 @@ it("keeps the heartbeat off the pane's Computer tab through the reverse transiti
   // The unavailable Computer view stays selected, but its keep-alive stops.
   await deliverCapabilityFlip("bot-1", true);
   await until(() => pane()?.textContent?.includes("Open Screen to view this computer.") === true);
-  expect(paneTab("Computer")?.getAttribute("aria-selected")).toBe("true");
+  expect(paneTab("Computer screen")?.getAttribute("aria-selected")).toBe("true");
   expect(heartbeatInterval()).toBeUndefined();
   const afterFlip = count("computer.heartbeat");
   await tick(200);
@@ -1224,7 +1591,7 @@ it("keeps the heartbeat off the pane's Computer tab through the reverse transiti
 it("does not request a screen for a computer whose capability no longer supports the rendered tab", async () => {
   await renderShell("/app/bot-1");
   await openWorkspacePane();
-  click(paneTab("Screen"));
+  await selectPaneView("Screen");
   await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
   await tick(150);
   const graphicalScreens = count("computer.screenUrl");
@@ -1250,8 +1617,8 @@ it("does not request a screen when the retained Computer tab stops being support
   state.threads["bot-1"] = snapshotFor("bot-1", false);
   await renderShell("/app/bot-1");
   await openWorkspacePane();
-  click(paneTab("Computer"));
-  await until(() => paneTab("Computer")?.getAttribute("aria-selected") === "true");
+  await selectPaneView("Computer screen");
+  await until(() => paneTab("Computer screen")?.getAttribute("aria-selected") === "true");
   await tick(150);
   const beforeFlip = count("computer.screenUrl");
   expect(beforeFlip).toBeGreaterThan(0);
@@ -1267,7 +1634,7 @@ it("does not request a screen when the retained Computer tab stops being support
 it("does not request a screen during a fast switch to a bot without one", async () => {
   await renderShell("/app/bot-1");
   await openWorkspacePane();
-  click(paneTab("Screen"));
+  await selectPaneView("Screen");
   await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
   await tick(150);
   const beforeSwitch = count("computer.screenUrl");
@@ -1290,7 +1657,7 @@ it("does not request a screen during a fast switch to a bot without one", async 
 it("shows a rejected Take control in the screen, terminal and non-graphical full-window views", async () => {
   await renderShell("/app/bot-1");
   await openWorkspacePane();
-  click(paneTab("Screen"));
+  await selectPaneView("Screen");
   await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
   await tick(150);
 
@@ -1332,7 +1699,7 @@ it("entering the Screen tab neither boots the computer nor takes control", async
   expect(count("computer.boot")).toBe(0);
   expect(count("computer.takeover")).toBe(0);
 
-  click(paneTab("Screen"));
+  await selectPaneView("Screen");
   await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
   await tick(200);
   expect(count("computer.boot")).toBe(0);
@@ -1354,10 +1721,10 @@ it("keeps the pane shell across views and expansion, and confirms explicit panel
     await renderShell("/app/bot-2");
     await openWorkspacePane();
     expect(count("session.mount")).toBe(0);
-    click(paneTab("Terminal"));
+    await selectPaneView("Terminal");
     await until(() => host.querySelector("[data-pane-session]") !== null);
     const original = host.querySelector("[data-pane-session]");
-    click(paneTab("Tasks"));
+    await selectPaneView("Tasks");
     await tick(100);
     expect(host.querySelector("[data-pane-session]")).toBe(original);
     expect(pane()?.textContent).toContain("You control the computer");
@@ -1365,14 +1732,20 @@ it("keeps the pane shell across views and expansion, and confirms explicit panel
     await tick(100);
     expect(host.querySelector("[data-pane-session]")).toBe(original);
     expect(confirm).not.toHaveBeenCalled();
-    click(pane()?.querySelector('[aria-label="Close Terminal"]'));
+    click(pane()?.querySelector('[aria-label="Close panel"]'));
     await tick(100);
     expect(confirm).toHaveBeenCalledExactlyOnceWith("End this terminal?");
     expect(pane()?.getAttribute("aria-hidden")).toBe("false");
     expect(count("session.close")).toBe(0);
+    paneTab("Tasks")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await tick(100);
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(pane()?.getAttribute("aria-hidden")).toBe("false");
+    expect(count("session.close")).toBe(0);
     confirm.mockReturnValue(true);
-    click(pane()?.querySelector('[aria-label="Close Terminal"]'));
+    click(pane()?.querySelector('[aria-label="Close panel"]'));
     await until(() => count("session.close") === 1);
+    expect(pane()?.getAttribute("data-panel")).toBe("closed");
     expect(count("session.mount")).toBe(1);
     expect(count("computer.release")).toBe(0);
   } finally {
@@ -1392,7 +1765,7 @@ it("confirms a bot switch before ending the pane shell", async () => {
   try {
     await renderShell("/app/bot-2");
     await openWorkspacePane();
-    click(paneTab("Terminal"));
+    await selectPaneView("Terminal");
     await until(() => host.querySelector("[data-pane-session]") !== null);
     click(host.querySelector('[data-roster-bot-id="bot-1"]'));
     await tick(100);
@@ -1444,7 +1817,7 @@ it("does not request a screen for a background bot while the full-window view is
 it("does not request a screen when the full-window view is on the Terminal tab", async () => {
   await renderShell("/app/bot-1");
   await openWorkspacePane();
-  click(paneTab("Screen"));
+  await selectPaneView("Screen");
   await until(() => paneTab("Screen")?.getAttribute("aria-selected") === "true");
   await tick(150);
 
@@ -1470,3 +1843,37 @@ it("does not request a screen when the full-window view is on the Terminal tab",
   await deliverCapabilityFlip("bot-1", true);
   expect(count("computer.screenUrl")).toBe(beforeRefresh + 1);
 }, 30_000);
+
+it.each([
+  {
+    code: "BAD_REQUEST",
+    message:
+      "Codex cannot run on this computer. Move this bot to This computer or change its runtime.",
+    expected:
+      "Codex cannot run on this computer. Move this bot to This computer or change its runtime.",
+  },
+  {
+    code: "INTERNAL_SERVER_ERROR",
+    message: "private diagnostic",
+    expected: "Could not save. Try again.",
+  },
+])("shows a refused Duplicate instead of dropping its rejection: $code", async (error) => {
+  state.duplicateError = error;
+  await renderShell("/app/bot-1");
+  const target = host.querySelector('[data-roster-bot-id="bot-1"]')!;
+  target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  await until(() => document.querySelector('[role="menuitem"]') !== null);
+  const duplicate = [...document.querySelectorAll('[role="menuitem"]')].find(
+    (item) => item.textContent?.trim() === "Duplicate",
+  );
+  expect(duplicate).toBeDefined();
+  click(duplicate);
+  await until(
+    () =>
+      host
+        .querySelector('[data-testid="composer-error"]')
+        ?.textContent?.includes(error.expected) === true,
+  );
+  expect(state.calls.filter((name) => name === "bots.duplicate")).toHaveLength(1);
+  expect(host.textContent).not.toContain("private diagnostic");
+});

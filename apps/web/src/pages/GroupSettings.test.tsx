@@ -8,6 +8,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 vi.mock("@lingui/core/macro", () => ({
   t: (parts: TemplateStringsArray) => parts.join(""),
+  // Condition support imports RunEvidence, whose labels are module-level descriptors.
+  msg: (value: TemplateStringsArray | { id: string; message: string }) =>
+    Array.isArray(value) ? { id: value.join(""), message: value.join("") } : value,
 }));
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),

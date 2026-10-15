@@ -43,7 +43,7 @@ describe("desktop package metadata", () => {
         from: "../host-service/dist/native/${os}_${arch}",
         // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder expands these macros.
         to: "host-service/native/${os}_${arch}",
-        filter: ["koffi.node"],
+        filter: ["koffi.node", "node-pty/**/*"],
       },
     ]);
   });

@@ -144,6 +144,15 @@ export async function isPeerRun(
   return peerRun;
 }
 
+/** One projection for the authenticated thread follower and signed device windows. */
+export async function shouldForwardThreadEvent(
+  prisma: MessageDb,
+  event: { runId?: string; type: string; payload: { blocks?: unknown } },
+  cache: Map<string, Promise<boolean>>,
+): Promise<boolean> {
+  return !(await isPeerRun(prisma, event.runId, cache)) || shouldForwardPeerThreadEvent(event);
+}
+
 /** Peer-run SSE events that must still reach an open thread (terminals, waits, receipts, asks, text). */
 export function shouldForwardPeerThreadEvent(event: {
   type: string;

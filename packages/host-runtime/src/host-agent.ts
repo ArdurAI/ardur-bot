@@ -8,7 +8,7 @@ import type {
   AgentRuntime,
   ComputerRef,
 } from "@ardurbot/adapter-kit";
-import { IDE_FILE_BYTES } from "@ardurbot/contracts";
+import { CommandRefusalError, IDE_FILE_BYTES } from "@ardurbot/contracts";
 import type {
   HostFrame,
   HostHealth,
@@ -47,7 +47,9 @@ import {
 } from "./host-guardrails.js";
 import { inspectHostIntegrations } from "./host-integrations.js";
 import { HostMcpServers } from "./host-mcp.js";
-import { confinedHostCwd, FILE_LOCATION_REFUSAL } from "./host-policy.js";
+import { confinedHostCwd } from "./host-policy.js";
+import type { GuardedHostTerminalFactory } from "./host-terminal.js";
+import { HostTerminalProvider } from "./host-terminal.js";
 import type { LocalImportScanner } from "./import/scanner.js";
 import { createLocalImportScanner, LocalImportRescanError } from "./import/scanner.js";
 import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-runtime.js";
@@ -86,6 +88,7 @@ export class HostAgent {
   private importer?: LocalImportScanner;
   private readonly mcp: HostMcpServers;
   private readonly guard: HostGuardrailConfig;
+  private readonly terminal?: HostTerminalProvider;
   private readonly runtimes: Partial<
     Record<"claude-code" | "codex-app-server" | "antigravity" | "hermes", AgentRuntime>
   >;
@@ -109,6 +112,7 @@ export class HostAgent {
     runtimes?: Partial<
       Record<"claude-code" | "codex-app-server" | "antigravity" | "hermes", AgentRuntime>
     >,
+    terminalFactory?: GuardedHostTerminalFactory,
   ) {
     this.fleet = new FleetService(config.root, config.token ?? randomUUID());
     const engine = containerEngineGuard();
@@ -142,6 +146,13 @@ export class HostAgent {
       restricted: true,
       guard: this.guard,
     });
+    if (terminalFactory)
+      this.terminal = new HostTerminalProvider({
+        factory: terminalFactory,
+        guard: this.guard,
+        environment: async () => (await getHostEnvironment()).env,
+        generation: (computer) => `host:${computer.botId}`,
+      });
   }
   async initialize() {
     await getHostEnvironment();
@@ -203,6 +214,7 @@ export class HostAgent {
     }
     return {
       capabilities: {
+        ...(this.terminal ? { hostTerminal: { generation: this.terminal.hostGeneration } } : {}),
         providerRelay: 1,
         ...(profileAvailable
           ? {
@@ -278,7 +290,7 @@ export class HostAgent {
     }
     throw new Error("Unexpected host request.");
   }
-  close() {
+  async close() {
     void this.fleet.close();
     void this.mcp.close();
     for (const state of this.active.values()) {
@@ -288,6 +300,7 @@ export class HostAgent {
         callback.reject(new Error("Host connection closed."));
       state.callbacks.clear();
     }
+    await this.terminal?.closeAll();
   }
   private async execute(request: HostRequest, state: Active) {
     const timeout = setTimeout(() => {
@@ -404,7 +417,10 @@ export class HostAgent {
           context,
         );
         await confinedHostCwd(computer.providerRef, [this.config.root]);
-        if (op.op === "computer.files.export") {
+        if (op.op === "computer.terminal") {
+          if (!this.terminal) throw new Error("Terminal is not available on this computer.");
+          await this.terminal.call({ ...computer, botId: op.homeKey }, op.action, context, send);
+        } else if (op.op === "computer.files.export") {
           const pending = [""];
           let count = 0;
           while (pending.length) {
@@ -468,6 +484,8 @@ export class HostAgent {
               : files,
           );
         } else if (op.op === "computer.lifecycle") {
+          if (op.action === "destroy" || op.action === "sleep")
+            await this.terminal?.revoke(computer, "*", context);
           if (op.action === "destroy") await this.sandbox.destroy(computer, context);
           else if (op.action === "sleep") await this.sandbox.stop(computer, context);
           else if (op.action === "cwd")
@@ -502,10 +520,12 @@ export class HostAgent {
           problem:
             error instanceof RuntimePinError
               ? error.problem
-              : hostLostProblem(
-                  request,
-                  "Host operation could not finish — check registered folders and the runtime.",
-                ),
+              : error instanceof CommandRefusalError
+                ? { ...hostLostProblem(request, error.message), refusalId: error.refusalId }
+                : hostLostProblem(
+                    request,
+                    "Host operation could not finish — check registered folders and the runtime.",
+                  ),
         });
       } catch {
         // A malformed or oversized operation error must not disconnect other host operations.
@@ -528,13 +548,13 @@ export class HostAgent {
   }
   private fileTarget(computer: ComputerRef, requested: string) {
     if (requested.includes("\0") || requested.split(/[/\\]/u).includes(".."))
-      throw new Error(FILE_LOCATION_REFUSAL);
+      throw new CommandRefusalError("file-location");
     if (!path.isAbsolute(requested)) return { computer, path: requested === "." ? "" : requested };
     const root = [computer.providerRef, ...this.roots].find((root) => {
       const relative = path.relative(root, requested);
       return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
     });
-    if (!root) throw new Error(FILE_LOCATION_REFUSAL);
+    if (!root) throw new CommandRefusalError("file-location");
     const key = `folder-${createHash("sha256").update(root).digest("hex")}`;
     // Only locally registered roots can create these provider references. The provider
     // resolves symlinks again at file-open time and uses its existing contained writer.
@@ -594,6 +614,7 @@ export class HostAgent {
         | "onRuntimeInfo"
         | "acknowledgeInput"
         | "claimSteering"
+        | "saveCheckpoint"
         | "provider.open"
         | "provider.read"
         | "provider.cancel",
@@ -677,6 +698,8 @@ export class HostAgent {
       acknowledgeInput: async (input) => {
         await callback("acknowledgeInput", [input]);
       },
+      saveCheckpoint: async (state, usage) =>
+        (await callback("saveCheckpoint", [state, usage])) === true,
       claimSteering: async (seen) =>
         (await callback("claimSteering", [seen])) as Awaited<
           ReturnType<NonNullable<AgentRunRequest["claimSteering"]>>

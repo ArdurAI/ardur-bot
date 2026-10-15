@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { TeamRow } from "@ardurbot/contracts";
-import { TeamRowSchema } from "@ardurbot/contracts";
+import type { TaskCard, TeamRow } from "@ardurbot/contracts";
+import { GOAL_FREEZE_CANCELLED, TaskCardSchema, TeamRowSchema } from "@ardurbot/contracts";
 import { i18n } from "@lingui/core";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
@@ -58,6 +58,8 @@ vi.mock("@lingui/react/macro", async () => {
 
 const usageLimit = "{runtime}'s usage limit is reached. Try again after it resets.";
 const unknownRuntime = "This runtime";
+const connectLinear = "Connect Linear or grant a team member permission to read and write.";
+const connectGithub = "Connect GitHub or grant a team member permission to read and write.";
 
 /** The catalog's own translation of a message, read from the file a release ships. */
 function russian(message: string): string {
@@ -111,6 +113,9 @@ beforeEach(() => {
   i18n.load("ru", {
     [usageLimit]: russian(usageLimit),
     [unknownRuntime]: russian(unknownRuntime),
+    [freezeText]: russian(freezeText),
+    [connectLinear]: russian(connectLinear),
+    [connectGithub]: russian(connectGithub),
   });
   i18n.activate("ru");
 });
@@ -136,3 +141,87 @@ it("keeps the words of a reason that has no category", async () => {
   const rendered = await text(blocked({ reason: "npm test failed." }));
   expect(rendered).toContain("npm test failed.");
 });
+
+const freezeText = "The goal reached owner review before this work started.";
+
+it("translates the goal-review freeze cancellation on a card timeline", async () => {
+  const card: TaskCard = TaskCardSchema.parse({
+    goal: "Review sources",
+    doneWhen: [],
+    requesterBotId: "chief",
+    workerBotId: "worker",
+    approvalBoundaries: { scopes: ["ordinary"], connectors: [] },
+    snapshot: {
+      pin: {
+        runtimeKind: "pi",
+        provider: "executed-provider",
+        modelId: "executed-model",
+        effort: "high",
+        credentialId: "connection",
+        revision: 1,
+      },
+      computer: { id: "computer", kind: "test", mode: "team" },
+      destination: { host: "localhost", local: true },
+    },
+    budget: { tokens: 10000, deadlineAt: "2026-09-26T18:00:00.000Z" },
+    artifacts: [],
+    timeline: [
+      {
+        id: "event-freeze",
+        kind: "cancelled",
+        at: "2026-09-26T17:00:00.000Z",
+        text: GOAL_FREEZE_CANCELLED,
+      },
+    ],
+  });
+  const rendered = await text(
+    blocked({
+      state: "queued",
+      delegationId: "handoff",
+      delegations: [
+        {
+          id: "handoff",
+          rootTaskId: "root",
+          parentRunId: "parent",
+          runId: "run",
+          requesterBotId: "chief",
+          actingBotId: "worker",
+          requesterName: "Chief",
+          actingName: "Reviewer",
+          kind: "message",
+          depth: 1,
+          hop: 1,
+          status: "cancelled",
+          snapshot: card.snapshot,
+          authority: card.approvalBoundaries,
+          differences: [],
+          budget: card.budget,
+          createdAt: "2026-09-26T16:00:00.000Z",
+          completedAt: "2026-09-26T17:00:00.000Z",
+          acceptedAt: null,
+          card,
+        },
+      ],
+    }),
+  );
+  // The stored key renders as the catalog's translation, never the key or English.
+  expect(rendered).toContain(russian(freezeText));
+  expect(rendered).not.toContain(GOAL_FREEZE_CANCELLED);
+  expect(rendered).not.toContain(freezeText);
+});
+it.each([
+  ["connect-linear", connectLinear],
+  ["connect-github", connectGithub],
+] as const)(
+  "writes a chief blocker key reason in the reader's language (%s)",
+  async (blockerKey, sentence) => {
+    const rendered = await text(
+      blocked({
+        blockerKey,
+        reason: sentence,
+      }),
+    );
+    expect(rendered).toContain(russian(sentence));
+    expect(rendered).not.toContain(sentence);
+  },
+);

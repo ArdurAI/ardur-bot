@@ -139,8 +139,25 @@ export async function startHermesProviderRelay(
       logger.error?.("Hermes provider request failed", safeError);
       onFailure?.(failure);
       if (!res.destroyed && !res.writableEnded) {
-        if (!res.headersSent) res.writeHead(502).end("Provider request failed.");
-        else res.destroy();
+        if (!res.headersSent) {
+          // Only a request-translation refusal is a bad client request. Keep
+          // upstream HTTP, transport and response-translation failures distinct.
+          if (
+            failure.kind === "provider-failed" &&
+            failure.layer === "translation" &&
+            failure.reason === "request-translation"
+          )
+            res.writeHead(400, { "content-type": "application/json" }).end(
+              JSON.stringify({
+                error: {
+                  message: "Provider request failed.",
+                  type: "invalid_request_error",
+                  code: 400,
+                },
+              }),
+            );
+          else res.writeHead(502).end("Provider request failed.");
+        } else res.destroy();
       }
     } finally {
       busy = false;

@@ -11,9 +11,16 @@ import {
 } from "@ardurbot/core";
 import { secretEnvironment } from "@ardurbot/core/node/service-secrets";
 
+import type { DeviceListenerConfig } from "@ardurbot/host-runtime/device-listener";
+import {
+  localDeviceTarget,
+  validateDeviceListenerConfig,
+} from "@ardurbot/host-runtime/device-listener";
+
 export { resolveCloudAgentProvider, resolveSandboxProvider } from "@ardurbot/adapters";
 
 export interface AppEnv {
+  deviceListener?: DeviceListenerConfig;
   deploymentKind?: "source" | "packaged";
   nodeEnv: string;
   desktopStackToken?: string;
@@ -103,6 +110,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = secretEnvironment()): AppEnv
   const updaterUrl = optional(source.ARDURBOT_UPDATER_URL);
   const updaterToken = optional(source.ARDURBOT_UPDATER_TOKEN);
   return {
+    deviceListener: deviceListenerEnv(source),
     deploymentKind:
       source.ARDURBOT_DEPLOYMENT_KIND === "packaged" || source.ARDURBOT_DESKTOP_STACK_TOKEN
         ? "packaged"
@@ -195,4 +203,21 @@ function required(source: NodeJS.ProcessEnv, key: string): string {
 function optional(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+function deviceListenerEnv(source: NodeJS.ProcessEnv): DeviceListenerConfig | undefined {
+  const enabled = optional(source.ARDURBOT_DEVICE_LISTENER_ENABLED);
+  if (!enabled || enabled === "false") return undefined;
+  if (enabled !== "true")
+    throw new Error("Invalid device listener enable switch; use true or false.");
+  localDeviceTarget({ apiHost: source.API_HOST ?? "127.0.0.1", port: Number(source.PORT ?? 3100) });
+  const port = optional(source.ARDURBOT_DEVICE_LISTENER_PORT) ?? "43119";
+  if (!/^[0-9]+$/.test(port)) throw new Error("Invalid device listener port.");
+  return validateDeviceListenerConfig({
+    bind: optional(source.ARDURBOT_DEVICE_LISTENER_BIND) ?? "127.0.0.1",
+    port: Number(port),
+    hints: optional(source.ARDURBOT_DEVICE_LISTENER_ORIGIN)
+      ? [source.ARDURBOT_DEVICE_LISTENER_ORIGIN!.trim()]
+      : [],
+  });
 }

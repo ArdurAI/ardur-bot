@@ -41,7 +41,9 @@ it("builds one relocatable JavaScript file without server modules or workspace i
         ),
       );
       for (const native of metadata.native.files) {
-        expect(native).toMatch(/^native\/win_(?:x64|arm64|ia32)\/koffi\.node$/);
+        expect(native).toMatch(
+          /^native\/(?:win_(?:x64|arm64|ia32)\/koffi\.node|(?:mac|win|linux)_(?:arm64|x64)\/node-pty\/(?:lib\/(?:\w+\/)*\w+\.js|prebuilds\/(?:darwin|win32)-(?:arm64|x64)\/(?:conpty\/)?[\w.-]+|build\/Release\/pty\.node|LICENSE|package\.json))$/,
+        );
         expect((await readFile(path.join(directory, native))).length).toBeGreaterThan(0);
       }
     } else {
@@ -52,7 +54,9 @@ it("builds one relocatable JavaScript file without server modules or workspace i
         );
     }
     expect(
-      Object.keys(metadata.inputs).some((file) => /prisma|pi-runtime|pi-ai|koffi/i.test(file)),
+      Object.keys(metadata.inputs).some((file) =>
+        /prisma|pi-runtime|pi-ai|koffi|node-pty/i.test(file),
+      ),
     ).toBe(false);
     expect(
       Object.keys(metadata.inputs).some((file) =>

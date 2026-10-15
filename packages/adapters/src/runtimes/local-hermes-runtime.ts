@@ -20,6 +20,7 @@ import {
   summaryOperationHash,
   summaryOperationManifest,
 } from "../hermes-provider-broker.js";
+import { nameHermesProviderFailure } from "../hermes-provider-problem.js";
 import { buildHostTurn } from "../host-turn.js";
 
 export class LocalHermesRuntime implements AgentRuntime {
@@ -151,9 +152,18 @@ export class LocalHermesRuntime implements AgentRuntime {
 
       relay = await startHermesProviderRelay(
         { protocol: 1, ...brokerSession.broker.grant, hostGeneration: "local" },
-        (method, args) => {
+        async (method, args) => {
           if (method === "provider.open" || method === "provider.read") assertProfileAcknowledged();
-          return relayDispatcher.dispatch(method, args);
+          const result = await relayDispatcher.dispatch(method, args);
+          if (
+            method === "provider.read" &&
+            result &&
+            typeof result === "object" &&
+            "done" in result &&
+            result.done
+          )
+            await request.saveCheckpoint?.(undefined);
+          return result;
         },
         (failure) => {
           void this.fail(request.runId, failure).catch(() => {});
@@ -218,8 +228,11 @@ export class LocalHermesRuntime implements AgentRuntime {
         onRuntimeInfo: request.onRuntimeInfo,
         acknowledgeInput: request.acknowledgeInput,
         claimSteering: request.claimSteering,
+        saveCheckpoint: request.saveCheckpoint,
       };
       yield* runtime.run(localRequest, context);
+    } catch (error) {
+      throw nameHermesProviderFailure(error);
     } finally {
       this.running.delete(request.runId);
       relay?.close();

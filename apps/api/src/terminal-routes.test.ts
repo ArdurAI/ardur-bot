@@ -108,6 +108,38 @@ function fixture(defaultTerminal = true) {
   return { actor, computer, provider, db, routes, resolveCommandCwd };
 }
 describe("terminal authorization", () => {
+  it("keeps desktop terminals unavailable until the live host advertises one", async () => {
+    const f = fixture(false);
+    f.computer.kind = "desktop";
+    expect(await f.routes.available(f.actor, { botId: "bot", computerId: "computer" })).toEqual({
+      available: false,
+    });
+    f.provider.available = vi.fn(async () => false);
+    expect(await f.routes.available(f.actor, { botId: "bot", computerId: "computer" })).toEqual({
+      available: false,
+    });
+    f.provider.available = vi.fn(async () => true);
+    expect(await f.routes.available(f.actor, { botId: "bot", computerId: "computer" })).toEqual({
+      available: true,
+    });
+    await f.routes.ticket(
+      f.actor,
+      { botId: "bot", computerId: "computer" },
+      "auth",
+      "https://app.example",
+    );
+    expect(f.provider.open).toHaveBeenCalledOnce();
+    f.provider.available = vi.fn(async () => false);
+    await expect(
+      f.routes.ticket(
+        f.actor,
+        { botId: "bot", computerId: "computer", sessionId: "session" },
+        "auth",
+        "https://app.example",
+      ),
+    ).rejects.toThrow();
+    await f.routes.gateway!.stop();
+  });
   it.each(["ssh", "remote-docker"])(
     "serializes %s terminal requests through the host bridge",
     async (kind) => {
@@ -366,20 +398,39 @@ describe("terminal authorization", () => {
   });
 });
 
-it("returns the actionable admission reason without opening a second terminal", async () => {
+it("preserves one production-route fence across four sessions and refuses a fifth", async () => {
   const f = fixture();
   const input = { botId: "bot", computerId: "computer" };
-  const first = await f.routes.ticket(f.actor, input, "auth", "https://app.example");
+  let opened = 0;
+  vi.mocked(f.provider.open).mockImplementation(async () => ({
+    id: `session-${++opened}`,
+    generation: "container",
+  }));
   try {
+    const sessions = [];
+    for (const _ of [1, 2, 3, 4])
+      sessions.push(await f.routes.ticket(f.actor, input, "auth", "https://app.example"));
+    expect(f.db.computer.update).toHaveBeenCalledOnce();
+    expect(f.computer.controlFence).toBe(2);
     await expect(
       f.routes.ticket(f.actor, input, "auth", "https://app.example"),
     ).rejects.toMatchObject({
       code: "CONFLICT",
-      message: "A terminal is already open. Close it before opening another.",
+      message: "Four terminals are already open.",
     });
-    expect(f.provider.open).toHaveBeenCalledOnce();
+    expect(f.provider.open).toHaveBeenCalledTimes(4);
+    await f.routes.close(f.actor, { ...input, sessionId: sessions[1]!.sessionId });
+    expect(f.routes.gateway!.sessions.size).toBe(3);
+    await expect(
+      f.routes.ticket(f.actor, input, "other-auth", "https://app.example"),
+    ).rejects.toThrow();
+    expect(f.db.computer.update).toHaveBeenCalledOnce();
+    expect(f.routes.gateway!.sessions.has(sessions[0]!.sessionId)).toBe(true);
+    await f.routes.ticket(f.actor, input, "auth", "https://app.example");
+    expect(f.provider.open).toHaveBeenCalledTimes(5);
+    expect(f.db.computer.update).toHaveBeenCalledOnce();
   } finally {
-    await f.routes.close(f.actor, { ...input, sessionId: first.sessionId });
+    await f.routes.gateway!.stop();
   }
 });
 

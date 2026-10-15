@@ -76,6 +76,8 @@ export function databaseCapacityBackoffMs(attempt: number): number {
 }
 
 export class GraphileJobWorkerHost implements JobWorkerHost {
+  private admissionClosed = false;
+  private readonly activeJobs = new Set<Promise<void>>();
   private runner: Runner | undefined;
   private handlers: BackgroundJobHandlers | undefined;
   private stopping = false;
@@ -93,7 +95,17 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
     } = {},
   ) {}
 
+  async drain(timeoutMs: number): Promise<boolean> {
+    this.admissionClosed = true;
+    return waitForJobs(this.activeJobs, timeoutMs);
+  }
+
+  resume(): void {
+    this.admissionClosed = false;
+  }
+
   async start(handlers: BackgroundJobHandlers): Promise<void> {
+    this.admissionClosed = false;
     if (this.runner || this.superviseTask) return;
     this.stopping = false;
     this.handlers = handlers;
@@ -124,6 +136,8 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
       Object.keys(handlers).map((name) => [
         name,
         async (payload: unknown) => {
+          if (this.admissionClosed)
+            throw new Error("Background worker is draining; retry after restart.");
           const unpacked = unwrapJobPayload(withoutCronMarker(payload));
           if (
             name === "run.continue" &&
@@ -133,12 +147,18 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
             typeof unpacked.payload.runId === "string"
           )
             tracePoint(unpacked.payload.runId, "job.dequeued");
-          await runCorrelatedJob({
+          const active = runCorrelatedJob({
             name,
             payload: unpacked.payload,
             correlation: unpacked.correlation,
             run: () => dispatchBackgroundJob(handlers, name, unpacked.payload),
           });
+          this.activeJobs.add(active);
+          try {
+            await active;
+          } finally {
+            this.activeJobs.delete(active);
+          }
         },
       ]),
     );
@@ -246,6 +266,8 @@ function toQueuedJob(job: BackgroundJob): QueuedJob {
 }
 
 export class InMemoryJobQueue implements JobPublisher, JobWorkerHost {
+  private admissionClosed = false;
+  private readonly pausedJobs: QueuedJob[] = [];
   private handlers: BackgroundJobHandlers | undefined;
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly scheduled = new Map<ReturnType<typeof setTimeout>, QueuedJob>();
@@ -288,6 +310,10 @@ export class InMemoryJobQueue implements JobPublisher, JobWorkerHost {
       }
       const handlers = this.handlers;
       if (!handlers) return;
+      if (this.admissionClosed) {
+        this.pausedJobs.push(stored);
+        return;
+      }
       void this.dispatch(handlers, stored);
     }, delay);
     this.timers.add(timer);
@@ -311,11 +337,26 @@ export class InMemoryJobQueue implements JobPublisher, JobWorkerHost {
     this.stopped = false;
   }
 
+  async drain(timeoutMs: number): Promise<boolean> {
+    this.admissionClosed = true;
+    return waitForJobs(this.active, timeoutMs);
+  }
+
+  resume(): void {
+    this.admissionClosed = false;
+    const handlers = this.handlers;
+    if (handlers) for (const job of this.pausedJobs.splice(0)) void this.dispatch(handlers, job);
+  }
+
   async stop(): Promise<void> {
-    await this.drain();
+    await this.flushClosing();
   }
 
   private dispatch(handlers: BackgroundJobHandlers, job: QueuedJob): Promise<void> {
+    if (this.admissionClosed) {
+      this.pausedJobs.push(job);
+      return Promise.resolve();
+    }
     const unpacked = unwrapJobPayload(job.payload);
     const runJob = () =>
       runCorrelatedJob({
@@ -339,7 +380,7 @@ export class InMemoryJobQueue implements JobPublisher, JobWorkerHost {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closeRequested = true;
-    await this.drain();
+    await this.flushClosing();
   }
 
   private enqueueWhileClosing(job: QueuedJob): void {
@@ -356,7 +397,7 @@ export class InMemoryJobQueue implements JobPublisher, JobWorkerHost {
     this.closingJobs.push(job);
   }
 
-  private async drain(): Promise<void> {
+  private async flushClosing(): Promise<void> {
     if (this.draining) return this.draining;
     const draining = this.performDrain();
     this.draining = draining;
@@ -403,4 +444,21 @@ function withoutCronMarker(payload: unknown): unknown {
   const input = { ...(payload as Record<string, unknown>) };
   delete input._cron;
   return input;
+}
+
+async function waitForJobs(
+  active: ReadonlySet<Promise<void>>,
+  timeoutMs: number,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.allSettled([...active]).then(() => true),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), Math.max(0, timeoutMs));
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }

@@ -1,4 +1,64 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Signing identity": "Идентификатор подписи",
+  Fingerprint: "Отпечаток",
+  "Copy fingerprint": "Копировать отпечаток",
+  "Export identity card": "Экспортировать карточку идентификатора",
+  "Expected fingerprint": "Ожидаемый отпечаток",
+  "Check key": "Проверить ключ",
+  "Signed by the expected key": "Подписано ожидаемым ключом",
+  "Signed by a different key": "Подписано другим ключом",
+  "No expected key given; self-consistent only":
+    "Ожидаемый ключ не указан; подтверждена только внутренняя согласованность",
+  "Key version": "Версия ключа",
+  "Share fingerprint": "Поделиться отпечатком",
+  "Key history": "История ключей",
+  "Version {version}": "Версия {version}",
+  Replaced: "Заменён",
+  Revoked: "Отозван",
+  "Revoke key": "Отозвать ключ",
+  "Replace key?": "Заменить ключ?",
+  "Runs already admitted keep their key; new runs sign with the new key.":
+    "Уже допущенные запуски сохраняют свой ключ; новые запуски подписываются новым ключом.",
+  "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted.":
+    "Отозвать ключ подписи? Подписание сразу прекратится. Более ранние подписи проходят проверку, но подписи за секунду отзыва считаются недоверенными.",
+  Reason: "Причина",
+  "The key changed. Reload and try again.": "Ключ изменился. Перезагрузите и попробуйте снова.",
+
+  "To {names}": "Кому: {names}",
+  "Queued: {queued}": "В очереди: {queued}",
+
+  "Capability checks": "Проверки возможностей",
+  "Last 7 days": "Последние 7 дней",
+  Success: "Успех",
+  "First reply": "Первый ответ",
+  "{count} measured runs": "Измерено запусков: {count}",
+  "Last failure": "Последний сбой",
+  "No runs yet": "Пока нет запусков",
+  "Not measured": "Не измерено",
+  Declared: "Заявлено",
+  "Confirmed offline": "Подтверждено офлайн",
+  Unsupported: "Не поддерживается",
+  "Not tested": "Не проверено",
+  "Report is for another version": "Отчёт для другой версии",
+  Streaming: "Потоковый вывод",
+  "Instruction delivery": "Передача инструкций",
+  Cancellation: "Отмена",
+  "Tool authorization": "Авторизация инструментов",
+  Goal: "Цель",
+  Used: "Использовано",
+  Reserved: "Зарезервировано",
+  "Usage incomplete": "Данные о расходе неполные",
+  "Applied limits": "Действующие ограничения",
+  CPU: "Процессор",
+  Processes: "Процессы",
+  "Host account": "Учётная запись хоста",
+  "Checked {time}": "Проверено в {time}",
+  "Native runtimes": "Локальные среды выполнения",
+  "Set up on the home device": "Настройте на основном устройстве",
+  "Run commands inside this bot's folder or a registered folder.":
+    "Запускайте команды в папке этого бота или в зарегистрированной папке.",
+  "This command was not run because its request is invalid. Check the command and folder.":
+    "Команда не была выполнена из-за неверного запроса. Проверьте команду и папку.",
   "{runtime}'s tool list changed during startup. Check the connected tools and try again.":
     "Список инструментов {runtime} изменился при запуске. Проверьте подключённые инструменты и повторите попытку.",
   "{runtime}'s settings were not confirmed. Check this bot's settings and try again.":
@@ -93,6 +153,9 @@ export const RU_MESSAGES: Record<string, string> = {
     "Срок входа {botName} для модели группы истёк. Восстановите подключение или измените модель группы.",
   "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
     "{botName} не смог использовать модель, выбранную для этой группы. Измените модель группы или проверьте настройки бота.",
+  "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan.":
+    "{provider} сейчас отклоняет запросы (лимит частоты или использования). Повторите попытку позже или проверьте свой тариф.",
+  "This connection": "Это подключение",
   "{runtime}'s usage limit is reached. Try again after it resets.":
     "Лимит использования {runtime} исчерпан. Повторите попытку после его сброса.",
   "Sign in to {runtime} on this computer, then try again.":
@@ -268,6 +331,7 @@ export const RU_MESSAGES: Record<string, string> = {
   Failures: "Сбои",
   "Feedback corrections": "Исправления по отзывам",
   Files: "Файлы",
+  "Computer changed. Refresh files.": "Компьютер изменился. Обновите файлы.",
   "Files are unavailable on this computer.": "Файлы недоступны на этом компьютере.",
   "Live files": "Текущие файлы",
   "Saved files": "Сохранённые файлы",
@@ -1511,4 +1575,97 @@ export const RU_MESSAGES: Record<string, string> = {
   "Could not check the model. Try again.": "Не удалось проверить модель. Попробуйте ещё раз.",
   "Context limit (estimated)": "Лимит контекста (оценка)",
   "Context limit (from the provider)": "Лимит контекста (от провайдера)",
+  "Updating — your bots will continue after the update":
+    "Обновление — ваши боты продолжат работу после обновления",
+  "This run continued in a new session after a restart.":
+    "После перезапуска эта задача продолжилась в новом сеансе.",
+  "Update paused because a bot is still working. Try again.":
+    "Обновление приостановлено: бот ещё работает. Попробуйте снова.",
+  "This action may already have happened. Check its outcome before trying again.":
+    "Это действие уже могло быть выполнено. Проверьте результат, прежде чем повторять попытку.",
+  "Bot work is still paused after the update. Try again.":
+    "После обновления работа ботов всё ещё приостановлена. Попробуйте снова.",
+  "This command was not run because it exceeds 64 KB. Put code in a file and run that file.":
+    "Команда не выполнена, потому что её размер превышает 64 КБ. Сохраните код в файл и запустите этот файл.",
+  "Use a path inside this bot's folder or a registered folder.":
+    "Используйте путь внутри папки этого бота или зарегистрированной папки.",
+  "Experimental turned on for this runtime":
+    "Экспериментальный режим включён для этой среды выполнения",
+  "The bot stopped responding. Retry the run.": "Бот перестал отвечать. Повторите запуск.",
+  "Continue the interrupted run from its saved results. Check any uncertain action before repeating it.":
+    "Продолжите прерванный запуск с сохранённых результатов. Проверьте действия с неизвестным результатом, прежде чем повторять их.",
+  "{runtime}'s runtime stopped. Retry the run.":
+    "Среда выполнения {runtime} остановилась. Повторите запуск.",
+  "{runtime} could not finish this turn. Retry the run.":
+    "{runtime} не смог завершить этот шаг. Повторите запуск.",
+  "Review result": "Проверить результат",
+  Pass: "Выполнено",
+  Fail: "Не выполнено",
+  Artifact: "Артефакт",
+  "Run record": "Запись запуска",
+  "Tool record": "Запись инструмента",
+  Proposed: "Предложено",
+  "Accept result": "Принять результат",
+  "Reject result": "Отклонить результат",
+  "Result changed; review again.": "Результат изменился. Проверьте его снова.",
+  "Work is still active.": "Работа ещё продолжается.",
+  "The goal reached owner review before this work started.":
+    "Цель передана на проверку владельцу до начала этой работы.",
+  "Effects are still unsettled.": "Эффекты ещё не завершены.",
+  "Late usage arrived after acceptance.": "После принятия поступило позднее использование.",
+  "Please address the failing conditions.": "Исправьте невыполненные условия.",
+  "Final owner review": "Итоговая проверка владельцем",
+  "Board item": "Пункт доски",
+  "Open board item": "Открыть пункт доски",
+  "Board update pending": "Обновление доски ожидается",
+  "Retry board update": "Повторить обновление доски",
+  "Mark board update handled": "Отметить обновление доски обработанным",
+  "Could not update the board. Try again.": "Не удалось обновить доску. Попробуйте снова.",
+  "Could not review result. Try again.": "Не удалось проверить результат. Попробуйте снова.",
+  "{runs} run": "{runs} запуск",
+  "By bot": "По ботам",
+  "Hide bots": "Скрыть ботов",
+  "Unknown bot": "Неизвестный бот",
+  "Unattributed usage": "Использование без привязки",
+  "Partial cost": "Частичная стоимость",
+  "{runs} runs": "Запусков: {runs}",
+  "Choose connection": "Выбрать подключение",
+  "Connection settings": "Настройки подключения",
+  "Local server": "Локальный сервер",
+  "Search models": "Поиск моделей",
+  "No matching models": "Подходящих моделей нет",
+  "Model options": "Варианты моделей",
+  "May not be available on your plan": "Может быть недоступно на вашем тарифе",
+  "Connect that model first.": "Сначала подключите эту модель.",
+  "Choose a model.": "Выберите модель.",
+  "Connect that model server first.": "Сначала подключите сервер этой модели.",
+  "This connection cannot serve that model.": "Это подключение не поддерживает эту модель.",
+  "Unknown model for that provider": "Неизвестная модель для этого провайдера",
+  "Show all models": "Показать все модели",
+  "Got it — I’ll choose a team member to file this issue in Linear.":
+    "Понял — выберу участника команды, который создаст эту задачу в Linear.",
+  "Got it — I’ll choose a team member to manage the GitHub repository.":
+    "Понял — выберу участника команды для управления репозиторием GitHub.",
+  "Got it — this task needs you before I can assign it.":
+    "Понял — прежде чем поручить эту задачу, мне нужна ваша помощь.",
+  "Connect Linear or grant a team member permission to read and write.":
+    "Подключите Linear или разрешите участнику команды читать и записывать данные.",
+  "Connect GitHub or grant a team member permission to read and write.":
+    "Подключите GitHub или разрешите участнику команды читать и записывать данные.",
+  "Needs you": "Нужна ваша помощь",
+  "Git changes": "Изменения Git",
+  "Git changes are unavailable on this computer.": "Изменения Git недоступны на этом компьютере.",
+  "Not a Git repository": "Не репозиторий Git",
+  "No changes to show": "Нет изменений для отображения",
+  "Some changes are not shown": "Некоторые изменения не показаны",
+  "Diff is too large": "Слишком большой diff",
+  Modified: "Изменён",
+  Untracked: "Не отслеживаются",
+  "This file looks like it contains a secret.": "Этот файл похож на секрет.",
+  Plan: "План",
+  Pending: "Ожидает",
+  "Waiting for": "Ожидание",
+  Reopen: "Открыть снова",
+  "Mark done": "Отметить готовым",
+  "Could not update the plan. Try again.": "Не удалось обновить план. Попробуйте снова.",
 };

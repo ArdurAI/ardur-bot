@@ -27,6 +27,32 @@ describe("shared chief receipt response handling", () => {
     expect(after.messages[0]!.runId).toBeUndefined();
     expect(applyChiefReceipt(after, receipt)).toBe(after);
   });
+  it("keeps a blocked selection in the immediate response and event replay", () => {
+    const blocked: ChiefReceipt = {
+      ...receipt,
+      key: "needs-owner",
+      text: "Got it — this task needs you before I can assign it.",
+      chiefDispatch: {
+        requestMessageId: receipt.requestMessageId,
+        revision: 1,
+        memberId: "chief",
+        memberName: "Chief",
+        state: "needs-owner",
+        blockerKey: "connect-linear",
+        reason: "Connect Linear or grant a team member permission to read and write.",
+      },
+    };
+    const snapshot = applyChiefReceipt(
+      { threadId: "room", messages: [] as ThreadMessage[] },
+      blocked,
+    )!;
+    expect(snapshot.messages[0]?.blocks[0]).toMatchObject({
+      kind: "chief_receipt",
+      key: "needs-owner",
+      chiefDispatch: blocked.chiefDispatch,
+    });
+    expect(applyChiefReceipt(snapshot, blocked)).toBe(snapshot);
+  });
   it("ignores old servers, unloaded or other rooms", () => {
     const before = { threadId: "another", messages: [] as ThreadMessage[] };
     expect(applyChiefReceipt(before, receipt)).toBe(before);

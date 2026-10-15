@@ -27,16 +27,18 @@ Apache-2.0 attribution.
 - [Command-line tool](/docs/cli/): Send a bot a task from your terminal or a script.
 
 - Persistent bots with their own conversation, memory, routines and history
-- Group chats whose members answer at the same time — the owner sets how many bots answer at
-  once (1-8) in group settings — and delegation between bots, plus short-lived subagents
+- [Group chats](/docs/group-routing/): an unaddressed message goes to one responder, shown
+  before sending. Mention bots or use @everyone for multiple replies. Selected members answer
+  together up to the room limit (default 4, adjustable 1-8); the rest stay visibly queued.
+  Bots can delegate to each other or use short-lived subagents.
 - [Chief room receipts](/docs/chief-receipts/): accepted requests get a saved acknowledgement before execution; bare greetings do not start work. Member choices use approved facts and committed dispatch stays compact.
 - A provider, model and thinking level per bot, with a separate model and thinking choice for each bot in a group room
 <!-- site-facts:providers:start -->
 <!-- Generated from site/data/product.json by pnpm site:facts; edit that file. -->
 - Providers: OpenRouter, OpenAI Codex (ChatGPT account), Anthropic (API key),
-  OpenAI, Google, Vercel AI Gateway, and 36 more in the searchable model catalog.
+  OpenAI, Google, Vercel AI Gateway, and 37 more in the searchable model catalog.
   OpenAI-compatible servers cover local Ollama, LM Studio and llama.cpp.
-  Planned additions include Claude Pro/Max through the CLI and Ollama as a direct local choice.
+  Planned additions include Claude Pro/Max through the CLI.
 <!-- site-facts:providers:end -->
 - Computers: the computer Ardur is installed on, plus Docker, Podman, Kubernetes or SSH
   machines you add, and E2B, Daytona or Box on a server, with a browser, terminal, files and a
@@ -78,7 +80,7 @@ After synchronization, shared notes are Markdown files in the connected reposito
 
 - Subscription-honest providers: Claude Pro/Max through your own unmodified `claude` CLI,
   Codex through OpenAI's documented integration, Kimi and Z.ai coding plans, Gemini with an
-  API key, Ollama as a first-class choice
+  API key
 - Computers on Podman and kind/Kubernetes
 - Signed macOS releases once release credentials are provisioned
 - A fast, smooth UI on Windows, macOS and Linux

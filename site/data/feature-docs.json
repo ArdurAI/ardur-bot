@@ -112,7 +112,7 @@
       "id": "onboarding",
       "aliases": [],
       "title": "Connect a model",
-      "summary": "Connect a model before starting a conversation when the server requires one.",
+      "summary": "Choose a model first, then reuse or set up the connection it needs.",
       "area": "getting-started",
       "order": 20,
       "internal": false,
@@ -150,14 +150,14 @@
           "aliases": [
             "open"
           ],
-          "text": "Open the required model connection form.",
+          "text": "Search for a model and choose its connection when several are available.",
           "uiLabels": [
             "Connect a model",
-            "Provider",
+            "Model",
             "API key"
           ],
           "screenshotId": "docs-onboarding-open",
-          "expected": "The selected connection and required fields are visible.",
+          "expected": "The selected model shows the connection it needs.",
           "availableSince": "0.1.0-alpha.2"
         },
         {
@@ -1121,7 +1121,7 @@
       "id": "group-goals",
       "aliases": [],
       "title": "Start goal",
-      "summary": "Start bounded work in a group room, watch its status, and stop it.",
+      "summary": "Start bounded work in a group room, follow the chief's ordered project plan, watch its status, and stop it.",
       "area": "team-work",
       "order": 20,
       "internal": false,
@@ -1154,6 +1154,8 @@
           "uiLabels": [
             "Objective",
             "Done when (one per line)",
+            "Board item",
+            "Board",
             "Start goal"
           ],
           "screenshotId": "docs-group-goals-form",
@@ -1170,7 +1172,7 @@
             "Working"
           ],
           "screenshotId": "docs-group-goals-progress",
-          "expected": "The room shows the working goal.",
+          "expected": "The expanded goal shows a pending step and the unfinished prerequisite it is waiting for.",
           "availableSince": "0.1.0-alpha.2"
         },
         {
@@ -1188,7 +1190,10 @@
       ],
       "boundaries": [
         "Only an authorized owner with a group coordinator can start this flow.",
-        "Stopping a goal ends new coordinator work; it does not undo completed actions."
+        "Stopping a goal ends new coordinator work; it does not undo completed actions.",
+        "A linked board item is commented when the result is submitted and closed only when the owner accepts it.",
+        "Each reviewed condition can name the records that support it: an artifact revision, a tool-result record, or a run record. A bot may propose support; only the owner's review records pass or fail.",
+        "The chief proposes the ordered plan; the owner can edit it, cancel or reopen steps, and mark their own steps done. Ready steps are handed out to their bot owners under the goal's budget, and a step is finished only by a recorded outcome. Reopen a finished step before changing its definition. Pending steps show which unfinished prerequisites they are waiting for on web, desktop and phone."
       ],
       "troubleshooting": [
         {
@@ -2127,7 +2132,7 @@
       "id": "models",
       "aliases": [],
       "title": "Models",
-      "summary": "Inspect a connected model, review the default control, and prepare another connection.",
+      "summary": "Search one entry per model, choose its connection, reuse a ready connection, or enter a custom endpoint model id. Show all models reveals plan-limited choices.",
       "area": "connections-and-computers",
       "order": 10,
       "internal": false,
@@ -2180,10 +2185,11 @@
           "uiLabels": [
             "Settings",
             "Models",
-            "Connected"
+            "Model",
+            "Connection settings"
           ],
           "screenshotId": "docs-models-open",
-          "expected": "The Models heading and connected credential are visible.",
+          "expected": "The active model and shared model picker are visible.",
           "availableSince": "0.1.0-alpha.2"
         },
         {
@@ -2191,7 +2197,7 @@
           "aliases": [
             "default"
           ],
-          "text": "Choose another model on the connected provider to reveal the default control.",
+          "text": "Search for a model, choose its connection when needed, and select Use this model.",
           "uiLabels": [
             "Model",
             "Use this model"
@@ -2205,7 +2211,7 @@
           "aliases": [
             "add"
           ],
-          "text": "Select an unconnected provider to open its key form.",
+          "text": "Choose a model that needs an API key to open its key form.",
           "uiLabels": [
             "API key",
             "Connect API key"
@@ -2513,16 +2519,16 @@
       "id": "computer-edit-remove",
       "aliases": [],
       "title": "Edit",
-      "summary": "Saved computer connection editing is not on this checkout.",
+      "summary": "Edit and remove saved computer connections, with revision checks for active runs.",
       "area": "connections-and-computers",
       "order": 70,
-      "internal": true,
-      "internalReason": "Saved connection edit and remove controls exist only on the separate fleet branch, not this checkout.",
+      "internal": false,
+      "internalReason": null,
       "status": "draft",
       "availableSince": null,
       "platforms": {
-        "web": "unavailable",
-        "desktop": "unavailable",
+        "web": "configure",
+        "desktop": "configure",
         "mobile": "unavailable"
       },
       "settingsPath": {},
@@ -3548,7 +3554,7 @@
       "id": "mobile-files",
       "aliases": [],
       "title": "Files",
-      "summary": "Browse available roots/directories and read a text preview.",
+      "summary": "Browse available roots/directories, read a text preview, and review a bot's Git changes.",
       "area": "mobile",
       "order": 30,
       "internal": false,
@@ -4033,7 +4039,7 @@
     {
       "id": "docs-group-goals-progress",
       "file": "docs/docs-group-goals-progress.png",
-      "alt": "Start goal: The room shows the working goal.",
+      "alt": "Start goal: The expanded goal shows a pending step and the unfinished prerequisite it is waiting for.",
       "width": 1280,
       "height": 800,
       "crop": {

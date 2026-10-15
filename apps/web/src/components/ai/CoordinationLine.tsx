@@ -20,6 +20,10 @@ function useTranslatedChiefActivity(key: ChiefActivityKey | undefined) {
       return t`Checking the Notion page`;
     case "check-tool":
       return t`Checking the missing tool`;
+    case "connect-linear":
+      return t`Connect Linear or grant a team member permission to read and write.`;
+    case "connect-github":
+      return t`Connect GitHub or grant a team member permission to read and write.`;
     case "waiting-tool":
       return t`Waiting for the tool`;
     default:
@@ -37,17 +41,23 @@ export function ChiefReceiptText({
   const { t } = useLingui();
   const name = memberName;
   const text =
-    receiptKey === "exclude-member" && name
-      ? t`Got it — I’ll keep ${name} off this task.`
-      : receiptKey === "change-task"
-        ? t`Got it — I’ll check this change before the next action.`
-        : receiptKey === "document-to-service"
-          ? t`Got it — I’ll choose a team member to put this in Notion.`
-          : receiptKey === "install-tool"
-            ? t`Got it — I’ll check what’s missing and ask before installing it.`
-            : receiptKey === "greeting"
-              ? t`Hi everyone.`
-              : t`Got it — I’ll check the request and choose the next step.`;
+    receiptKey === "needs-owner"
+      ? t`Got it — this task needs you before I can assign it.`
+      : receiptKey === "exclude-member" && name
+        ? t`Got it — I’ll keep ${name} off this task.`
+        : receiptKey === "change-task"
+          ? t`Got it — I’ll check this change before the next action.`
+          : receiptKey === "document-to-service"
+            ? t`Got it — I’ll choose a team member to put this in Notion.`
+            : receiptKey === "install-tool"
+              ? t`Got it — I’ll check what’s missing and ask before installing it.`
+              : receiptKey === "create-issue"
+                ? t`Got it — I’ll choose a team member to file this issue in Linear.`
+                : receiptKey === "manage-repository"
+                  ? t`Got it — I’ll choose a team member to manage the GitHub repository.`
+                  : receiptKey === "greeting"
+                    ? t`Hi everyone.`
+                    : t`Got it — I’ll check the request and choose the next step.`;
   return (
     <span data-testid="chief-receipt" aria-live="polite">
       {text}
@@ -67,19 +77,21 @@ export function ChiefDispatchLine({
   const [expanded, setExpanded] = useState(false);
   const name = dispatch.stop?.memberName ?? dispatch.memberName;
   const label =
-    dispatch.stop?.state === "requested"
-      ? t`Told ${name} to stand down`
-      : dispatch.stop?.state === "confirmed"
-        ? t`${name} stood down`
-        : dispatch.stop?.state === "uncertain"
-          ? t`The previous action may have finished. I’ll check before retrying.`
-          : dispatch.stop?.state === "checking"
-            ? t`Checking the earlier action`
-            : dispatch.state === "approval-held"
-              ? t`Waiting for approval`
-              : dispatch.state === "queued"
-                ? t`Queued for ${name}`
-                : t`Messaged ${name}`;
+    dispatch.state === "needs-owner"
+      ? t`Needs you`
+      : dispatch.stop?.state === "requested"
+        ? t`Told ${name} to stand down`
+        : dispatch.stop?.state === "confirmed"
+          ? t`${name} stood down`
+          : dispatch.stop?.state === "uncertain"
+            ? t`The previous action may have finished. I’ll check before retrying.`
+            : dispatch.stop?.state === "checking"
+              ? t`Checking the earlier action`
+              : dispatch.state === "approval-held"
+                ? t`Waiting for approval`
+                : dispatch.state === "queued"
+                  ? t`Queued for ${name}`
+                  : t`Messaged ${name}`;
   const activityKey = chiefActivityKey(dispatch);
   const translatedActivity = useTranslatedChiefActivity(activityKey);
   const activity = dispatch.stop
@@ -109,7 +121,11 @@ export function ChiefDispatchLine({
         )}
       </button>
       {activity ? (
-        <div className="truncate" data-testid="chief-activity" aria-live="polite">
+        <div
+          className={dispatch.state === "needs-owner" ? undefined : "truncate"}
+          data-testid="chief-activity"
+          aria-live="polite"
+        >
           {activity}
         </div>
       ) : null}

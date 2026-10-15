@@ -1,10 +1,134 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { expect, test } from "@playwright/test";
+import { selectCatalogModel } from "./catalog-model-picker";
 import { captureScreenshot, completeOnboarding, openUserSettings, rpc, signup } from "./helpers";
 
 const LOCAL_MODEL_ID = "ardurbot-e2e-local";
 const LOCAL_MODEL_REPLY = "OpenAI-compatible endpoint verified end to end.";
+
+test("runtime reliability keeps cancellations separate and textless results unmeasured", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `reliability-${Date.now()}@example.test`, "password12", "Reliability fixture");
+  await completeOnboarding(page);
+  await page.route("**/rpc/runtimes/reliability", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: {
+          from: "2030-01-01T00:00:00Z",
+          asOf: "2030-01-08T00:00:00Z",
+          runtimes: [
+            {
+              runtimeKind: "pi",
+              completed: 2,
+              failed: 1,
+              cancelled: 1,
+              successRate: 2 / 3,
+              measuredRuns: 2,
+              firstReplyMedianMs: 2500,
+              lastFailure: { category: "usage-limit", at: "2030-01-08T00:00:00Z" },
+            },
+            {
+              runtimeKind: "codex-app-server",
+              completed: 0,
+              failed: 0,
+              cancelled: 1,
+              successRate: null,
+              measuredRuns: 0,
+              firstReplyMedianMs: null,
+              lastFailure: null,
+            },
+          ],
+        },
+      }),
+    }),
+  );
+  await openUserSettings(page, "models");
+  await page.locator("summary", { hasText: "Last 7 days" }).click();
+  const builtIn = page.getByRole("region", { name: "Ardur", exact: true });
+  await expect(builtIn.getByText("67%", { exact: true })).toBeVisible();
+  await expect(builtIn.getByText("2 measured runs", { exact: true })).toBeVisible();
+  await expect(
+    builtIn.getByText("Ardur's usage limit is reached.", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Codex", exact: true })
+      .getByText("Not measured", { exact: true }),
+  ).toHaveCount(2);
+  await captureScreenshot(page, testInfo, "runtime-reliability");
+});
+
+test("native discovery and cancelled connection preserve the default pin", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `native-models-${Date.now()}@example.test`, "password12", "Native models");
+  await completeOnboarding(page);
+  const original = await rpc<Record<string, unknown>>(page, "me", {});
+  await page.route("**/rpc/me", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ json: { ...original, isDeploymentOwner: true } }),
+    }),
+  );
+  await page.route("**/rpc/runtimes/availability", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: {
+          runtimeKind: "codex-app-server",
+          available: true,
+          signedIn: false,
+          models: [{ id: "fixture-native", label: "Fixture native", efforts: [] }],
+        },
+      }),
+    }),
+  );
+  await page.route("**/rpc/runtimes/connectCodex", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: {
+          loginId: "fixture-login",
+          mode: "auth-url",
+          verificationUri: "https://example.test/login",
+        },
+      }),
+    }),
+  );
+  await page.route("**/rpc/runtimes/cancelConnect", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ json: { ok: true } }),
+    }),
+  );
+  await openUserSettings(page, "models");
+  await page.getByText("Native runtimes", { exact: true }).click();
+  await page
+    .locator("summary")
+    .filter({ hasText: /^Codex$/ })
+    .click();
+  await expect(page.getByText("Fixture native", { exact: true })).toBeVisible();
+  const codex = page
+    .locator("details")
+    .filter({ has: page.locator("summary", { hasText: /^Codex$/ }) });
+  await codex.locator("summary", { hasText: "Capability checks" }).click();
+  const checks = codex.locator("dl dd");
+  await expect(checks).toHaveCount(5);
+  for (const check of await checks.all()) await expect(check).toContainText("Not tested");
+  await expect(checks.first()).toContainText("Declared");
+  await expect(codex.getByText("Confirmed offline", { exact: true })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "runtime-capability-checks");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Continue with ChatGPT" })).toBeVisible();
+  await captureScreenshot(page, testInfo, "native-models-connection");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Continue with ChatGPT" })).toHaveCount(0);
+  const current = await rpc<Record<string, unknown>>(page, "me", {});
+  expect(current.defaultModel).toBe(original.defaultModel);
+});
 
 test("Anthropic offers API keys and asks old subscription connections to reconnect", async ({
   page,
@@ -12,13 +136,22 @@ test("Anthropic offers API keys and asks old subscription connections to reconne
   const stamp = Date.now();
   await signup(page, `anthropic-key-${stamp}@example.test`, "password12", "API key connection");
   await completeOnboarding(page);
+  const catalog = await rpc<Array<{ provider: string; id: string }>>(page, "models/list", {});
+  const model = catalog.find((entry) => entry.provider === "anthropic");
+  if (!model) throw new Error("Anthropic fixture model is missing.");
+  const legacy = await rpc<{ id: string }>(page, "models/connect", {
+    provider: "anthropic",
+    modelId: model.id,
+    apiKey: "fixture-anthropic-key",
+    label: "Old subscription",
+  });
   await page.route("**/rpc/models/credentials", (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         json: [
           {
-            id: "legacy-connection",
+            id: legacy.id,
             provider: "anthropic",
             label: "Old subscription",
             hasKey: false,
@@ -30,13 +163,8 @@ test("Anthropic offers API keys and asks old subscription connections to reconne
     }),
   );
   await openUserSettings(page, "models");
-  await page.getByPlaceholder("Search providers").fill("anthropic");
-  await page.getByRole("button", { name: /Anthropic/ }).click();
-  await expect(
-    page.getByText(
-      "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings.",
-    ),
-  ).toBeVisible();
+  await selectCatalogModel(page, "anthropic");
+  await expect(page.getByText("Set up on the home device")).toBeVisible();
   await expect(page.getByText("Reconnect with an API key", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Sign in/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Use this model", exact: true })).toHaveCount(0);
@@ -44,6 +172,7 @@ test("Anthropic offers API keys and asks old subscription connections to reconne
   await page.unroute("**/rpc/models/credentials");
   await page.getByLabel("API key", { exact: true }).fill("fake-anthropic-api-key");
   await page.getByRole("button", { name: "Connect API key", exact: true }).click();
+  await page.getByRole("button", { name: "Connection settings", exact: true }).click();
   await expect(page.getByLabel("Replace API key", { exact: true })).toBeVisible();
   await expect(page.getByText("Reconnect with an API key", { exact: true })).toBeHidden();
   await captureScreenshot(page, testInfo, "anthropic-api-key-connected");
@@ -57,8 +186,7 @@ test("custom connections persist reasoning support and bot thinking", async ({
   await signup(page, `reasoning-model-${stamp}@example.test`, "password12", userName);
   await completeOnboarding(page);
   await openUserSettings(page, "models");
-  await page.getByPlaceholder("Search providers").fill("openai-compatible");
-  await page.getByRole("button", { name: /OpenAI-compatible/ }).click();
+  await selectCatalogModel(page, "openai-compatible");
   await page.getByLabel("OpenAI-compatible server URL").fill("http://127.0.0.1:8090/v1");
   await page.getByLabel("Model id").fill("arbitrary-model");
   await expect(page.getByRole("checkbox", { name: "Supports thinking" })).toBeHidden();
@@ -214,9 +342,7 @@ test("connects, lists, and uses an OpenAI-compatible endpoint", async ({ page },
     await completeOnboarding(page);
 
     await openUserSettings(page, "models");
-    const providerSearch = page.getByPlaceholder("Search providers");
-    await providerSearch.fill("openai-compatible");
-    await page.getByRole("button", { name: /OpenAI-compatible/ }).click();
+    await selectCatalogModel(page, "openai-compatible");
     await expect(
       page.getByText("Paste the OpenAI-compatible address", { exact: false }),
     ).toBeHidden();
@@ -246,9 +372,11 @@ test("connects, lists, and uses an OpenAI-compatible endpoint", async ({ page },
 
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("Saved.")).toBeVisible();
-    await expect(page.getByRole("button", { name: /OpenAI-compatible/ })).toContainText(
-      "Connected",
+    await page.getByRole("combobox", { name: "Model", exact: true }).click();
+    await expect(page.getByRole("option").filter({ hasText: LOCAL_MODEL_ID })).toContainText(
+      "Ready",
     );
+    await page.getByRole("combobox", { name: "Search models" }).press("Escape");
     await captureScreenshot(page, testInfo, "openai-compatible-connected");
 
     await page.getByLabel("OpenAI-compatible server URL").fill("");
@@ -281,9 +409,7 @@ test("model settings connect, replace, and cancel provider authentication", asyn
   await openUserSettings(page, "models");
   await expect(page.getByRole("button", { name: "Close model settings" })).toBeVisible();
 
-  const providerSearch = page.getByPlaceholder("Search providers");
-  await providerSearch.fill("scripted");
-  await page.getByRole("button", { name: /Scripted/ }).click();
+  await selectCatalogModel(page, "scripted");
   await expect(
     page.getByTestId("model-settings").getByRole("combobox", { name: "Model", exact: true }),
   ).toHaveText(/Scripted runtime/);
@@ -293,6 +419,7 @@ test("model settings connect, replace, and cancel provider authentication", asyn
   await page.getByRole("button", { name: "Connect API key" }).click();
   await expect(page.getByText(/Connected and using Scripted runtime/)).toBeVisible();
 
+  await page.getByRole("button", { name: "Connection settings", exact: true }).click();
   await page.getByLabel("Replace API key").fill("fake-scripted-key-two");
   await page.getByRole("button", { name: "Replace API key" }).click();
   await expect(page.getByText(/Connected and using Scripted runtime/)).toBeVisible();
@@ -326,21 +453,17 @@ test("model settings connect, replace, and cancel provider authentication", asyn
     if (request.url().includes("/rpc/models/finishOAuth")) finishRequests += 1;
   });
 
-  await providerSearch.fill("openai-codex");
-  await page
-    .getByRole("button", { name: /ChatGPT Plus\/Pro/ })
-    .first()
-    .click();
+  await selectCatalogModel(page, "openai-codex");
   await page.getByRole("button", { name: /Sign in with ChatGPT Plus\/Pro/ }).click();
   await expect(page.getByText("Waiting for sign-in…")).toBeVisible();
 
   const cancelled = page.waitForRequest((request) =>
     request.url().includes("/rpc/models/cancelOAuth"),
   );
-  await providerSearch.fill("scripted");
-  await page.getByRole("button", { name: /Scripted/ }).click();
+  await selectCatalogModel(page, "scripted");
   await cancelled;
   expect(finishRequests).toBe(0);
+  await page.getByRole("button", { name: "Connection settings", exact: true }).click();
   await page.getByLabel("Replace API key").fill("fake-scripted-key-three");
   await expect(page.getByRole("button", { name: "Replace API key" })).toBeEnabled();
   await expect(page.getByText("Waiting for sign-in…")).toBeHidden();
@@ -373,8 +496,7 @@ test("Models shows an unsaved context estimate and preserves its source", async 
     }),
   );
   await openUserSettings(page, "models");
-  await page.getByPlaceholder("Search providers").fill("openai-compatible");
-  await page.getByRole("button", { name: /OpenAI-compatible/ }).click();
+  await selectCatalogModel(page, "openai-compatible");
   await page.getByText("Advanced", { exact: true }).click();
   await expect(page.getByLabel("Context limit (estimated)", { exact: true })).toHaveValue("65536");
   await captureScreenshot(page, testInfo, "model-context-estimate");

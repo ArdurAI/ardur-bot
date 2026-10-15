@@ -1,6 +1,11 @@
 import type { KeyObject } from "node:crypto";
 import { randomBytes, randomUUID } from "node:crypto";
-import { connectorKindFromToolName, redactSecrets } from "@ardurbot/core";
+import {
+  beforeDeadline,
+  connectorKindFromToolName,
+  redactSecrets,
+  StepDeadlineExceeded,
+} from "@ardurbot/core";
 import type { EvidenceStore } from "@ardurbot/db";
 import { EvidenceSequenceConflict } from "@ardurbot/db";
 import type { EvidenceChain, ReceiptClaims, ReceiptRunIdentity } from "@ardurbot/evidence";
@@ -12,7 +17,8 @@ import {
   sealRun,
   verifyChain,
 } from "@ardurbot/evidence";
-import { redactSensitiveText } from "@ardurbot/logging";
+import { getLogger, redactSensitiveText } from "@ardurbot/logging";
+import { RESTART_DRAIN_MS } from "../restart-drain.js";
 import type { EncryptedSecretStore } from "../secrets.js";
 import type { DecisionKind } from "./decision-kinds.js";
 import { decisionFields } from "./decision-kinds.js";
@@ -77,6 +83,7 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
   const queues = new Map<string, Promise<unknown>>();
   const keys = new Map<string, KeyObject>();
   const pendingGaps = new Map<string, number>();
+  const gapFlushes = new Map<string, Promise<void>>();
 
   function releaseRunState(runId: string) {
     chains.delete(runId);
@@ -84,13 +91,32 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
     // Undurable gap counts are retry work, not a cache; flushGaps releases them after persistence.
   }
 
-  async function serial<T>(runId: string, work: () => Promise<T>): Promise<T> {
-    const next = (queues.get(runId) ?? Promise.resolve()).catch(() => undefined).then(work);
+  async function serial<T>(
+    runId: string,
+    step: string,
+    work: (signal: AbortSignal) => Promise<T>,
+    callerSignal?: AbortSignal,
+  ): Promise<T> {
+    const deadline = new AbortController();
+    const signal = callerSignal
+      ? AbortSignal.any([deadline.signal, callerSignal])
+      : deadline.signal;
+    const next = (queues.get(runId) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => work(signal));
     queues.set(runId, next);
     try {
-      return await next;
+      return await beforeDeadline(step, Date.now() + RESTART_DRAIN_MS, () => next);
+    } catch (error) {
+      if (error instanceof StepDeadlineExceeded) deadline.abort(error);
+      throw error;
     } finally {
-      if (queues.get(runId) === next) queues.delete(runId);
+      // Keep the queue fenced until the underlying storage work really settles.
+      void next
+        .catch(() => undefined)
+        .finally(() => {
+          if (queues.get(runId) === next) queues.delete(runId);
+        });
     }
   }
   async function governance(run: EvidenceRun) {
@@ -116,11 +142,20 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
     }
     return key;
   }
-  async function spaceKey(run: EvidenceRun) {
+  // Emergency revocation is the one state that must stop an admitted run from
+  // signing; replacement only rotates new runs to the new key.
+  function emergencyRevoked(row: { revokedAt: Date | null; replacedAt: Date | null }): boolean {
+    return Boolean(row.revokedAt && !row.replacedAt);
+  }
+  async function spaceKey(run: EvidenceRun, signal?: AbortSignal) {
     const active = await deps.store.activeKey(run.spaceId);
     if (active) return active;
+    // Never mint a replacement silently after a revocation: signing stays
+    // stopped (recorded as gaps) until the owner authorizes a new key.
+    if ((await deps.store.keysForSpace(run.spaceId)).length > 0) return null;
     const generated = generateEvidenceKey();
     const secretRecordId = randomUUID();
+    signal?.throwIfAborted();
     const stored = await deps.secretStore.put(
       generated.privateKeyPem,
       {
@@ -130,10 +165,11 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
         userId: run.userId,
         botId: run.botId,
         runId: run.id,
-        signal: new AbortController().signal,
+        signal: signal ?? new AbortController().signal,
       },
       secretRecordId,
     );
+    signal?.throwIfAborted();
     return deps.store.insertKey({
       spaceId: run.spaceId,
       kid: generated.kid,
@@ -142,13 +178,13 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
       secretRecordId: stored.id,
     });
   }
-  async function runChain(run: EvidenceRun): Promise<RunChain> {
+  async function runChain(run: EvidenceRun, signal?: AbortSignal): Promise<RunChain> {
     const cached = chains.get(run.id);
     if (cached) return cached;
     const last = await deps.store.lastRecord(run.id);
     const first = last ? await deps.store.firstRecord(run.id) : null;
     if (last && !first) throw new Error("Missing first evidence record");
-    const row = first ? await deps.store.keyByKid(first.kid) : await spaceKey(run);
+    const row = first ? await deps.store.keyByKid(first.kid) : await spaceKey(run, signal);
     if (!row || row.spaceId !== run.spaceId || (last && last.kid !== row.kid))
       throw new Error("Evidence key mismatch");
     if (first && !verifyChain([first.jws], row.publicKeyPem).ok)
@@ -177,86 +213,152 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
         )
       : createEvidenceChain(privateKey(row), row.kid);
     const state = { chain, identity, kid: row.kid };
+    signal?.throwIfAborted();
     chains.set(run.id, state);
     return state;
   }
-  async function flushGaps(runId: string) {
-    while ((pendingGaps.get(runId) ?? 0) > 0) {
-      await deps.store.noteGap(runId);
-      pendingGaps.set(runId, (pendingGaps.get(runId) ?? 1) - 1);
-    }
-    pendingGaps.delete(runId);
-  }
-  async function recordDecision(input: RecordDecisionInput): Promise<EvidenceResult> {
-    return serial(input.run.id, async () => {
+  function flushGaps(runId: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    const existing = gapFlushes.get(runId);
+    if (existing) return existing;
+    // Install the fence before starting storage work; callers share it even after a timeout.
+    const flush = Promise.resolve().then(async () => {
       try {
-        if (!(await governance(input.run))) return { ok: true };
-        const durableId = input.decisionId
-          ? `evidence:${input.run.id}:${input.decisionId}`
-          : undefined;
-        if (durableId && (await deps.store.recordById(durableId))) return { ok: true };
-        await flushGaps(input.run.id);
-        for (let attempt = 0; attempt < 3; attempt++) {
-          const state = await runChain(input.run);
-          const fields = decisionFields(input.decisionKind, input.ruleId);
-          const record = state.chain.append({
-            ...state.identity,
-            ...toolEvidenceClass(input.toolName, input.viaConnector),
-            ...fields,
-            tool: input.toolName,
-            args: input.args,
-            target: safeTarget(input),
-            budgetRemaining: {},
-          });
-          try {
-            await deps.store.insertRecord({
-              ...record,
-              ...(durableId ? { id: durableId } : {}),
-              runId: input.run.id,
-              spaceId: input.run.spaceId,
-              kid: state.kid,
-              verdict: fields.verdict,
-              decisionKind: input.decisionKind,
-              toolName: input.toolName,
-            });
-            return { ok: true };
-          } catch (error) {
-            chains.delete(input.run.id);
-            if (durableId && (await deps.store.recordById(durableId))) return { ok: true };
-            if (!(error instanceof EvidenceSequenceConflict) || attempt === 2) throw error;
-          }
+        // Gap notes record the failure itself, so a started flush finishes even after a
+        // deadline; the deadline path joins this flush to persist its own gap.
+        while ((pendingGaps.get(runId) ?? 0) > 0) {
+          await deps.store.noteGap(runId);
+          pendingGaps.set(runId, (pendingGaps.get(runId) ?? 1) - 1);
         }
-        throw new Error("Evidence retry exhausted");
-      } catch {
-        chains.delete(input.run.id);
-        pendingGaps.set(input.run.id, (pendingGaps.get(input.run.id) ?? 0) + 1);
-        try {
-          await flushGaps(input.run.id);
-        } catch {
-          /* Retry when storage recovers. */
-        }
-        return { ok: false, reason: "recording_failed" };
+        pendingGaps.delete(runId);
+      } finally {
+        gapFlushes.delete(runId);
       }
+    });
+    gapFlushes.set(runId, flush);
+    return flush;
+  }
+  function timedOutGap(runId: string, step: string, gapAlreadyCounted = false) {
+    chains.delete(runId);
+    if (!gapAlreadyCounted) pendingGaps.set(runId, (pendingGaps.get(runId) ?? 0) + 1);
+    getLogger().warn("run.step.timed_out", { step });
+    // Do not queue this behind the stalled record/seal or hold the reply on it.
+    void beforeDeadline("evidence-gap", Date.now() + RESTART_DRAIN_MS, () =>
+      flushGaps(runId),
+    ).catch(() => undefined);
+  }
+  async function recordDecision(
+    input: RecordDecisionInput,
+    signal?: AbortSignal,
+  ): Promise<EvidenceResult> {
+    let gapCounted = false;
+    return serial(
+      input.run.id,
+      "record",
+      async (signal): Promise<EvidenceResult> => {
+        try {
+          signal.throwIfAborted();
+          if (!(await governance(input.run))) return { ok: true };
+          const durableId = input.decisionId
+            ? `evidence:${input.run.id}:${input.decisionId}`
+            : undefined;
+          if (durableId && (await deps.store.recordById(durableId))) return { ok: true };
+          signal.throwIfAborted();
+          await flushGaps(input.run.id, signal);
+          for (let attempt = 0; attempt < 3; attempt++) {
+            signal.throwIfAborted();
+            const state = await runChain(input.run, signal);
+            signal.throwIfAborted();
+            const keyRow = await deps.store.keyByKid(state.kid);
+            if (!keyRow || keyRow.spaceId !== input.run.spaceId || emergencyRevoked(keyRow)) {
+              chains.delete(input.run.id);
+              throw new Error("Evidence key unavailable");
+            }
+            const fields = decisionFields(input.decisionKind, input.ruleId);
+            const record = state.chain.append({
+              ...state.identity,
+              ...toolEvidenceClass(input.toolName, input.viaConnector),
+              ...fields,
+              tool: input.toolName,
+              args: input.args,
+              target: safeTarget(input),
+              budgetRemaining: {},
+            });
+            try {
+              signal.throwIfAborted();
+              await deps.store.insertRecord({
+                ...record,
+                ...(durableId ? { id: durableId } : {}),
+                runId: input.run.id,
+                spaceId: input.run.spaceId,
+                kid: state.kid,
+                verdict: fields.verdict,
+                decisionKind: input.decisionKind,
+                toolName: input.toolName,
+              });
+              return { ok: true };
+            } catch (error) {
+              signal.throwIfAborted();
+              chains.delete(input.run.id);
+              if (durableId && (await deps.store.recordById(durableId))) return { ok: true };
+              if (!(error instanceof EvidenceSequenceConflict) || attempt === 2) throw error;
+            }
+          }
+          throw new Error("Evidence retry exhausted");
+        } catch {
+          chains.delete(input.run.id);
+          if (signal.aborted) return { ok: false, reason: "recording_failed" };
+          pendingGaps.set(input.run.id, (pendingGaps.get(input.run.id) ?? 0) + 1);
+          gapCounted = true;
+          try {
+            await flushGaps(input.run.id, signal);
+          } catch {
+            /* Retry when storage recovers. */
+          }
+          return { ok: false, reason: "recording_failed" };
+        }
+      },
+      signal,
+    ).catch((error: unknown) => {
+      if (!(error instanceof StepDeadlineExceeded)) throw error;
+      if (!signal?.aborted) timedOutGap(input.run.id, error.step, gapCounted);
+      return { ok: false, reason: "recording_failed" };
     });
   }
   async function sealRunEvidence(runId: string): Promise<EvidenceResult> {
-    return serial(runId, async () => {
+    return serial(runId, "seal", async (signal): Promise<EvidenceResult> => {
       try {
-        await flushGaps(runId);
+        signal.throwIfAborted();
+        await flushGaps(runId, signal);
+        signal.throwIfAborted();
         if (await deps.store.sealForRun(runId)) return { ok: true };
+        signal.throwIfAborted();
         const records = await deps.store.recordsForRun(runId);
+        signal.throwIfAborted();
         const first = records[0];
         const last = records.at(-1);
         if (!first || !last) return { ok: true };
         const row = await deps.store.keyByKid(first.kid);
+        signal.throwIfAborted();
         if (!row || row.spaceId !== first.spaceId) throw new Error("Missing evidence key");
+        // A seal is a signature too: never seal with an emergency-revoked key.
+        // The missed seal ends the run without its closing signature; count it.
+        if (emergencyRevoked(row)) {
+          pendingGaps.set(runId, (pendingGaps.get(runId) ?? 0) + 1);
+          await flushGaps(runId).catch(() => {
+            /* Retry when storage recovers. */
+          });
+          return { ok: false, reason: "key_revoked" };
+        }
         const journal = records.map((record) => record.jws);
         const verification = verifyChain(journal, row.publicKeyPem);
         if (!verification.ok) {
           deps.logFailure?.(verification.failures.map((failure) => failure.code));
           return { ok: false, reason: "chain_invalid" };
         }
-        await flushGaps(runId);
+        signal.throwIfAborted();
+        await flushGaps(runId, signal);
+        signal.throwIfAborted();
         const identity = claims(first.jws);
         const jws = sealRun(
           {
@@ -268,20 +370,35 @@ export function createEvidenceRecorder(deps: RecorderDeps) {
           privateKey(row),
           row.kid,
         );
+        const gapCount = await deps.store.gapCount(runId);
+        signal.throwIfAborted();
         await deps.store.insertSeal({
           runId,
           spaceId: first.spaceId,
           jws,
           headSha256: last.sha256,
           recordCount: records.length,
-          gapCount: await deps.store.gapCount(runId),
+          gapCount,
         });
         return { ok: true };
       } catch {
+        // The missed seal ends the run without its closing signature — including
+        // one the revocation fence refused — so count the gap honestly.
+        if (!signal.aborted) {
+          pendingGaps.set(runId, (pendingGaps.get(runId) ?? 0) + 1);
+          await flushGaps(runId).catch(() => {
+            /* Retry when storage recovers. */
+          });
+        }
         return { ok: false, reason: "sealing_failed" };
       } finally {
+        // serial keeps later steps behind this thunk until cleanup has finished.
         releaseRunState(runId);
       }
+    }).catch((error: unknown) => {
+      if (!(error instanceof StepDeadlineExceeded)) throw error;
+      timedOutGap(runId, error.step);
+      return { ok: false, reason: "sealing_failed" };
     });
   }
   return { recordDecision, sealRunEvidence, releaseRunState };

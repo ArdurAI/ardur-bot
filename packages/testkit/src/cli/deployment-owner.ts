@@ -3,6 +3,8 @@ type OwnerSession = { userId: string; sessionId: string };
 // The 360 s bot-comms spec renews every 60 s; a silent holder expires after 180 s.
 export const DEPLOYMENT_OWNER_LEASE_MS = 180_000;
 export const DEPLOYMENT_OWNER_RENEW_MS = 60_000;
+// A contested claim used to retry HTTP 423 forever. Stop after the server's wait budget.
+export const DEPLOYMENT_OWNER_CLAIM_DEADLINE_MS = 120_000;
 
 export function createDeploymentOwnerFixture(options: {
   authenticate: (request: Request) => Promise<OwnerSession | null>;

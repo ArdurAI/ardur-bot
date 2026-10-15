@@ -143,7 +143,11 @@ for name in os.listdir('/proc'):
 }
 
 /** A restarted supervisor must not admit work past a guardian it no longer owns. */
-export async function assertNoDockerTerminals(container: Docker.Container, stopOrphans = false) {
+export async function assertNoDockerTerminals(
+  container: Docker.Container,
+  stopOrphans = false,
+  ownedIds: readonly string[] = [],
+) {
   const probe = await container.exec({
     AttachStdout: true,
     AttachStderr: true,
@@ -155,9 +159,10 @@ for name in os.listdir('/proc'):
  if name.isdigit():
   try:
    args=open('/proc/'+name+'/cmdline','rb').read().split(b'\0')
-   if len(args)>5 and args[1]==b'-c' and b'prctl(36' in args[2]: sys.exit(42)
+   if len(args)>5 and args[1]==b'-c' and b'prctl(36' in args[2] and args[3].decode() not in sys.argv[1:]: sys.exit(42)
   except (OSError,ValueError): pass
 sys.exit(0)`,
+      ...ownedIds,
     ],
   });
   const stream = await probe.start({});

@@ -1,14 +1,23 @@
 import type { JobPublisher } from "@ardurbot/adapter-kit";
 import { runContinueJob } from "@ardurbot/adapter-kit";
 import { admitRoutedDispatch as admitDispatch, validateDeviceApproval } from "@ardurbot/adapters";
-import type { Actor, DeviceScope, PairingPayload } from "@ardurbot/contracts";
+import type { Actor, DeviceListenerState, DeviceScope, PairingPayload } from "@ardurbot/contracts";
 import {
   canonicalDispatchJson,
+  DeviceEventsInputSchema,
+  DeviceMessagesGetInputSchema,
   DeviceProofSchema,
+  DeviceRoomSendInputSchema,
+  DeviceRoomsListInputSchema,
+  DeviceRoomsListOutputSchema,
+  DeviceRunGetInputSchema,
+  DeviceRunsListInputSchema,
   DeviceScopeSchema,
+  DeviceTaskGetInputSchema,
   DispatchInputSchema,
   PairingPayloadSchema,
   pairingSignedText,
+  UNICODE_MESSAGE,
 } from "@ardurbot/contracts";
 import { effectiveRemoteAuthority } from "@ardurbot/core";
 import type { DeviceGrant, PrismaClient, ThreadEvents } from "@ardurbot/db";
@@ -21,6 +30,7 @@ import {
   deviceDigest,
   dispatchState,
   getBotCommunicationPolicy,
+  IsolationError,
   issueDeviceNonce,
   loadRemoteAuthority,
   requestCancel,
@@ -31,8 +41,17 @@ import {
   startDevicePairing,
   verifyDeviceSignature,
 } from "@ardurbot/db";
+import { ORPCError } from "@orpc/server";
 import { Hono } from "hono";
 import * as z from "zod";
+import { deviceRunEvents } from "./device-events.js";
+import { sendDeviceRoom } from "./device-rooms.js";
+import {
+  DEVICE_RECORD_UNAVAILABLE,
+  getDeviceRun,
+  listDeviceRuns,
+  requireDeviceThreadReceipt,
+} from "./device-runs.js";
 import { requestBodyLimit } from "./request-body-limit.js";
 import { acceptTeamTask } from "./team.js";
 
@@ -40,7 +59,9 @@ export interface RemoteDevicesDeps {
   prisma: PrismaClient;
   events: ThreadEvents;
   jobs: JobPublisher;
-  publicUrl?: string;
+  shutdown?: AbortSignal;
+  listenerState?: () => DeviceListenerState;
+  trustedDesktopHints?: () => string[];
   homeProof?: (challenge: string) => { certificate: string; signature: string };
 }
 function owner(actor: Actor) {
@@ -69,6 +90,7 @@ export function createRemoteDevices(deps: RemoteDevicesDeps) {
         },
       });
       return {
+        listener: deps.listenerState?.() ?? { enabled: false, hints: [] },
         instanceId: home.instanceId,
         homeName: home.homeName,
         fingerprint: home.fingerprint,
@@ -96,18 +118,23 @@ export function createRemoteDevices(deps: RemoteDevicesDeps) {
       const home = await identity();
       if (input.scopes.some((scope) => !home.scopes.includes(scope)))
         throw new DeviceRequestError("These permissions are unavailable at home.");
+      const listener = deps.listenerState?.();
+      const hints = [
+        ...new Set([
+          ...(listener?.enabled ? listener.hints : []),
+          ...(deps.trustedDesktopHints?.() ?? []),
+        ]),
+      ].slice(0, 8);
+      if (!hints.length)
+        throw new DeviceRequestError(
+          "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device.",
+        );
       const issued = await startDevicePairing(prisma, {
         userId: actor.userId,
         spaceId: actor.spaceId,
         instanceId: home.instanceId,
         scopes: input.scopes,
       });
-      const hints = [
-        ...new Set([
-          ...input.hints,
-          ...(deps.publicUrl?.startsWith("https:") ? [new URL(deps.publicUrl).origin] : []),
-        ]),
-      ].slice(0, 8);
       const payload: PairingPayload = PairingPayloadSchema.parse({
         version: 1,
         challenge: issued.challenge,
@@ -179,6 +206,7 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "bots/get",
   "bots/list",
   "groups/list",
+  "computer/list",
   "agentSkills/list",
   "customizationSkills/list",
   "connectors/summary",
@@ -206,7 +234,9 @@ export const DEVICE_READ_PROCEDURES = new Set([
   "briefs/list",
   "context/settings",
   "metrics/context",
+  "evidence/keyHistory",
 ]);
+export const STATE_CHANGING_READ_PROCEDURES = new Set(["threads/markRead"]);
 function publicGrant(grant: DeviceGrant) {
   return {
     grantId: grant.id,
@@ -224,7 +254,21 @@ export function mountRemoteDevices(
   const device = new Hono();
   device.onError((error, c) => {
     if (error instanceof DeviceRequestError)
-      return c.json({ message: error.message }, error.status);
+      return c.json(
+        { message: error.message, ...(error.problem ? { problem: error.problem } : {}) },
+        error.status,
+      );
+    if (error instanceof IsolationError) return c.json({ message: DEVICE_RECORD_UNAVAILABLE }, 403);
+    if (
+      error instanceof ORPCError &&
+      (error.code === "FORBIDDEN" || error.code === "BAD_REQUEST" || error.code === "CONFLICT")
+    )
+      return c.json(
+        { message: error.message, ...(error.data ? { problem: error.data } : {}) },
+        error.code === "FORBIDDEN" ? 403 : error.code === "CONFLICT" ? 409 : 400,
+      );
+    if (error instanceof TypeError && error.message === UNICODE_MESSAGE)
+      return c.json({ message: UNICODE_MESSAGE }, 400);
     if (error instanceof z.ZodError || error instanceof SyntaxError)
       return c.json({ message: "This request is incomplete; try again." }, 400);
     return c.json({ message: "Home could not finish this request; try again." }, 500);
@@ -331,17 +375,54 @@ export function mountRemoteDevices(
       if (!grant.scopes.includes(scope))
         throw new DeviceRequestError("This action is unavailable from this device.");
     };
-    if (["dispatch", "answer", "team-accept", "default"].includes(input.operation))
+    const verifyLiveReadGrant = async () => {
+      const live = await deps.prisma.deviceGrant.findFirst({
+        where: {
+          id: grant.id,
+          instanceId: grant.instanceId,
+          userId: grant.userId,
+          spaceId: grant.spaceId,
+          revokedAt: null,
+        },
+      });
+      const member = await deps.prisma.spaceMember.findUnique({
+        where: { spaceId_userId: { spaceId: grant.spaceId, userId: grant.userId } },
+      });
+      if (!live || !member || !live.scopes.includes("read"))
+        throw new DeviceRequestError(DEVICE_RECORD_UNAVAILABLE);
+      return live;
+    };
+    const readDevice = async (procedure: string, body: unknown) => {
+      if (STATE_CHANGING_READ_PROCEDURES.has(procedure)) await verifyLiveReadGrant();
+      const result = await deps.read(grant, procedure, body).then(
+        (value) => ({ ok: true as const, value }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+      await verifyLiveReadGrant();
+      if (!result.ok) throw result.error;
+      return result.value;
+    };
+    if (["dispatch", "rooms/send", "answer", "team-accept", "default"].includes(input.operation))
       await requireDispatchEnabled(deps.prisma, grant.spaceId);
     switch (input.operation) {
       case "presence":
         return c.json({ ok: true });
+      case "rooms/list":
+        requireScope("read");
+        DeviceRoomsListInputSchema.parse(input.body);
+        return c.json(DeviceRoomsListOutputSchema.parse(await readDevice("groups/list", {})));
+      case "rooms/send":
+        requireScope("dispatch");
+        requireScope("ordinary");
+        return c.json(
+          await sendDeviceRoom(deps, grant, DeviceRoomSendInputSchema.parse(input.body)),
+        );
       case "rpc": {
         requireScope("read");
         const read = z.object({ procedure: z.string(), input: z.unknown() }).parse(input.body);
         if (!DEVICE_READ_PROCEDURES.has(read.procedure))
           throw new DeviceRequestError("Change permissions or connections at home.");
-        return c.json(await deps.read(grant, read.procedure, read.input));
+        return c.json(await readDevice(read.procedure, read.input));
       }
       case "team-policy": {
         requireScope("read");
@@ -431,6 +512,49 @@ export function mountRemoteDevices(
         for (const run of runs)
           await deps.jobs.enqueue(runContinueJob(run.id)).catch(() => undefined);
         return c.json(result);
+      }
+
+      case "runs/get": {
+        requireScope("read");
+        const body = DeviceRunGetInputSchema.parse(input.body);
+        return c.json({ run: await getDeviceRun(deps.prisma, grant, body) });
+      }
+      case "events": {
+        requireScope("read");
+        return deviceRunEvents(
+          deps,
+          grant,
+          DeviceEventsInputSchema.parse(input.body),
+          c.req.raw.signal,
+        );
+      }
+      case "tasks/get": {
+        requireScope("read");
+        const body = DeviceTaskGetInputSchema.parse(input.body);
+        return c.json({ task: await getDeviceRun(deps.prisma, grant, body) });
+      }
+      case "runs/list": {
+        requireScope("read");
+        return c.json(
+          await listDeviceRuns(deps.prisma, grant, DeviceRunsListInputSchema.parse(input.body)),
+        );
+      }
+      case "messages/get": {
+        requireScope("read");
+        const body = DeviceMessagesGetInputSchema.parse(input.body);
+        const thread = await deps.prisma.thread.findFirst({
+          where: {
+            id: body.threadId,
+            spaceId: grant.spaceId,
+            userId: grant.userId,
+            ...(body.botId ? { botId: body.botId, groupId: null } : { groupId: body.groupId }),
+          },
+          select: { id: true },
+        });
+        if (!thread) throw new DeviceRequestError(DEVICE_RECORD_UNAVAILABLE);
+        await requireDeviceThreadReceipt(deps.prisma, grant, body.threadId);
+        // The existing read path owns bounded paging, target authorization and redaction.
+        return c.json(await readDevice("threads/messages", body));
       }
       case "tasks": {
         requireScope("read");

@@ -15,9 +15,37 @@ both processes after setting it. Start the server with `pnpm dev`, then the desk
 with `ARDURBOT_WEB_URL=http://127.0.0.1:5173 pnpm --filter @ardurbot/desktop dev`.
 Use Settings → Devices to enable network reachability and pair the phone. The
 development exception requires a loopback target and is disabled in packaged builds.
-Packaged existing-instance connections must use an app-managed "This computer" home
-for this listener. The listener exposes only the device API over TLS on the private
+For a source or headless server, prefer the operator-enabled listener described in
+[Self-hosted device pairing](self-host.md#pair-a-phone-or-command-line-device-with-a-server):
+set `ARDURBOT_DEVICE_LISTENER_ENABLED=true`, configure an advertised HTTPS origin,
+and optionally configure the bind address and port (defaults: `127.0.0.1`, `43119`).
+Packaged existing-instance connections use that server listener when enabled.
+The desktop-local listener still requires an app-managed "This computer" home;
+only the unpackaged loopback exception above can retrieve development key material.
+Keep the server database and `ENCRYPTION_KEY` to preserve its certificate across restarts.
+Expose the device port only through a private network/firewall; a TLS-terminating
+proxy with another certificate cannot satisfy the home pin.
+The listener exposes only the device API over TLS on the private
 network; it does not forward cookies, general RPC, or the stack token to phones.
+
+## Automation and screen readers
+
+Set `ARDUR_DESKTOP_ACCESSIBILITY=1` in the environment that launches the desktop app
+to expose its accessibility tree without waiting for a screen reader or automation
+client to request it. The app enables the tree after Electron is ready and before
+creating its first window, then logs “Accessibility tree forced on for automation.”
+While that variable is set, the app also keeps an occluded or background window
+from dropping the tree: before startup it disables Chromium occlusion backgrounding
+and renderer backgrounding, forces the renderer accessibility tree on, and turns
+window background throttling off. If support is cleared, or a renderer is reloaded
+or recreated, it turns the tree back on and logs “Accessibility tree restored for
+automation.” Whether a covered window keeps a live tree still has to be confirmed
+on a running app.
+The desktop development command sets this variable automatically. Packaged launches
+can use the same environment variable. When it is
+absent or has any other value, normal screen reader detection stays unchanged.
+Forcing the tree adds rendering work, so it remains an explicit choice outside
+development.
 
 ## Native Codex compatibility
 
@@ -329,6 +357,12 @@ releases without the trust command can skip it. Homebrew verifies the downloaded
 against the cask's SHA-256. For previews without an identified developer, use **Open Anyway**,
 or install with `brew install --cask --no-quarantine ArdurAI/tap/ardur`.
 Signed and notarized builds omit these caveats and open normally.
+
+## Window placement
+
+The main window remembers its normal size, position, display, maximized and full-screen state across restarts. It uses the saved display when still connected and keeps usable bounds fully inside its work area, shrinking only when needed. If the saved top area is unreachable, it centres the default size on the saved display, the display containing the saved centre, or the primary display, in that order. Linux Wayland may let the compositor choose its position.
+
+Full-screen restore starts after the window is shown. Placement saves wait for full-screen entry to finish. Closing saves immediately; quitting waits up to two seconds for a pending write, then exits even if storage stalls.
 
 ## Platform acceptance still required
 

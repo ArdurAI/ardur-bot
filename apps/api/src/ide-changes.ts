@@ -1,7 +1,7 @@
 import path from "node:path";
 import { teamBotWorkspaceDirectory, toComputerRef } from "@ardurbot/adapters";
 import type { Actor, WorkspaceRootBinding } from "@ardurbot/contracts";
-import { IdePathSchema } from "@ardurbot/contracts";
+import { computerRunsOnHost, IdePathSchema } from "@ardurbot/contracts";
 import { eventFileChanges } from "@ardurbot/core";
 import { IsolationError } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -29,6 +29,9 @@ export function createIdeChanges(
     const { root, computer, context } = input.target
       ? await files.checkedRoot(actor, input.target)
       : await files.resolve(actor, input.rootId);
+    const botId =
+      input.target?.botId ??
+      (root.kind === "sandbox" && computerRunsOnHost(computer) ? root.botId : null);
     const since = new Date(input.since),
       until = new Date(input.until);
     if (
@@ -44,7 +47,7 @@ export function createIdeChanges(
       where: {
         spaceId: actor.spaceId,
         thread: { userId: actor.userId, spaceId: actor.spaceId },
-        ...(input.target ? { botId: input.target.botId } : {}),
+        ...(botId ? { botId } : {}),
         createdAt: { gte: since, lt: until },
         type: { in: ["computer.file.changed", "command.finished"] },
         ...(input.changeId
@@ -70,7 +73,7 @@ export function createIdeChanges(
             .catch(() => null)
         : null;
     const items = changes.flatMap((change) => {
-      if (input.target && change.botId !== input.target.botId) return [];
+      if (botId && change.botId !== botId) return [];
       let relative = change.path;
       if (root.kind === "host") {
         const paths = ideHostPaths(root.path);
@@ -91,8 +94,8 @@ export function createIdeChanges(
           relative = path.posix.join(cwd, change.path);
         }
       }
-      if (input.target && computer?.scope === "team") {
-        relative = path.posix.relative(teamBotWorkspaceDirectory(input.target.botId), relative);
+      if (botId && computer?.scope === "team") {
+        relative = path.posix.relative(teamBotWorkspaceDirectory(botId), relative);
       }
       const parsed = IdePathSchema.safeParse(relative);
       if (!parsed.success || !relative) return [];

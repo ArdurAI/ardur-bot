@@ -2,7 +2,16 @@ import type { ComputerStatus, WorkspaceContext, WorkspaceViewId } from "@ardurbo
 import { msg } from "@lingui/core/macro";
 import type { useLingui } from "@lingui/react/macro";
 import type { LucideIcon } from "lucide-react";
-import { ClipboardList, Code, FileDiff, Folder, Monitor, Repeat, Terminal } from "lucide-react";
+import {
+  ClipboardList,
+  Code,
+  FileDiff,
+  Folder,
+  GitBranch,
+  Monitor,
+  Repeat,
+  Terminal,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { createElement, lazy } from "react";
 import { terminalSupported } from "./terminal-controller";
@@ -23,6 +32,9 @@ const ChangesView = lazy(() =>
 const TerminalView = lazy(() =>
   import("./WorkspaceTerminal").then((module) => ({ default: module.WorkspaceTerminal })),
 );
+const GitChangesView = lazy(() =>
+  import("./WorkspaceGitChanges").then((module) => ({ default: module.WorkspaceGitChanges })),
+);
 type ViewBodyProps = Pick<
   WorkspacePaneProps,
   | "bot"
@@ -33,6 +45,7 @@ type ViewBodyProps = Pick<
   | "onOpenRun"
   | "fileLocation"
   | "changeLocation"
+  | "onContextChange"
 > & {
   context: WorkspaceContext | null;
   visible: boolean;
@@ -50,7 +63,6 @@ export type WorkspaceViewDefinition = {
   id: WorkspaceViewId;
   label(t: Translate): string;
   icon: LucideIcon;
-  primary?: boolean;
   available(capabilities: ViewCapabilities): boolean;
   unavailable(t: Translate): string;
   render(props: ViewBodyProps): ReactNode;
@@ -73,24 +85,26 @@ export const workspaceViews = {
     icon: Folder,
     available: ({ context }) => Boolean(context?.computerId && context.files !== "unavailable"),
     unavailable: (t) => t(msg`Files are unavailable on this computer.`),
-    render: ({ bot, context, compact, fileLocation }) =>
-      context ? createElement(Files, { bot, context, compact, location: fileLocation }) : null,
+    render: ({ bot, context, compact, fileLocation, onContextChange }) =>
+      context
+        ? createElement(Files, { bot, context, compact, location: fileLocation, onContextChange })
+        : null,
   },
   ide: {
     id: "ide",
     label: (t) => t(msg`IDE`),
     icon: Code,
-    primary: true,
     available: ({ context }) => Boolean(context?.rootId && context.files !== "unavailable"),
     unavailable: (t) => t(msg`Files are unavailable on this computer.`),
-    render: ({ bot, context, compact, fileLocation }) =>
-      context ? createElement(Files, { bot, context, compact, location: fileLocation }) : null,
+    render: ({ bot, context, compact, fileLocation, onContextChange }) =>
+      context
+        ? createElement(Files, { bot, context, compact, location: fileLocation, onContextChange })
+        : null,
   },
   changes: {
     id: "changes",
     label: (t) => t(msg`Recorded changes`),
     icon: FileDiff,
-    primary: true,
     available: ({ context }) => Boolean(context?.rootId && context.files !== "unavailable"),
     unavailable: (t) => t(msg`Files are unavailable on this computer.`),
     render: ({ context, visible, changeLocation }) =>
@@ -103,11 +117,25 @@ export const workspaceViews = {
           })
         : null,
   },
+  gitChanges: {
+    id: "gitChanges",
+    label: (t) => t(msg`Git changes`),
+    icon: GitBranch,
+    available: ({ context }) => Boolean(context?.git),
+    unavailable: (t) => t(msg`Git changes are unavailable on this computer.`),
+    render: ({ context, visible }) =>
+      context
+        ? createElement(GitChangesView, {
+            key: `${context.botId}:${context.rootId}:${context.generation}`,
+            context,
+            visible,
+          })
+        : null,
+  },
   terminal: {
     id: "terminal",
     label: (t) => t(msg`Terminal`),
     icon: Terminal,
-    primary: true,
     available: ({ computer, terminal }) => terminal !== false && terminalSupported(computer),
     unavailable: (t) => t(msg`Terminal is unavailable on this computer.`),
     render: ({ bot, computer, visible, terminal, controlsHost }) =>
@@ -134,15 +162,13 @@ export const workspaceViews = {
     id: "screen",
     label: (t) => t(msg`Screen`),
     icon: Monitor,
-    primary: true,
     available: ({ computer }) => computer?.capabilities?.graphical === true,
     unavailable: (t) => t(msg`Screen is unavailable on this computer.`),
     render: ({ screen, visible }) => createElement(Screen, { ...screen, visible }),
   },
   computer: {
     id: "computer",
-    primary: true,
-    label: (t) => t(msg`Computer`),
+    label: (t) => t(msg`Computer screen`),
     icon: Monitor,
     available: ({ computer }) => computer?.capabilities?.graphical !== true,
     unavailable: (t) => t(msg`Open Screen to view this computer.`),

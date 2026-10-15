@@ -1,5 +1,5 @@
 import type { EvidenceStore } from "@ardurbot/db";
-import { EvidenceSequenceConflict } from "@ardurbot/db";
+import { EvidenceKeyConflict, EvidenceSequenceConflict } from "@ardurbot/db";
 import { vi } from "vitest";
 
 export function fakeEvidenceStore(): {
@@ -35,6 +35,8 @@ export function fakeEvidenceStore(): {
     }),
     activeKey: async (spaceId) =>
       keys.find((row) => row.spaceId === spaceId && !row.revokedAt) ?? null,
+    keysForSpace: async (spaceId) =>
+      keys.filter((row) => row.spaceId === spaceId).sort((a, b) => a.version - b.version),
     keyByKid: async (kid) => keys.find((row) => row.kid === kid) ?? null,
     insertKey: async (data) => {
       const existing = keys.find((row) => row.spaceId === data.spaceId && !row.revokedAt);
@@ -42,11 +44,43 @@ export function fakeEvidenceStore(): {
       const row = {
         ...data,
         id: `key-${keys.length}`,
+        version: data.version ?? 1,
         createdAt: new Date(),
+        replacedAt: null,
         revokedAt: null,
+        revokedReason: null,
       } as (typeof keys)[number];
       keys.push(row);
       return row;
+    },
+    replaceKey: async ({ spaceId, expectedKid, data }) => {
+      const head = keys
+        .filter((row) => row.spaceId === spaceId)
+        .sort((a, b) => b.version - a.version)[0];
+      if (!head || head.kid !== expectedKid) throw new EvidenceKeyConflict(spaceId);
+      if (!head.revokedAt) {
+        head.revokedAt = new Date();
+        head.replacedAt = new Date();
+      }
+      const row = {
+        ...data,
+        id: `key-${keys.length}`,
+        spaceId,
+        version: head.version + 1,
+        createdAt: new Date(),
+        replacedAt: null,
+        revokedAt: null,
+        revokedReason: null,
+      } as (typeof keys)[number];
+      keys.push(row);
+      return row;
+    },
+    revokeKey: async ({ spaceId, expectedKid, reason }) => {
+      const current = keys.find((row) => row.spaceId === spaceId && !row.revokedAt);
+      if (!current || current.kid !== expectedKid) throw new EvidenceKeyConflict(spaceId);
+      current.revokedAt = new Date();
+      current.revokedReason = reason;
+      return current;
     },
     sealForRun: async (runId) => seals.find((row) => row.runId === runId) ?? null,
     insertSeal: async (data) => {

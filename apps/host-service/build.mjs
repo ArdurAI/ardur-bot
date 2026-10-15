@@ -1,13 +1,134 @@
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, rm } from "node:fs/promises";
+import { chmod, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { builtinModules, createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { smokeDarwinPty } from "./scripts/smoke-darwin-pty.mjs";
 
 const adapterRequire = createRequire(
   new URL("../../packages/adapters/package.json", import.meta.url),
 );
+const hostRequire = createRequire(new URL("./package.json", import.meta.url));
+
+export async function stageDarwinPty(directory, ptyEntry = hostRequire.resolve("node-pty")) {
+  const root = path.dirname(path.dirname(ptyEntry));
+  const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+  if (manifest.version !== "1.1.0") throw new Error("Expected the pinned node-pty 1.1.0 runtime.");
+  const files = [];
+  for (const arch of ["arm64", "x64"]) {
+    const relative = `native/mac_${arch}/node-pty`;
+    const target = path.join(directory, relative);
+    await rm(path.dirname(target), { recursive: true, force: true });
+    await mkdir(path.join(target, "lib"), { recursive: true });
+    const prebuild = `prebuilds/darwin-${arch}`;
+    await mkdir(path.join(target, prebuild), { recursive: true });
+    // Preserve upstream's relative addon/helper lookup; no install-time loader,
+    // development dependencies, sources, tests or other platforms are shipped.
+    for (const name of ["index", "unixTerminal", "terminal", "eventEmitter2", "utils"]) {
+      const file = `lib/${name}.js`;
+      await copyFile(path.join(root, file), path.join(target, file));
+      files.push(`${relative}/${file}`);
+    }
+    for (const name of ["pty.node", "spawn-helper"]) {
+      const file = `${prebuild}/${name}`;
+      await copyFile(path.join(root, file), path.join(target, file));
+      if (name === "spawn-helper") await chmod(path.join(target, file), 0o755);
+      files.push(`${relative}/${file}`);
+    }
+    await copyFile(path.join(root, "LICENSE"), path.join(target, "LICENSE"));
+    await writeFile(
+      path.join(target, "package.json"),
+      `${JSON.stringify({
+        name: "node-pty",
+        version: manifest.version,
+        main: "lib/index.js",
+        license: "MIT",
+      })}\n`,
+    );
+    files.push(`${relative}/LICENSE`, `${relative}/package.json`);
+  }
+  return { files };
+}
+
+/** Keep upstream's relative loader, worker and binary paths outside asar. */
+async function stagePtyTarget(directory, root, targetName, jsFiles, binaries) {
+  const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+  if (manifest.version !== "1.1.0") throw new Error("Expected the pinned node-pty 1.1.0 runtime.");
+  const relative = `native/${targetName}/node-pty`;
+  const target = path.join(directory, relative);
+  await rm(target, { recursive: true, force: true });
+  const files = [];
+  for (const file of [...jsFiles.map((name) => `lib/${name}.js`), ...binaries, "LICENSE"]) {
+    await mkdir(path.dirname(path.join(target, file)), { recursive: true });
+    await copyFile(path.join(root, file), path.join(target, file));
+    files.push(`${relative}/${file}`);
+  }
+  await writeFile(
+    path.join(target, "package.json"),
+    `${JSON.stringify({
+      name: "node-pty",
+      version: manifest.version,
+      main: "lib/index.js",
+      license: "MIT",
+    })}\n`,
+  );
+  files.push(`${relative}/package.json`);
+  return files;
+}
+const commonPtyJs = ["index", "terminal", "eventEmitter2", "utils"];
+export async function stageWindowsPty(directory, ptyEntry = hostRequire.resolve("node-pty")) {
+  const root = path.dirname(path.dirname(ptyEntry));
+  const files = [];
+  for (const arch of ["x64", "arm64"]) {
+    const prebuild = `prebuilds/win32-${arch}`;
+    files.push(
+      ...(await stagePtyTarget(
+        directory,
+        root,
+        `win_${arch}`,
+        [
+          ...commonPtyJs,
+          "windowsTerminal",
+          "windowsPtyAgent",
+          "windowsConoutConnection",
+          "conpty_console_list_agent",
+          "shared/conout",
+          "worker/conoutSocketWorker",
+        ],
+        [
+          "conpty.node",
+          "conpty_console_list.node",
+          "pty.node",
+          "winpty.dll",
+          "winpty-agent.exe",
+          "conpty/conpty.dll",
+          "conpty/OpenConsole.exe",
+        ].map((name) => `${prebuild}/${name}`),
+      )),
+    );
+  }
+  return { files };
+}
+export async function stageLinuxPty(
+  directory,
+  ptyEntry = hostRequire.resolve("node-pty"),
+  arch = process.arch,
+) {
+  if (!["x64", "arm64"].includes(arch)) throw new Error("Unsupported Linux PTY target.");
+  // Release runners build this addon with node-gyp against Electron headers before
+  // bundling. No compiler, headers, install script or package manager ships at runtime.
+  const root = path.dirname(path.dirname(ptyEntry));
+  return {
+    files: await stagePtyTarget(
+      directory,
+      root,
+      `linux_${arch}`,
+      [...commonPtyJs, "unixTerminal"],
+      ["build/Release/pty.node"],
+    ),
+  };
+}
 
 export async function stageWindowsNativeAddons(
   directory,
@@ -63,17 +184,29 @@ export async function bundleHostService(
     format: "cjs",
     target: "node22",
     packages: "bundle",
+    external: ["node-pty"],
+    // ESM source uses its module URL in tsx; the relocatable CJS artifact uses
+    // its own URL, never a build-machine path or esbuild's empty import.meta.
+    banner: {
+      js: 'const hostServiceModuleUrl = require("node:url").pathToFileURL(__filename).href;',
+    },
     sourcemap: false,
     metafile: true,
     minify: true,
-    define: { "process.env.WS_NO_BUFFER_UTIL": '"1"', "process.env.WS_NO_UTF_8_VALIDATE": '"1"' },
+    define: {
+      "process.env.WS_NO_BUFFER_UTIL": '"1"',
+      "process.env.WS_NO_UTF_8_VALIDATE": '"1"',
+      "import.meta.url": "hostServiceModuleUrl",
+    },
     logLevel: "warning",
   });
   for (const output of Object.values(result.metafile.outputs)) {
     for (const entry of output.imports) {
       if (
         !entry.external ||
-        (!entry.path.startsWith("node:") && !builtinModules.includes(entry.path))
+        (entry.path !== "node-pty" &&
+          !entry.path.startsWith("node:") &&
+          !builtinModules.includes(entry.path))
       )
         throw new Error(`Host bundle has a runtime dependency: ${entry.path}`);
     }
@@ -87,6 +220,10 @@ export async function bundleHostService(
   )
     throw new Error("Host bundle includes a server or native-addon dependency.");
   const native = await stageWindowsNativeAddons(path.dirname(outfile));
+  const pty = await stageDarwinPty(path.dirname(outfile));
+  const windowsPty = await stageWindowsPty(path.dirname(outfile));
+  const linuxPty =
+    process.platform === "linux" ? await stageLinuxPty(path.dirname(outfile)) : { files: [] };
   const python = path.join(path.dirname(outfile), "python");
   await mkdir(python, { recursive: true });
   for (const name of [
@@ -100,7 +237,14 @@ export async function bundleHostService(
       fileURLToPath(new URL(`../../packages/host-runtime/python/${name}`, import.meta.url)),
       path.join(python, name),
     );
-  return { ...result.metafile, native };
+  await smokeDarwinPty(path.dirname(outfile));
+  return {
+    ...result.metafile,
+    native: {
+      ...native,
+      files: [...native.files, ...pty.files, ...windowsPty.files, ...linuxPty.files],
+    },
+  };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const metadata = await bundleHostService();

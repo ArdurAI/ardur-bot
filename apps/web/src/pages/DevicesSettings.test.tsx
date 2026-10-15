@@ -73,6 +73,7 @@ beforeEach(() => {
     expiresAt: new Date(Date.now() + 300_000).toISOString(),
   });
   api.list.mockResolvedValue({
+    listener: { enabled: true, hints: ["https://home.example.test:43119"] },
     fingerprint: "a".repeat(64),
     pending: [{ id: "pending", deviceName: "Pending phone", publicKeyFingerprint: "b".repeat(64) }],
     devices: [
@@ -154,7 +155,7 @@ it("reveals chat pairing only when requested and shares the device list", async 
   expect(container.textContent).toContain("private message");
 });
 
-it("hides the listener toggle when the main process rejects existing-instance pairing", async () => {
+it("uses an enabled server listener on a remote desktop without the managed-home refusal", async () => {
   window.ardurbotDesktop = {
     devices: {
       state: async () => ({ enabled: false, hints: [], available: false, mode: "existing" }),
@@ -163,11 +164,35 @@ it("hides the listener toggle when the main process rejects existing-instance pa
   } as unknown as ArdurBotDesktop;
   await act(async () => root.render(<DevicesSettings owner />));
   expect(container.querySelector("#lan-listener")).toBeNull();
-  expect(container.textContent).toContain(
+  expect(container.textContent).not.toContain(
     "Phone pairing needs a home run by this app. Set up This computer to use it.",
   );
+  await click("Pair device");
+  expect(api.start).toHaveBeenCalledWith(expect.objectContaining({ hints: [] }));
+});
+it("explains the operator switch and disables pairing on a headless home without a listener", async () => {
+  api.list.mockResolvedValue({
+    fingerprint: "a".repeat(64),
+    pending: [],
+    devices: [],
+    listener: { enabled: false, hints: [] },
+  });
+  await act(async () => root.render(<DevicesSettings owner />));
+  expect(container.textContent).toContain(
+    "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device.",
+  );
+  expect(
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "Pair device")
+      ?.disabled,
+  ).toBe(true);
 });
 it("shows the development capability and preserves a known bridge reason", async () => {
+  api.list.mockResolvedValue({
+    fingerprint: "a".repeat(64),
+    pending: [],
+    devices: [],
+    listener: { enabled: false, hints: [] },
+  });
   const setEnabled = vi
     .fn()
     .mockRejectedValue(
@@ -203,6 +228,12 @@ it("preserves known server reasons but hides unexpected diagnostics", async () =
 });
 
 it("asks for a desktop update when an older bridge cannot report pairing capability", async () => {
+  api.list.mockResolvedValue({
+    fingerprint: "a".repeat(64),
+    pending: [],
+    devices: [],
+    listener: { enabled: false, hints: [] },
+  });
   window.ardurbotDesktop = {
     devices: {
       state: async () => ({ enabled: false, hints: [] }),

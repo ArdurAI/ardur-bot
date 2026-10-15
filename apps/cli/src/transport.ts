@@ -13,9 +13,15 @@ export class CliError extends Error {
 }
 export const HOME_CHANGED = "This home's identity changed; pair this device again.";
 export const HOME_UNREACHABLE = "Home unreachable — check that Ardur is running";
-export type Transport = (url: string, fingerprint: string, body: unknown) => Promise<unknown>;
-export const pinnedPost: Transport = (url, fingerprint, body) =>
+export type Transport = (
+  url: string,
+  fingerprint: string,
+  body: unknown,
+  signal?: AbortSignal,
+) => Promise<unknown>;
+export const pinnedPost: Transport = (url, fingerprint, body, signal) =>
   new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new CliError("Waiting stopped."));
     const target = new URL(url);
     if (
       target.protocol !== "https:" ||
@@ -71,13 +77,19 @@ export const pinnedPost: Transport = (url, fingerprint, body) =>
       },
     );
     const timer = setTimeout(() => req.destroy(new CliError(HOME_UNREACHABLE)), 15_000);
-    req.once("close", () => clearTimeout(timer));
+    const abort = () => req.destroy(new CliError("Waiting stopped."));
+    signal?.addEventListener("abort", abort, { once: true });
+    req.once("close", () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+    });
     req.once("error", (error) =>
       reject(error instanceof CliError ? error : new CliError(HOME_UNREACHABLE)),
     );
     req.once("socket", (socket) => {
       const tls = socket as TLSSocket;
       tls.once("secureConnect", () => {
+        if (signal?.aborted || req.destroyed) return;
         const cert = tls.getPeerCertificate();
         if (!cert.raw || !certificateMatches(cert.raw, fingerprint)) {
           req.destroy(new CliError(HOME_CHANGED, 2));

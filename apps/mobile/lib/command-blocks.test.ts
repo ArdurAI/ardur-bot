@@ -26,6 +26,24 @@ vi.mock("./dispatch", () => ({
 }));
 
 describe("native command projection", () => {
+  it("keeps refusal identifiers in native live messages and history refreshes", () => {
+    const event = commandEvent("command.finished", {
+      refusalId: "file-location",
+      error: "original refusal",
+    });
+    const live = applyMobileThreadEvent(
+      { threadId: "thread-1", cursor: 0, messages: [], olderCursor: null, run: null },
+      event,
+    );
+    expect(live?.messages[0]?.blocks[0]).toMatchObject({
+      kind: "command",
+      command: { refusalId: "file-location", error: "original refusal" },
+    });
+    expect(mergeMobileSnapshot(live, live!).messages[0]?.blocks[0]).toEqual(
+      live?.messages[0]?.blocks[0],
+    );
+  });
+
   it("matches the shared command projection and is idempotent", () => {
     const initial: MobileSnapshot = {
       threadId: "thread-1",

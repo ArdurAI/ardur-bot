@@ -187,7 +187,17 @@ export function installTerminalWebSocket(
           value.ticket.length !== 43
         )
           throw new Error("Authentication required.");
-        attachment = await gateway.attach(value.ticket, origin, value.ack, transport);
+        if (value.version !== undefined && value.version !== 2)
+          throw new Error("Invalid terminal replay.");
+        if (value.reset !== undefined && typeof value.reset !== "boolean")
+          throw new Error("Invalid terminal replay.");
+        attachment = await gateway.attach(
+          value.ticket,
+          origin,
+          value.ack,
+          transport,
+          value.version === 2 ? { version: 2, reset: value.reset === true } : undefined,
+        );
         clearTimeout(timer);
         if (disconnected) attachment.detach();
       },

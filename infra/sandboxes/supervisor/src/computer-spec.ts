@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
+import type { ComputerLimitsObservation } from "@ardurbot/contracts";
 import { LOCAL_COMPUTER_IMAGE } from "@ardurbot/contracts/computer-image";
 import { MAX_DESKTOP_DISPLAY, screenPorts } from "@ardurbot/core/node/desktop-runtime";
 import type Docker from "dockerode";
@@ -11,6 +12,24 @@ export const COMPUTER_IMAGE = process.env.ARDURBOT_COMPUTER_IMAGE?.trim() || LOC
 export const COMPUTER_UID = 1000;
 export const COMPUTER_GID = 1000;
 export const COMPUTER_USER = `${COMPUTER_UID}:${COMPUTER_GID}`;
+
+export function inspectedComputerLimits(
+  info: Pick<Docker.ContainerInspectInfo, "State" | "HostConfig">,
+  now = new Date(),
+): ComputerLimitsObservation | null {
+  if (!info.State.Running) return null;
+  const positive = (value: number | undefined) =>
+    typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
+  const nano = positive(info.HostConfig.NanoCpus);
+  const quota = positive(info.HostConfig.CpuQuota);
+  const period = positive(info.HostConfig.CpuPeriod);
+  return {
+    observedAt: now.toISOString(),
+    cpuCores: nano ? nano / 1_000_000_000 : quota && period ? quota / period : null,
+    memoryBytes: positive(info.HostConfig.Memory),
+    processes: positive(info.HostConfig.PidsLimit),
+  };
+}
 
 export { screenPorts };
 export const COMPUTER_CONTROL_PORT = 7070;

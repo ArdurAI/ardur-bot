@@ -4,6 +4,7 @@ import path from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
+import { selectCatalogModel } from "./catalog-model-picker";
 import { dashboardFixture } from "./dashboard-fixture";
 import {
   computerDocsFixture,
@@ -12,7 +13,8 @@ import {
   memoryDocsFixture,
   routineDocsFixture,
 } from "./feature-docs-fixtures";
-import { openWorkspaceView } from "./workspace-view";
+import { captureScreenshot } from "./helpers";
+import { openAgentComputer, openWorkspaceView } from "./workspace-view";
 
 const captureRoot = process.env.FEATURE_DOCS_DIR
   ? Promise.resolve(process.env.FEATURE_DOCS_DIR)
@@ -201,7 +203,7 @@ test("onboarding: prepare a required connection", async ({ page }) => {
   );
   await page.goto("/onboarding");
   await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Provider" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Model", exact: true })).toBeVisible();
   const key = page.getByLabel("API key", { exact: true });
   await expect(key).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
@@ -281,24 +283,24 @@ test("models: inspect a connection, default control, and connection form", async
   await expect(models).toBeVisible();
   await models.click();
   await expect(panel.getByRole("heading", { name: "Models", exact: true })).toBeVisible();
-  await expect(panel.getByText("Connected · Personal connection")).toBeVisible();
+  await expect(
+    panel.getByRole("button", { name: "Connection settings", exact: true }),
+  ).toBeVisible();
   await expect(panel.getByText(connected.label, { exact: true }).first()).toBeVisible();
-  await expect(panel.getByText(/Context limit \(from the provider\)/)).toBeVisible();
+
   await capture(page, "docs-models-open");
-  const otherModel = panel.getByRole("combobox", { name: "Model", exact: true });
-  await otherModel.click();
+  await panel.getByRole("button", { name: "Connection settings", exact: true }).click();
+  await expect(panel.getByText(/Context limit \(from the provider\)/)).toBeVisible();
   const alternate = listPiCatalog().find(
     (entry) => entry.provider === connected.provider && entry.id !== connected.id,
   );
   if (!alternate) throw new Error("Bundled default-choice fixture is unavailable.");
-  await panel.getByRole("option", { name: alternate.label }).first().click();
+  await selectCatalogModel(page, alternate.provider, alternate.id, "docs-connection");
   const useThisModel = panel.getByRole("button", { name: "Use this model" });
   await expect(useThisModel).toBeVisible();
   await useThisModel.scrollIntoViewIfNeeded();
   await capture(page, "docs-models-default");
-  await panel
-    .getByRole("button", { name: unconnected.providerName ?? unconnected.provider })
-    .click();
+  await selectCatalogModel(page, unconnected.provider, unconnected.id);
   const connectKey = panel.getByRole("button", { name: "Connect API key" });
   await expect(connectKey).toBeVisible();
   await expect(panel.getByLabel("API key", { exact: true })).toBeVisible();
@@ -328,7 +330,7 @@ test("routines: edit a scheduled routine and inspect its result", async ({ page 
   await useDashboard(page, state);
   await page.goto("/app/bot");
   await expectModelReady(page);
-  await page.getByTitle("Agent computer").click();
+  await openAgentComputer(page);
   await openWorkspaceView(page, "Routines");
   await expect(page.getByRole("button", { name: /Morning brief/ })).toBeVisible();
   await capture(page, "docs-routines-open");
@@ -525,9 +527,53 @@ test("group-goals: start a goal in a room and stop it", async ({ page }) => {
   await expect.poll(() => state.goal?.status, { timeout: 3_000 }).toBe("running");
   await expect(page.getByText("Goal: Working", { exact: false })).toBeVisible();
   await expect(panel).toHaveAttribute("data-panel", "closed");
+  await page
+    .locator("details")
+    .filter({ has: page.locator("summary", { hasText: "Goal:" }) })
+    .locator("summary")
+    .click();
+  await expect(page.getByText("Waiting for Draft the release plan", { exact: true })).toBeVisible();
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible();
   await capture(page, "docs-group-goals-progress");
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect.poll(() => state.goal?.status, { timeout: 3_000 }).toBe("stopped");
   await expect(page.getByText("Goal: Stopped", { exact: false })).toBeVisible();
   await capture(page, "docs-group-goals-stopped");
+});
+
+test("group-goals: review a submitted result and refresh after accepting it", async ({
+  page,
+}, testInfo) => {
+  const state = groupGoalDocsFixture(true);
+  await useDashboard(page, {
+    botCount: 2,
+    botNames: ["Planner"],
+    groups: [state.group],
+    rpc: state.rpc,
+  });
+  await page.goto("/app/g/operations-group");
+  await page.getByText("Goal: Completed", { exact: false }).click();
+  await expect(page.getByText("Final owner review", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open board item" })).toBeVisible();
+  await expect(page.getByText("Board update pending")).toBeVisible();
+  await page.getByRole("textbox", { name: "Rework notes" }).fill("Revise the sample plan.");
+  await expect(page.getByRole("button", { name: "Accept result", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Reject result", exact: true })).toBeEnabled();
+  const runRecord = page.getByRole("button", { name: /Run record/ });
+  await expect(runRecord).toBeVisible();
+  await expect(page.getByText("Proposed", { exact: false })).toBeVisible();
+  await runRecord.click();
+  await expect(page.getByText("Decisions recorded")).toBeVisible();
+  await capture(page, "docs-group-goals-review");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Accept result", exact: true }).click();
+  await expect(page.getByText("Goal: Accepted", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Accept result", exact: true })).toHaveCount(0);
+  await page.goto("/app/g/operations-group?goal=sample-goal&revision=sample-revision");
+  await expect(
+    page.getByText("The sample release plan is ready for review.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Accept result", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reject result", exact: true })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "goal-board-accepted-result");
 });

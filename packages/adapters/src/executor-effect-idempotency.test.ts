@@ -4,13 +4,17 @@ vi.mock("./context/concurrency.js", () => ({
     input.claim(prisma),
 }));
 // Ledger transactions have disposable-PostgreSQL coverage; this fixture isolates effect fences.
-vi.mock("./run-usage.js", () => ({ recordRunUsage: vi.fn(async () => null) }));
+vi.mock("./run-usage.js", () => ({
+  recordFirstReply: vi.fn(async () => undefined),
+  recordRunUsage: vi.fn(async () => null),
+}));
 
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type {
   AgentRunRequest,
+  AgentRuntime,
   AgentRuntimeEvent,
   ProcessEvent,
   SandboxProvider,
@@ -27,6 +31,7 @@ import type { MemoryService } from "@ardurbot/memory";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "./auto-review.js";
 import { parseBeadsItem } from "./board/beads.js";
+import { reconcileBoardOutcomes } from "./board/reconcile.js";
 import { BoardService } from "./board/service.js";
 import { commandComputerFingerprint } from "./command-replay.js";
 import { MissingComputerProviderError } from "./computer-connections.js";
@@ -35,8 +40,12 @@ import { acquireComputerExecutionLease, provisionComputer } from "./computer-lif
 import type * as ComputerWorkspaceModule from "./computer-workspace.js";
 import { checkpointRunComputerWorkspace } from "./computer-workspace.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
+import { createEvidenceRecorder } from "./evidence/recorder.js";
+import { fakeEvidenceStore } from "./evidence/test-store.js";
 import { createRunExecutor } from "./executor.js";
 import { ProviderError } from "./provider-error.js";
+import type { DrainResult } from "./restart-drain.js";
+import { drainForShutdown, RestartDrain } from "./restart-drain.js";
 import { recordRunUsage } from "./run-usage.js";
 import { EncryptedSecretStore } from "./secrets.js";
 
@@ -88,7 +97,14 @@ type ToolCall = {
   executionId: string;
 };
 
-function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: SandboxProvider) {
+function fixture(
+  runId = "run-1",
+  memoryDocuments?: MemoryService,
+  sandbox?: SandboxProvider,
+  restartDrain?: Parameters<typeof createRunExecutor>[0]["restartDrain"],
+  shutdownSignal?: AbortSignal,
+  evidenceRecorder?: Parameters<typeof createRunExecutor>[0]["evidenceRecorder"],
+) {
   vi.mocked(recordRunUsage).mockClear();
   const effects: Effect[] = [];
   const results: unknown[] = [];
@@ -114,6 +130,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: San
     status: "queued",
     trigger: "user",
     sourceMessageId: null as string | null,
+    turnCheckpoint: null as string | null,
     clientNonce: null as string | null,
     leaseFence: 0,
     screenLeaseId: null as string | null,
@@ -126,6 +143,12 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: San
     cancelConfirmedAt: null as Date | null,
     providerRetryAt: null as Date | null,
     delegationId: null as string | null,
+    goalId: null as string | null,
+    delegationRootTaskId: null as string | null,
+    comparisonId: null as string | null,
+    remoteRootTaskId: null as string | null,
+    originDeviceGrantId: null as string | null,
+    remoteDeviceGrantIds: [] as string[],
   };
   const memoryCommit = vi.fn(async () => ({ revision: "rev-1" }));
   const externalEffect = {
@@ -189,9 +212,10 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: San
     chatGroupMember: { findMany: vi.fn(async () => []) },
     botMessageDelivery: {
       findFirst: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
       updateMany: vi.fn(async () => ({ count: 0 })),
     },
-    botMessageWake: { findMany: vi.fn(async () => []) },
+    botMessageWake: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
     delegationRoot: {
       findUnique: vi.fn(async () => null),
       findUniqueOrThrow: vi.fn(async () => ({
@@ -200,8 +224,10 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: San
         coordinatorBotId: "bot-1",
       })),
     },
+    teamGoal: { findFirst: vi.fn(async () => null) },
     delegation: {
       findMany: vi.fn(async () => []),
+      findFirst: vi.fn(async () => null),
       findUnique: vi.fn(async () => null),
       findUniqueOrThrow: vi.fn(async ({ where }: { where: { id: string } }) => ({
         id: where.id,
@@ -321,7 +347,9 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: San
     task: {
       findUniqueOrThrow: vi.fn(async () => ({ id: run.taskId, prompt: "Update shared state" })),
       update: vi.fn(async () => ({})),
+      updateMany: vi.fn(async () => ({ count: 1 })),
     },
+    deviceApprovalBinding: { findUnique: vi.fn(async () => null) },
     connection: { findMany: vi.fn(async () => []) },
     spaceModelPreference: {
       findFirst: vi.fn(async () => ({
@@ -380,13 +408,17 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: San
     return true;
   });
   const finalizeRun = vi.fn(
-    async (_input: { outcome: string }): Promise<{ continuationRunId: string | null } | false> => ({
+    async (_input: {
+      outcome: string;
+      error?: string;
+    }): Promise<{ continuationRunId: string | null } | false> => ({
       continuationRunId: null,
     }),
   );
   let calls: ToolCall[] = [];
   const runtimeRun = vi.fn(async function* (
     request: AgentRunRequest,
+    _context?: Parameters<AgentRuntime["run"]>[1],
   ): AsyncGenerator<AgentRuntimeEvent> {
     for (const call of calls) {
       const result = await request.executeTool!(call.name, call.args, call.executionId);
@@ -411,14 +443,30 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: San
   const environmentNote = vi.fn(async () => "Tools on this computer: gh 2.80.0 (signed in).");
   const resolveCommandCwd = vi.fn(async () => "/workspace");
   const sandboxDescription = { capabilities: { graphical: false } };
-  const events = { append: vi.fn(async () => undefined), pauseRunForInput, finalizeRun };
+  const pauseRunForTakeover = vi.fn(async () => {
+    run.status = "waiting_takeover";
+    return true;
+  });
+  const events = {
+    append: vi.fn(async () => undefined),
+    pauseRunForInput,
+    pauseRunForTakeover,
+    finalizeRun,
+  };
   const jobs = { enqueue: vi.fn(async () => undefined) };
   const secrets: string[] = [];
   const memoryRead = vi.fn(async () => ({ documents: [] }));
   const memorySearch = vi.fn(async () => []);
   const executor = createRunExecutor({
     prisma,
-    secretStore: { load: () => "test-key", digest: testDigest },
+    restartDrain,
+    shutdownSignal,
+    secretStore: {
+      load: (value: string, id: string) =>
+        id.startsWith("turn:") ? digests.load(value, id) : "test-key",
+      digest: testDigest,
+      put: digests.put.bind(digests),
+    },
     runtime: { describe: () => ({ capabilities: { scripted: false } }), run: runtimeRun },
     connector: {
       discoverTools: async () => [],
@@ -444,6 +492,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService, sandbox?: San
     events,
     jobs,
     secrets,
+    evidenceRecorder,
   } as unknown as Parameters<typeof createRunExecutor>[0]);
 
   return {
@@ -711,6 +760,95 @@ describe("Board outcome finalization", () => {
       expect(f.runRecord.boardCommentedAt).toBeInstanceOf(Date);
     },
   );
+  it.each(["before streaming", "during streaming"])(
+    "publishes a persisted failed outcome after finalization when a generator throws %s",
+    async (phase) => {
+      const f = boardRun();
+      const order: string[] = [];
+      f.runtimeRun.mockImplementation(async function* () {
+        if (phase === "during streaming") yield { type: "text", text: "Started work" };
+        throw new Error("Runtime stream failed");
+      });
+      f.finalizeRun.mockImplementation(async ({ outcome }) => {
+        // Cleanup must still stop pending tools before terminal delivery starts.
+        expect(f.runtimeRun.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+        order.push("finalized");
+        f.runRecord.status = outcome;
+        return { continuationRunId: null };
+      });
+      f.provider.comment.mockImplementation(async () => {
+        order.push(f.runRecord.status);
+      });
+      await f.executor.continueRun(f.runRecord.id, "worker-1");
+      expect(f.finalizeRun).toHaveBeenCalledWith(
+        expect.objectContaining({ outcome: "failed", error: "Runtime stream failed" }),
+      );
+      expect(order).toEqual(["finalized", "failed"]);
+      expect(f.provider.comment).toHaveBeenCalledExactlyOnceWith(
+        "board-a",
+        expect.stringContaining("Failed\nRuntime stream failed"),
+      );
+      expect(f.provider.close).not.toHaveBeenCalled();
+      expect(f.runRecord.boardCommentedAt).toBeInstanceOf(Date);
+    },
+  );
+  it.each(["before streaming", "during streaming", "at finalization"])(
+    "does not publish a failed outcome when cancellation wins %s",
+    async (phase) => {
+      const f = boardRun();
+      f.runtimeRun.mockImplementation(async function* () {
+        if (phase === "during streaming") yield { type: "text", text: "Started work" };
+        if (phase !== "at finalization") {
+          f.runRecord.status = "cancelled";
+          f.runRecord.cancelRequestedAt = new Date();
+        }
+        throw new Error("Runtime failed while stopping");
+      });
+      if (phase === "at finalization")
+        f.finalizeRun.mockImplementation(async () => {
+          f.runRecord.status = "cancelled";
+          f.runRecord.cancelRequestedAt = new Date();
+          return false;
+        });
+      await f.executor.continueRun(f.runRecord.id, "worker-1");
+      if (phase === "at finalization")
+        expect(f.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
+      else expect(f.finalizeRun).not.toHaveBeenCalled();
+      expect(f.provider.comment).not.toHaveBeenCalled();
+      expect(f.provider.close).not.toHaveBeenCalled();
+      expect(f.runRecord.boardCommentedAt).toBeNull();
+      expect(f.runRecord.status).toBe("cancelled");
+    },
+  );
+  it("keeps a failed board delivery pending for reconciliation", async () => {
+    const f = boardRun();
+    f.runtimeRun.mockImplementation(async function* () {
+      yield { type: "text", text: "Started work" };
+      throw new Error("Runtime stream failed");
+    });
+    f.finalizeRun.mockImplementation(async ({ outcome, error }) => {
+      Object.assign(f.runRecord, { status: outcome, error });
+      return { continuationRunId: null };
+    });
+    f.provider.comment.mockRejectedValueOnce(new Error("Board unavailable"));
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.provider.comment).toHaveBeenCalledOnce();
+    expect(f.runRecord.status).toBe("failed");
+    expect(f.runRecord.boardCommentedAt).toBeNull();
+    expect(f.runRecord).toMatchObject({
+      boardDeliveryToken: null,
+      boardDeliveryExpiresAt: null,
+    });
+    f.prisma.run.findMany.mockResolvedValue([f.runRecord] as never);
+    await reconcileBoardOutcomes({ prisma: f.prisma as never, dataDir: "/workspace" });
+    expect(f.provider.comment).toHaveBeenCalledTimes(2);
+    expect(f.provider.comment).toHaveBeenLastCalledWith(
+      "board-a",
+      expect.stringContaining("Failed\nRuntime stream failed"),
+    );
+    expect(f.runRecord.boardCommentedAt).toBeInstanceOf(Date);
+    expect(f.provider.close).not.toHaveBeenCalled();
+  });
 });
 
 describe("mutating tool effect idempotency keys", () => {
@@ -2125,5 +2263,1022 @@ describe("run failure cause", () => {
       level: "error",
       runtimeProblem: "runtime-unavailable",
     });
+  });
+});
+
+describe("bounded run finalization without a database", () => {
+  it("fails a stale runtime with a plain Retry sentence instead of renewing it forever", async () => {
+    vi.useFakeTimers();
+    const f = fixture("inactive-runtime");
+    f.runtimeRun.mockImplementation(async function* () {
+      yield { type: "text", text: "Partial reply" };
+      await new Promise(() => {});
+    });
+    let finished = false;
+    const running = f.executor.continueRun(f.runRecord.id, "worker").then(() => {
+      finished = true;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(119_999);
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(f.finalizeRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcome: "failed",
+          error: "The bot stopped responding. Retry the run.",
+        }),
+      );
+      expect(finished).toBe(true);
+      await running;
+      const calls = f.prisma.run.findUnique.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(f.prisma.run.findUnique.mock.calls).toHaveLength(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds a blocked post-stream workspace save and releases a pending follow-up", async () => {
+    vi.useFakeTimers();
+    const f = fixture("blocked-finalization");
+    const queued = ["Follow-up request"];
+    const handled: string[] = [];
+    const replies: string[] = [];
+    vi.mocked(checkpointRunComputerWorkspace).mockImplementationOnce(() => new Promise(() => {}));
+    f.runtimeRun.mockImplementation(async function* (request) {
+      if (handled.length) expect(request.prompt).toContain("Follow-up request");
+      else await request.executeTool!("shell", { command: "echo fixture" }, "owned-command");
+      yield { type: "text", text: handled.length ? "Follow-up reply" : "First reply" };
+      yield { type: "done" };
+    });
+    f.finalizeRun.mockImplementation(async (input) => {
+      f.runRecord.status = input.outcome;
+      if (input.outcome === "completed") replies.push("Follow-up reply");
+      return { continuationRunId: queued.length ? "follow-up" : null };
+    });
+    let finished = false;
+    const running = f.executor.continueRun(f.runRecord.id, "worker").then(() => {
+      finished = true;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(finished).toBe(true);
+      await running;
+      expect(f.finalizeRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outcome: "failed",
+          error: "The bot stopped responding. Retry the run.",
+        }),
+      );
+      expect(f.jobs.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "run.continue",
+          payload: { runId: "follow-up" },
+        }),
+      );
+      handled.push(queued.shift()!);
+      f.runRecord.status = "queued";
+      f.prisma.task.findUniqueOrThrow.mockResolvedValueOnce({ id: "task-1", prompt: handled[0]! });
+      await f.executor.continueRun(f.runRecord.id, "worker");
+      expect(replies).toEqual(["Follow-up reply"]);
+      expect(f.runRecord.status).toBe("completed");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("executor restart journeys without a database", () => {
+  function blockQueuedCheckpoint(f: ReturnType<typeof fixture>, afterSaves = 0) {
+    let saves = 0;
+    let release!: () => void;
+    let started!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queued = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const underlying = f.prisma.run.updateMany.getMockImplementation()!;
+    f.prisma.run.updateMany.mockImplementation(async (input) => {
+      if (
+        (input as { data?: { turnCheckpoint?: unknown } }).data?.turnCheckpoint &&
+        saves++ >= afterSaves
+      ) {
+        started();
+        await blocked;
+        const where = (input as unknown as { where: { leaseFence: number } }).where;
+        if (f.runRecord.status !== "running" || where.leaseFence !== f.runRecord.leaseFence)
+          return { count: 0 };
+      }
+      return underlying(input);
+    });
+    return { queued, release };
+  }
+
+  it.each([
+    "shutdown",
+    "failure",
+    "ask",
+    "takeover",
+    "retry",
+    "stop",
+    "lease-return",
+    "completed",
+    "loop-stop",
+  ] as const)(
+    "settles a queued checkpoint before an interrupted %s exit or transition",
+    async (exit) => {
+      vi.useFakeTimers();
+      const shutdown = new AbortController();
+      const drain = new RestartDrain({} as never);
+      vi.spyOn(drain, "admits").mockResolvedValue(true);
+      vi.spyOn(drain, "requested").mockResolvedValue(false);
+      const leave = vi.fn();
+      const enter = drain.enter.bind(drain);
+      vi.spyOn(drain, "enter").mockImplementation(() => {
+        const unregister = enter()!;
+        return () => {
+          leave();
+          unregister();
+        };
+      });
+      const f = fixture(`queued-${exit}`, undefined, undefined, drain, shutdown.signal);
+      const gate = blockQueuedCheckpoint(f);
+      if (exit === "takeover" || exit === "loop-stop") {
+        Object.assign(f.prisma.message, {
+          create: vi.fn(async () => ({ id: "takeover-notice" })),
+        });
+        Object.assign(f.events, { notify: vi.fn(async () => undefined) });
+      }
+      f.runtimeRun.mockImplementation(async function* () {
+        await gate.queued;
+        if (exit === "ask") {
+          yield { type: "ask", text: "Continue?" };
+          return;
+        }
+        if (exit === "takeover") {
+          yield { type: "takeover", reason: "Continue on the computer" };
+          return;
+        }
+        if (exit === "lease-return") {
+          f.runRecord.leaseFence++;
+          yield { type: "text", text: "No longer owned" };
+          return;
+        }
+        if (exit === "completed") {
+          yield { type: "done", text: "Finished" };
+          return;
+        }
+        if (exit === "loop-stop") {
+          for (let call = 0; call < 6; call++) {
+            yield {
+              type: "tool",
+              name: "read_file",
+              args: { path: "fixture.md" },
+              executionId: String(call),
+            };
+          }
+          return;
+        }
+        if (exit === "retry") throw new ProviderError("Too many requests", "rate-limit");
+        if (exit === "shutdown") shutdown.abort();
+        if (exit === "stop") f.runRecord.cancelRequestedAt = new Date();
+        throw new Error("interrupted fixture");
+      });
+      const running = f.executor.continueRun(f.runRecord.id, "worker");
+      try {
+        await gate.queued;
+        await vi.advanceTimersByTimeAsync(0);
+        expect(f.runRecord.turnCheckpoint).toBeNull();
+        expect(leave).not.toHaveBeenCalled();
+        expect(f.finalizeRun).not.toHaveBeenCalled();
+        expect(f.events.pauseRunForInput).not.toHaveBeenCalled();
+        expect(f.events.pauseRunForTakeover).not.toHaveBeenCalled();
+        expect(f.runRecord.status).toBe("running");
+        expect(f.prisma.attempt.updateMany).not.toHaveBeenCalled();
+        gate.release();
+        await running;
+        expect(leave).toHaveBeenCalledOnce();
+        if (exit === "lease-return") {
+          expect(f.runRecord.turnCheckpoint).toBeNull();
+        } else {
+          expect(f.runRecord.turnCheckpoint).toMatch(/^v2:/);
+          const saved = JSON.parse(
+            digests.load(f.runRecord.turnCheckpoint!, `turn:${f.runRecord.id}`),
+          );
+          expect(saved).toMatchObject({ version: 1, prompt: expect.any(String) });
+        }
+        if (exit === "failure") {
+          expect(f.finalizeRun).toHaveBeenCalledWith(
+            expect.objectContaining({ outcome: "failed" }),
+          );
+        } else if (exit === "completed" || exit === "loop-stop") {
+          expect(f.finalizeRun).toHaveBeenCalledWith(
+            expect.objectContaining({ outcome: "completed" }),
+          );
+        } else if (exit === "ask") {
+          expect(f.events.pauseRunForInput).toHaveBeenCalledOnce();
+        } else if (exit === "takeover") {
+          expect(f.events.pauseRunForTakeover).toHaveBeenCalledOnce();
+        } else if (exit === "retry") {
+          expect(f.runRecord.status).toBe("queued");
+          expect(f.runRecord.providerRetryAt).toBeInstanceOf(Date);
+          expect(f.finalizeRun).not.toHaveBeenCalled();
+        } else {
+          expect(f.finalizeRun).not.toHaveBeenCalled();
+        }
+      } finally {
+        gate.release();
+        await running;
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each(["completed", "failure"] as const)(
+    "starts bounded workspace finalization before flushing queued saves on %s",
+    async (exit) => {
+      vi.useFakeTimers();
+      const drain = new RestartDrain({} as never);
+      vi.spyOn(drain, "admits").mockResolvedValue(true);
+      vi.spyOn(drain, "requested").mockResolvedValue(false);
+      const leave = vi.fn();
+      const enter = drain.enter.bind(drain);
+      vi.spyOn(drain, "enter").mockImplementation(() => {
+        const unregister = enter()!;
+        return () => {
+          leave();
+          unregister();
+        };
+      });
+      const f = fixture(`finalization-order-${exit}`, undefined, undefined, drain);
+      // Let initial state and tool intent settle; block the queued tool-result save.
+      const gate = blockQueuedCheckpoint(f, 2);
+      let checkpointBeforeFlush: string | null = null;
+      let workspaceStarted = false;
+      vi.mocked(checkpointRunComputerWorkspace).mockImplementationOnce(async () => {
+        expect(f.runRecord.turnCheckpoint).toBe(checkpointBeforeFlush);
+        expect(leave).not.toHaveBeenCalled();
+        workspaceStarted = true;
+      });
+      f.runtimeRun.mockImplementation(async function* (request) {
+        await request.executeTool!("shell", { command: "echo fixture" }, "owned-command");
+        await gate.queued;
+        checkpointBeforeFlush = f.runRecord.turnCheckpoint;
+        if (exit === "failure") throw new Error("interrupted fixture");
+        yield { type: "done", text: "Finished" };
+      });
+      const running = f.executor.continueRun(f.runRecord.id, "worker");
+      try {
+        await vi.advanceTimersByTimeAsync(1);
+        await gate.queued;
+        await vi.advanceTimersByTimeAsync(0);
+        expect(workspaceStarted).toBe(true);
+        expect(f.finalizeRun).not.toHaveBeenCalled();
+        expect(leave).not.toHaveBeenCalled();
+        gate.release();
+        await running;
+        expect(f.runRecord.turnCheckpoint).toMatch(/^v2:/);
+        expect(f.runRecord.turnCheckpoint).not.toBe(checkpointBeforeFlush);
+        expect(f.finalizeRun).toHaveBeenCalledWith(
+          expect.objectContaining({ outcome: exit === "completed" ? "completed" : "failed" }),
+        );
+        expect(leave).toHaveBeenCalledOnce();
+        expect(f.finalizeRun.mock.invocationCallOrder[0]).toBeLessThan(
+          leave.mock.invocationCallOrder[0]!,
+        );
+      } finally {
+        gate.release();
+        await running;
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("reports an unsettled checkpoint at the existing shutdown deadline without waiting for it", async () => {
+    vi.useFakeTimers();
+    const sink = createTestSink();
+    installLogger(createLogger({ service: "ardurbot-worker", sinks: [sink] }));
+    const shutdown = new AbortController();
+    const drain = new RestartDrain({} as never);
+    vi.spyOn(drain, "admits").mockResolvedValue(true);
+    vi.spyOn(drain, "requested").mockResolvedValue(false);
+    const f = fixture("checkpoint-deadline", undefined, undefined, drain, shutdown.signal);
+    const gate = blockQueuedCheckpoint(f);
+    f.runtimeRun.mockImplementation(async function* () {
+      await gate.queued;
+      yield { type: "text", text: "Before interruption" };
+      throw new Error("interrupted fixture");
+    });
+    const running = f.executor.continueRun(f.runRecord.id, "worker");
+    try {
+      await gate.queued;
+      await vi.advanceTimersByTimeAsync(0);
+      const stopped = drainForShutdown(drain, shutdown);
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(shutdown.signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await stopped).toEqual({
+        ok: false,
+        activeAtStart: 1,
+        remaining: 1,
+        durationMs: 60_000,
+      });
+      expect(shutdown.signal.aborted).toBe(true);
+      expect(sink.events).toContainEqual(
+        expect.objectContaining({
+          message: "restart.drain",
+          deadlineMiss: true,
+          remaining: 1,
+        }),
+      );
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+      expect(f.runRecord.turnCheckpoint).toBeNull();
+      gate.release();
+      await running;
+      expect(f.runRecord.turnCheckpoint).toMatch(/^v2:/);
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+    } finally {
+      gate.release();
+      await running;
+      vi.useRealTimers();
+      installLogger(createLogger({ service: "ardurbot-worker", sinks: [] }));
+    }
+  });
+
+  it.each(["failure", "lease-return"] as const)(
+    "leaves cleanup and stops its heartbeat at the shared drain deadline with a forever-blocked %s save",
+    async (exit) => {
+      vi.useFakeTimers();
+      const sink = createTestSink();
+      installLogger(createLogger({ service: "ardurbot-worker", sinks: [sink] }));
+      const shutdown = new AbortController();
+      const drain = new RestartDrain({} as never);
+      vi.spyOn(drain, "admits").mockResolvedValue(true);
+      vi.spyOn(drain, "requested").mockResolvedValue(false);
+      const f = fixture("forever-checkpoint", undefined, undefined, drain, shutdown.signal);
+      const gate = blockQueuedCheckpoint(f);
+      f.runtimeRun.mockImplementation(async function* () {
+        await gate.queued;
+        if (exit === "lease-return") f.runRecord.leaseFence++;
+        yield { type: "text", text: "Before interruption" };
+        throw new Error("interrupted fixture");
+      });
+      let resolved = false;
+      const running = f.executor.continueRun(f.runRecord.id, "worker").then(() => {
+        resolved = true;
+      });
+      try {
+        await gate.queued;
+        await vi.advanceTimersByTimeAsync(0);
+        const stopped = drainForShutdown(drain, shutdown);
+        await vi.advanceTimersByTimeAsync(59_999);
+        expect(resolved).toBe(false);
+        expect(f.prisma.attempt.updateMany).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await stopped).toMatchObject({ ok: false, remaining: 1, durationMs: 60_000 });
+        expect(resolved).toBe(true);
+        await running;
+        expect(f.prisma.attempt.updateMany).toHaveBeenCalledOnce();
+        expect(sink.events).toContainEqual(
+          expect.objectContaining({
+            message: "restart.turn.checkpoint.abandoned",
+            abandonedSaves: 1,
+          }),
+        );
+        const calls = f.prisma.run.findUnique.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(65_000);
+        expect(f.prisma.run.findUnique.mock.calls).toHaveLength(calls);
+        expect(await drain.shutdown(0)).toMatchObject({ ok: true, remaining: 0 });
+        expect(f.runRecord.turnCheckpoint).toBeNull();
+        expect(f.finalizeRun).not.toHaveBeenCalled();
+        // Intentionally never release the save: cleanup must not depend on it.
+      } finally {
+        vi.useRealTimers();
+        installLogger(createLogger({ service: "ardurbot-worker", sinks: [] }));
+      }
+    },
+  );
+
+  it.each([false, true])(
+    "flushes redacted stream progress on ordinary shutdown with restart admission %s",
+    async (withDrain) => {
+      const shutdown = new AbortController();
+      const f = fixture(
+        "shutdown-progress",
+        undefined,
+        undefined,
+        withDrain ? admission().value : undefined,
+        shutdown.signal,
+      );
+      f.secrets.push("fixture-secret-token");
+      f.runtimeRun.mockImplementation(async function* () {
+        yield { type: "text", text: "First response. " };
+        yield { type: "text", text: "fixture-secret-token Final response." };
+        shutdown.abort();
+      });
+      await f.executor.continueRun(f.runRecord.id, "worker");
+      const recorded = f.events.append.mock.calls as unknown as Array<
+        [{ type: string; payload: { text?: string; delta?: string } }]
+      >;
+      const progress = recorded
+        .map(([event]) => event)
+        .filter(
+          (event) =>
+            event.type === "thread.progress" && (event.payload.text || event.payload.delta),
+        )
+        .map((event) => event.payload.text ?? event.payload.delta)
+        .join("");
+      expect(progress).toContain("Final response.");
+      expect(progress).not.toContain("fixture-secret-token");
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+      expect(f.events.append).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "run.suspended" }),
+      );
+    },
+  );
+  it("requeues a boot wait promptly without interrupting the runtime drain signal", async () => {
+    vi.useFakeTimers();
+    try {
+      const drain = new RestartDrain({} as never);
+      vi.spyOn(drain, "admits").mockResolvedValue(true);
+      const f = fixture("boot-wait", undefined, undefined, drain);
+      let ready!: () => void;
+      const booting = new Promise<void>((resolve) => {
+        ready = resolve;
+      });
+      vi.mocked(provisionComputer).mockImplementationOnce(async (_deps, _id, context) => {
+        ready();
+        return new Promise((_resolve, reject) => {
+          context.signal.addEventListener("abort", () => reject(context.signal.reason), {
+            once: true,
+          });
+        });
+      });
+      const running = f.executor.continueRun("boot-wait", "worker");
+      await booting;
+      const shutdown = new AbortController();
+      const stopped = drainForShutdown(drain, shutdown);
+      expect(shutdown.signal.aborted).toBe(false);
+      await running;
+      await vi.advanceTimersByTimeAsync(50);
+      expect(await stopped).toMatchObject({ ok: true, remaining: 0, durationMs: 50 });
+      expect(f.runRecord.status).toBe("queued");
+      expect(f.runtimeRun).not.toHaveBeenCalled();
+      expect(f.finalizeRun).not.toHaveBeenCalled();
+      expect(f.runRecord.turnCheckpoint).toBeNull();
+      expect(shutdown.signal.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("does not treat a paused approval intent as an uncertain restart effect", async () => {
+    const f = fixture("answered-approval");
+    const args = { command: "echo fixture" };
+    f.runRecord.turnCheckpoint = (
+      await digests.put(
+        JSON.stringify({
+          version: 1,
+          runtimeKind: "pi",
+          pin: {},
+          history: [],
+          prompt: "work",
+          effects: [
+            {
+              id: "paused",
+              name: "shell",
+              digest: testDigest("restart-effect", JSON.stringify(args)),
+              state: "started",
+            },
+          ],
+        }),
+        {} as never,
+        "turn:answered-approval",
+      )
+    ).ciphertext;
+    f.setCalls([{ name: "shell", args, executionId: "answered" }]);
+    await f.executor.continueRun("answered-approval", "worker");
+    expect(f.sandboxExecute).toHaveBeenCalledOnce();
+    expect(f.events.pauseRunForInput).not.toHaveBeenCalled();
+    expect(f.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "completed" }));
+  });
+  it.each(["queued", "waiting_input"])(
+    "uses current answer context rather than restart context for an ordinary %s continuation",
+    async (status) => {
+      const f = fixture(`answered-${status}`);
+      f.runRecord.status = status;
+      f.prisma.task.findUniqueOrThrow.mockResolvedValue({
+        id: "task-1",
+        prompt: "Continue after the protected answer.",
+      });
+      f.runRecord.turnCheckpoint = (
+        await digests.put(
+          JSON.stringify({
+            version: 1,
+            runtimeKind: "pi",
+            pin: {},
+            history: [{ role: "user", content: "pre-answer context" }],
+            prompt: "show a secret card for a masked api key",
+            runtimeState: [{ role: "assistant", content: "waiting for the answer" }],
+            effects: [],
+          }),
+          {} as never,
+          `turn:answered-${status}`,
+        )
+      ).ciphertext;
+      f.runtimeRun.mockImplementation(async function* (request) {
+        expect(request.prompt).toContain("Continue after the protected answer.");
+        expect(JSON.stringify(request.history)).not.toContain("pre-answer context");
+        expect(request.restartState).toBeUndefined();
+        expect(request.priorToolCalls).toBeUndefined();
+        yield { type: "done", text: "Finished after the answer" };
+      });
+      await f.executor.continueRun(f.runRecord.id, "worker");
+      expect(f.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "completed" }));
+      expect(f.events.append).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "run.resumed" }),
+      );
+    },
+  );
+  function admission() {
+    let draining = false;
+    return {
+      set(value: boolean) {
+        draining = value;
+      },
+      value: {
+        enter: () => () => {},
+        admits: async () => !draining,
+        requested: async () => draining,
+      } as unknown as NonNullable<Parameters<typeof createRunExecutor>[0]["restartDrain"]>,
+    };
+  }
+  it("suspends after a model boundary, keeps the same run and pin, and restores saved context", async () => {
+    const drain = admission();
+    const f = fixture("restart-model", undefined, undefined, drain.value);
+    let calls = 0;
+    let firstModel: unknown;
+    f.runtimeRun.mockImplementation(async function* (request) {
+      calls++;
+      if (calls === 1) {
+        firstModel = request.model;
+        yield { type: "text", text: "First model response" };
+        drain.set(true);
+        expect(
+          await request.saveCheckpoint!(
+            [{ role: "assistant", content: "First model response" }],
+            [{ provider: "test", model: "pinned", inputTokens: 3, outputTokens: 5 }],
+          ),
+        ).toBe(true);
+      } else {
+        expect(JSON.stringify(request.history)).toContain("First model response");
+        expect(request.nativeSession).toBeUndefined();
+        expect(request.model).toEqual(firstModel);
+        yield { type: "done", text: "Finished after restart" };
+      }
+    });
+    await f.executor.continueRun("restart-model", "old");
+    expect(f.finalizeRun).not.toHaveBeenCalled();
+    expect(recordRunUsage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: "restart-model" }),
+      expect.objectContaining({ inputTokens: 3, outputTokens: 5 }),
+    );
+    expect(f.runRecord.turnCheckpoint).toMatch(/^v2:/);
+    const saved = JSON.parse(digests.load(f.runRecord.turnCheckpoint!, "turn:restart-model"));
+    expect(saved).toMatchObject({
+      version: 1,
+      runtimeState: [{ content: "First model response" }],
+    });
+    drain.set(false);
+    await f.executor.continueRun("restart-model", "new");
+    expect(f.finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "restart-model", outcome: "completed" }),
+    );
+    expect(f.events.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "run.resumed",
+        payload: expect.objectContaining({ freshSession: true }),
+      }),
+    );
+  });
+  it("lets an active tool finish before saving and releasing it, then skips the completed effect", async () => {
+    const drain = admission();
+    const f = fixture("tool-boundary", undefined, undefined, drain.value);
+    let release!: () => void;
+    const finished = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.sandboxExecute.mockImplementation(async function* () {
+      drain.set(true);
+      await finished;
+      yield { type: "stdout", data: "completed tool result" };
+      yield { type: "exit", code: 0 };
+    });
+    const args = { command: "echo fixture" };
+    f.setCalls([{ name: "shell", args, executionId: "first" }]);
+    const work = f.executor.continueRun("tool-boundary", "old");
+    await vi.waitFor(() => expect(f.sandboxExecute).toHaveBeenCalledOnce());
+    try {
+      expect(f.runRecord.turnCheckpoint).toMatch(/^v2:/);
+      const active = JSON.parse(digests.load(f.runRecord.turnCheckpoint!, "turn:tool-boundary"));
+      expect(active.effects).toContainEqual(expect.objectContaining({ state: "started" }));
+      expect(f.events.append).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "run.suspended" }),
+      );
+    } finally {
+      release();
+      await work;
+    }
+    expect(f.finalizeRun).not.toHaveBeenCalled();
+    const saved = JSON.parse(digests.load(f.runRecord.turnCheckpoint!, "turn:tool-boundary"));
+    expect(saved.effects).toContainEqual(expect.objectContaining({ state: "completed" }));
+    drain.set(false);
+    f.setCalls([{ name: "shell", args, executionId: "recovered" }]);
+    await f.executor.continueRun("tool-boundary", "new");
+    expect(f.sandboxExecute).toHaveBeenCalledOnce();
+  });
+  it("keeps a full model checkpoint when later stream text is delivered", async () => {
+    const f = fixture("native-progress");
+    f.runtimeRun.mockImplementation(async function* (request) {
+      await request.saveCheckpoint!([{ role: "assistant", content: "full model context" }]);
+      yield { type: "text", text: "later stream fragment" };
+      yield { type: "done", text: "finished" };
+    });
+    await f.executor.continueRun("native-progress", "worker");
+    const saved = JSON.parse(digests.load(f.runRecord.turnCheckpoint!, "turn:native-progress"));
+    expect(saved.runtimeState).toEqual([{ role: "assistant", content: "full model context" }]);
+  });
+  it("re-arms checkpoint writes after a transient failure instead of poisoning the turn", async () => {
+    const f = fixture("checkpoint-rearm");
+    const underlying = f.prisma.run.updateMany.getMockImplementation()!;
+    let checkpointWrites = 0;
+    f.prisma.run.updateMany.mockImplementation(async (input) => {
+      if ((input as { data?: { turnCheckpoint?: unknown } }).data?.turnCheckpoint) {
+        checkpointWrites++;
+        if (checkpointWrites === 2) throw new Error("transient connection reset");
+      }
+      return underlying(input);
+    });
+    f.runtimeRun.mockImplementation(async function* (request) {
+      await expect(
+        request.saveCheckpoint!([{ role: "assistant", content: "lost write" }]),
+      ).rejects.toThrow("transient connection reset");
+      await request.saveCheckpoint!([{ role: "assistant", content: "re-armed write" }]);
+      yield { type: "done", text: "finished" };
+    });
+    await f.executor.continueRun("checkpoint-rearm", "worker");
+    expect(f.finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "checkpoint-rearm", outcome: "completed" }),
+    );
+    const saved = JSON.parse(digests.load(f.runRecord.turnCheckpoint!, "turn:checkpoint-rearm"));
+    expect(saved.runtimeState).toEqual([{ role: "assistant", content: "re-armed write" }]);
+  });
+  it("keeps a cancelled saved turn cancelled without starting a fresh session", async () => {
+    const f = fixture("cancelled-saved");
+    f.runRecord.status = "cancelled";
+    f.runRecord.turnCheckpoint = "fake-not-decrypted";
+    await f.executor.continueRun("cancelled-saved", "new");
+    expect(f.runtimeRun).not.toHaveBeenCalled();
+    expect(f.runRecord.status).toBe("cancelled");
+  });
+  it("admits no provider call while draining", async () => {
+    const drain = admission();
+    const f = fixture("held", undefined, undefined, drain.value);
+    drain.set(true);
+    await f.executor.continueRun("held", "worker");
+    expect(f.runtimeRun).not.toHaveBeenCalled();
+    expect(f.runRecord.status).toBe("queued");
+  });
+  it("recovers a completed command without repeating it after a crash before lease release", async () => {
+    const f = fixture("restart-tool");
+    const args = { command: "echo fixture" };
+    f.setCalls([{ name: "shell", args, executionId: "first" }]);
+    await f.executor.continueRun("restart-tool", "old");
+    const pin = JSON.stringify(f.runRecord);
+    f.setCalls([{ name: "shell", args, executionId: "recovered" }]);
+    await f.executor.continueRun("restart-tool", "new");
+    expect(f.sandboxExecute).toHaveBeenCalledTimes(1);
+    expect(f.runRecord.turnCheckpoint).toMatch(/^v2:/);
+    expect(pin).not.toContain("Tests passed.");
+  });
+  it("pauses an uncertain command for a person instead of repeating it", async () => {
+    const f = fixture("uncertain-tool");
+    f.runRecord.status = "running";
+    const args = { command: "echo fixture" };
+    const saved = {
+      version: 1,
+      runtimeKind: "pi",
+      pin: {},
+      history: [],
+      prompt: "work",
+      effects: [
+        {
+          id: "started",
+          name: "shell",
+          digest: testDigest("restart-effect", JSON.stringify(args)),
+          state: "started",
+        },
+      ],
+    };
+    f.runRecord.turnCheckpoint = (
+      await digests.put(JSON.stringify(saved), {} as never, "turn:uncertain-tool")
+    ).ciphertext;
+    f.setCalls([{ name: "shell", args, executionId: "recovered" }]);
+    await f.executor.continueRun("uncertain-tool", "new");
+    expect(f.sandboxExecute).not.toHaveBeenCalled();
+    expect(f.events.pauseRunForInput).toHaveBeenCalled();
+    expect(f.finalizeRun).not.toHaveBeenCalled();
+  });
+});
+
+it("measures interruption counts with the same two-bot scripted restart workload", async () => {
+  let draining = false;
+  let service = new RestartDrain({} as never);
+  let drained: Promise<DrainResult> | undefined;
+  const coordinator = {
+    enter: () => service.enter(),
+    admits: async () => !draining,
+    requested: async () => draining,
+  } as unknown as NonNullable<Parameters<typeof createRunExecutor>[0]["restartDrain"]>;
+  const bots = [
+    fixture("workload-a", undefined, undefined, coordinator),
+    fixture("workload-b", undefined, undefined, coordinator),
+  ];
+  let boundaries = 0;
+  let release!: () => void;
+  const together = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let resumed = 0;
+  for (const bot of bots) {
+    let first = true;
+    bot.runtimeRun.mockImplementation(async function* (request) {
+      if (first) {
+        first = false;
+        yield { type: "text", text: "Saved step" };
+        if (++boundaries === 2) {
+          draining = true;
+          drained = service.shutdown();
+          release();
+        }
+        await together;
+        if (await request.saveCheckpoint?.([{ role: "assistant", content: "Saved step" }])) return;
+        throw new Error("Turn interrupted by restart");
+      }
+      resumed++;
+      yield { type: "done", text: "Finished" };
+    });
+  }
+  await Promise.all(bots.map((bot) => bot.executor.continueRun(bot.runRecord.id, "old")));
+  const saved = bots.filter((bot) => bot.runRecord.turnCheckpoint).length;
+  const failed = bots.reduce(
+    (sum, bot) =>
+      sum + bot.finalizeRun.mock.calls.filter(([call]) => call.outcome === "failed").length,
+    0,
+  );
+  const cancelled = bots.reduce(
+    (sum, bot) =>
+      sum + bot.finalizeRun.mock.calls.filter(([call]) => call.outcome === "cancelled").length,
+    0,
+  );
+  const drainResult = await drained!;
+  draining = false;
+  service = new RestartDrain({} as never);
+  if (saved === 2)
+    await Promise.all(bots.map((bot) => bot.executor.continueRun(bot.runRecord.id, "new")));
+  const counts = {
+    activeAtRestart: boundaries,
+    saved,
+    resumed,
+    failed,
+    cancelled,
+    deadlineMisses: Number(!drainResult.ok),
+    drainTimeMs: drainResult.durationMs,
+  };
+  process.stdout.write(`restart-workload ${JSON.stringify(counts)}\n`);
+  expect(counts).toMatchObject({
+    activeAtRestart: 2,
+    saved: 2,
+    resumed: 2,
+    failed: 0,
+    cancelled: 0,
+    deadlineMisses: 0,
+  });
+  expect(drainResult.durationMs).toBeLessThan(60_000);
+});
+
+it("finishes a streamed reply despite hung read-only evidence and marks the receipt partial", async () => {
+  vi.useFakeTimers();
+  try {
+    const { store, records, seals } = fakeEvidenceStore();
+    const recorder = createEvidenceRecorder({ store, secretStore: digests });
+    vi.mocked(store.insertRecord).mockImplementationOnce(() => new Promise<never>(() => {}));
+    const f = fixture("evidence-hang", undefined, undefined, undefined, undefined, recorder);
+    f.runtimeRun.mockImplementation(async function* (request) {
+      yield { type: "text", text: "Reply ready" };
+      await request.executeTool!("recall", { query: "fixture" }, "read-only");
+      yield { type: "done", text: "Reply ready" };
+    });
+    let settled = false;
+    const running = f.executor.continueRun("evidence-hang", "worker").then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(settled).toBe(true);
+    await running;
+    expect(f.finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: "completed",
+        blocks: expect.arrayContaining([
+          expect.objectContaining({ kind: "text", text: "Reply ready" }),
+        ]),
+      }),
+    );
+    expect(await store.gapCount("evidence-hang")).toBe(1);
+    expect(records).toHaveLength(0);
+    expect(seals).toHaveLength(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+describe("goal review freeze through the executor", () => {
+  function goalRun(patch: Record<string, unknown> = {}) {
+    const f = fixture("goal-freeze-run");
+    Object.assign(f.runRecord, {
+      goalId: "goal-1",
+      delegationRootTaskId: "root-1",
+      ...patch,
+    });
+    return f;
+  }
+
+  function freezeGoal(f: ReturnType<typeof goalRun>, status: string) {
+    vi.mocked(f.prisma.teamGoal.findFirst).mockResolvedValue({
+      id: "goal-1",
+      rootTaskId: "root-1",
+      status,
+    } as never);
+  }
+
+  it.each(["queued", "waiting_input", "waiting_takeover"] as const)(
+    "settles a %s goal run a stale continue claims instead of starting the runtime",
+    async (status) => {
+      const f = goalRun({ status });
+      freezeGoal(f, "completed");
+      await f.executor.continueRun(f.runRecord.id, "worker-1");
+      // The freeze owns the run: no lease, no model call, the run is cancelled and
+      // its prevented effects are denied (see goals.test.ts for the assertions).
+      expect(f.runtimeRun).not.toHaveBeenCalled();
+      expect(f.runRecord.status).toBe("cancelled");
+    },
+  );
+
+  it("writes the final goal usage cut after runtime callbacks drain", async () => {
+    const f = goalRun();
+    freezeGoal(f, "running");
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let observed!: () => void;
+    const observedUsage = new Promise<void>((resolve) => {
+      observed = resolve;
+    });
+    vi.mocked(recordRunUsage).mockImplementationOnce(async () => {
+      observed();
+      await pending;
+      return null;
+    });
+    f.runtimeRun.mockImplementation(async function* () {
+      yield {
+        type: "usage" as const,
+        provider: "fixture",
+        model: "fixture",
+        inputTokens: 12,
+        outputTokens: 3,
+      };
+      yield { type: "done" as const, text: "Done" };
+    });
+    const running = f.executor.continueRun(f.runRecord.id, "worker-1");
+    try {
+      await observedUsage;
+      expect(f.prisma.attempt.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: { usageSettledAt: expect.any(Date) } }),
+      );
+      release();
+      await running;
+      expect(f.prisma.attempt.updateMany).toHaveBeenCalledWith({
+        where: { id: "attempt-1", runId: f.runRecord.id, fence: f.runRecord.leaseFence },
+        data: { usageSettledAt: expect.any(Date) },
+      });
+    } finally {
+      release();
+      await running;
+    }
+  });
+
+  it("does not mark goal accounting final when a usage write fails", async () => {
+    const f = goalRun();
+    freezeGoal(f, "running");
+    vi.mocked(recordRunUsage).mockRejectedValueOnce(new Error("fixture accounting unavailable"));
+    f.runtimeRun.mockImplementation(async function* () {
+      yield {
+        type: "usage" as const,
+        provider: "fixture",
+        model: "fixture",
+        inputTokens: 12,
+        outputTokens: 3,
+      };
+      yield { type: "done" as const, text: "Done" };
+    });
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.prisma.attempt.updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: { usageSettledAt: expect.any(Date) } }),
+    );
+  });
+
+  it("keeps finish_goal out of the external-effect queue so submission cannot block itself", async () => {
+    const f = goalRun();
+    freezeGoal(f, "running");
+    f.setCalls([
+      { name: "finish_goal", args: { summary: "Candidate" }, executionId: "submit-call" },
+    ]);
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.prisma.externalEffect.create).not.toHaveBeenCalled();
+    // This fixture has no group room; reaching the submission handler still proves
+    // that effect admission did not create a self-blocking intended effect first.
+    expect(f.results[0]).toEqual({ error: "finish_goal requires an active group goal" });
+  });
+
+  it("starts the runtime normally while the goal is running", async () => {
+    const f = goalRun();
+
+    freezeGoal(f, "running");
+    f.setCalls([{ name: "shell", args: { command: "fixture command" }, executionId: "call-1" }]);
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.runtimeRun).toHaveBeenCalled();
+    expect(f.sandboxExecute).toHaveBeenCalledOnce();
+  });
+
+  it("holds an approved effect replay when the goal freezes mid-turn, without dropping it", async () => {
+    const f = goalRun();
+    let frozen = false;
+    vi.mocked(f.prisma.teamGoal.findFirst).mockImplementation(
+      async () =>
+        ({
+          id: "goal-1",
+          rootTaskId: "root-1",
+          status: frozen ? "completed" : "running",
+        }) as never,
+    );
+    const args = { command: "fixture command" };
+    f.effects.push({
+      id: "effect-approved",
+      runId: f.runRecord.id,
+      kind: "shell",
+      idempotencyKey: toolEffectIdempotencyKey(f.runRecord.id, "shell", args, 0),
+      status: "approved",
+      request: args,
+    });
+    f.setCalls([{ name: "shell", args, executionId: "replay-call" }]);
+    f.runtimeRun.mockImplementation(async function* (request: AgentRunRequest) {
+      // Owner review freezes the goal while the run is mid-turn; the model's next
+      // tool call replays the approved effect.
+      frozen = true;
+      for (const call of [{ name: "shell", args, executionId: "replay-call" }]) {
+        f.results.push(await request.executeTool!(call.name, call.args, call.executionId));
+      }
+      yield { type: "done" as const, text: "Done" };
+    });
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    // Held, not dropped: the fixture command never dispatched, and the effect stays
+    // approved for rework. (The sandbox may run the run's stop-cleanup script.)
+    expect(JSON.stringify(f.sandboxExecute.mock.calls)).not.toContain("fixture command");
+    expect(f.effects[0]!.status).toBe("approved");
+    expect(f.results[0]).toMatchObject({ error: expect.stringContaining("owner review") });
+  });
+
+  it("executes the approved replay while the goal is running", async () => {
+    const f = goalRun();
+    freezeGoal(f, "running");
+    const args = { command: "fixture command" };
+    f.effects.push({
+      id: "effect-approved",
+      runId: f.runRecord.id,
+      kind: "shell",
+      idempotencyKey: toolEffectIdempotencyKey(f.runRecord.id, "shell", args, 0),
+      status: "approved",
+      request: args,
+    });
+    f.setCalls([{ name: "shell", args, executionId: "replay-call" }]);
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.sandboxExecute).toHaveBeenCalledOnce();
+    expect(f.effects[0]!.status).toBe("completed");
   });
 });

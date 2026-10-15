@@ -18,6 +18,7 @@ import {
   summaryOperationHash,
   summaryOperationManifest,
 } from "./hermes-provider-broker.js";
+import { nameHermesProviderFailure } from "./hermes-provider-problem.js";
 import { buildHostTurn } from "./host-turn.js";
 
 export { advertisedHostTools } from "./host-turn.js";
@@ -200,7 +201,16 @@ export class RemoteHostRuntime implements AgentRuntime {
             if (!relayDispatcher) {
               relayDispatcher = new HermesRelayDispatcher(brokerSession, abort.signal);
             }
-            return relayDispatcher.dispatch(frame.method, frame.args);
+            const result = await relayDispatcher.dispatch(frame.method, frame.args);
+            if (
+              frame.method === "provider.read" &&
+              result &&
+              typeof result === "object" &&
+              "done" in result &&
+              result.done
+            )
+              await request.saveCheckpoint?.(undefined);
+            return result;
           }
           if (frame.method === "onRuntimeInfo") {
             const info = HostRuntimeInfoSchema.parse(frame.args[0]) as ReturnType<
@@ -226,6 +236,22 @@ export class RemoteHostRuntime implements AgentRuntime {
               .parse(frame.args[0]);
             await request.acknowledgeInput?.(input);
             return;
+          }
+          if (frame.method === "saveCheckpoint") {
+            if (Buffer.byteLength(JSON.stringify(frame.args[0] ?? null)) > 8 * 1024 * 1024)
+              throw new Error("Turn checkpoint is too large.");
+            const usage = z
+              .array(HostRuntimeEventSchema)
+              .max(1024)
+              .parse(frame.args[1] ?? []);
+            if (usage.some((event) => event.type !== "usage"))
+              throw new Error("Invalid checkpoint usage.");
+            return (
+              request.saveCheckpoint?.(
+                frame.args[0],
+                usage as Array<Extract<AgentRuntimeEvent, { type: "usage" }>>,
+              ) ?? false
+            );
           }
           if (frame.method === "claimSteering")
             return (
@@ -294,6 +320,8 @@ export class RemoteHostRuntime implements AgentRuntime {
         if (frame.channel !== "event") throw new Error("Unexpected runtime frame.");
         yield HostRuntimeEventSchema.parse(frame.data);
       }
+    } catch (error) {
+      throw this.kind === "hermes" ? nameHermesProviderFailure(error) : error;
     } finally {
       brokerSession?.broker.revoke();
       this.active.delete(request.runId);

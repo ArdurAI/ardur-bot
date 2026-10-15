@@ -1151,7 +1151,7 @@ it("admits a Hermes reviewer saved through setReviewer", async () => {
       id: "same-model",
       baseUrl: "http://127.0.0.1:8080/v1",
       thinkingLevel: "off",
-      contextWindow: 32_768,
+      contextWindow: 65_536,
       maxTokens: 4_096,
     }),
   });

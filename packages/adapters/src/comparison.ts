@@ -21,15 +21,18 @@ import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   comparisonMergeInput,
   DELEGATION_ADMISSION_TRANSACTION,
+  delegationBotBinding,
+  delegationModelBinding,
   deviceDigest,
   lockDelegationRoot,
   readComparison,
   withTransactionRetry,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
-import type { DelegationResolver } from "./delegation.js";
+import type { DelegationResolver, PreparedDelegationTarget } from "./delegation.js";
 import { delegationFloorForModel, prepareDelegation } from "./delegation.js";
 import { destinationForModel } from "./model-locality.js";
+import { hasBotPin, requestedBotPin } from "./pin-resolution.js";
 
 type Scope = Pick<Actor, "spaceId" | "userId">;
 export type ComparisonDeps = {
@@ -49,6 +52,11 @@ export async function comparisonParticipants(
         where: { id, ...scope, archivedAt: null },
         include: { computer: true },
       });
+      const modelBinding = await delegationModelBinding(
+        deps.prisma,
+        scope,
+        hasBotPin(bot) ? requestedBotPin(bot) : null,
+      );
       const selected = await deps.resolvePin(bot);
       if (selected.kind === "problem") throw new RuntimePinError(selected);
       const participant: ComparisonParticipant = {
@@ -69,7 +77,7 @@ export async function comparisonParticipants(
         DELEGATION_LIMITS.reservationTokens,
         delegationFloorForModel(selected.pin, selected),
       );
-      return { bot, selected, participant, reservation };
+      return { bot, selected, participant, reservation, modelBinding };
     }),
   );
 }
@@ -88,7 +96,7 @@ async function queueComparisonRun(
     selectedRunIds?: string[];
     frozenInput: Prisma.InputJsonValue;
   },
-  resolvePin: DelegationResolver,
+  target: PreparedDelegationTarget,
 ) {
   const bot = await tx.bot.findFirstOrThrow({
     where: { id: input.participant.botId, ...scope, archivedAt: null },
@@ -109,7 +117,7 @@ async function queueComparisonRun(
       card: input.card,
       tokens: input.tokens,
     },
-    resolvePin,
+    target,
   );
   if (!admitted.ok) throw new Error(admitted.error);
   if (!isDeepStrictEqual(admitted.record.snapshot, input.participant.executing))
@@ -332,7 +340,11 @@ export async function startComparison(deps: ComparisonDeps, scope: Scope, raw: C
               tokens: entry.reservation,
               frozenInput: snapshot,
             },
-            async () => entry.selected,
+            {
+              selected: entry.selected,
+              binding: { bot: delegationBotBinding(entry.bot), model: entry.modelBinding },
+              computer: entry.participant.executing.computer,
+            },
           ),
         );
       return { id: comparison.id, runIds };
@@ -410,7 +422,11 @@ export async function mergeComparison(deps: ComparisonDeps, scope: Scope, raw: C
           frozenInput,
           selectedRunIds: input.selectedRunIds,
         },
-        async () => entry.selected,
+        {
+          selected: entry.selected,
+          binding: { bot: delegationBotBinding(entry.bot), model: entry.modelBinding },
+          computer: entry.participant.executing.computer,
+        },
       );
       await tx.comparison.update({
         where: { id: row.id },

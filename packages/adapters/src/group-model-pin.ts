@@ -31,7 +31,7 @@ export type RunPinCandidate = {
 
 /** The persisted execution thread, never a prompt or group of origin, selects the scope. */
 export async function selectRunPinSource(input: {
-  prisma: PrismaClient;
+  prisma: Prisma.TransactionClient;
   scope: Scope;
   threadId: string;
   executionGroupId?: string | null;

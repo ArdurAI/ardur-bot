@@ -3,6 +3,7 @@ import {
   DelegationAuthoritySchema,
   type DelegationStopReason,
   delegationStopLine,
+  isFrozenGoalStatus,
   TaskCardSchema,
 } from "@ardurbot/contracts";
 import {
@@ -48,6 +49,22 @@ export async function checkDelegationExecution(
       verificationRead: await chiefVerificationRead(prisma, runId, route),
     });
     if (refusal) return refusal;
+  }
+  if (run.goalId) {
+    // The freeze holds at continuation too: an in-flight turn stops at its next
+    // check instead of running more model work for a goal awaiting owner review.
+    // New and replayed effects are refused at admission as well; this ends the turn.
+    const goal = await prisma.teamGoal.findFirst({
+      where: { id: run.goalId },
+      select: { status: true },
+    });
+    if (goal && isFrozenGoalStatus(goal.status)) {
+      await prisma.run.updateMany({
+        where: { id: runId, cancelRequestedAt: null },
+        data: { cancelRequestedAt: new Date() },
+      });
+      return "This goal is awaiting owner review or already accepted, so this run cannot continue.";
+    }
   }
   if (run.goalId) {
     const peerDelegation = run.delegationId

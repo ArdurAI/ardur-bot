@@ -3,10 +3,25 @@ import {
   decodeTerminalFrame,
   encodeTerminalFrame,
   parseTerminalControl,
+  parseTerminalReplaySize,
   validateTerminalSize,
 } from "./terminal.js";
 
 describe("terminal protocol", () => {
+  it("accepts only bounded versioned replay dimensions", () => {
+    const size = { type: "replay-size", version: 2, seq: 1, cols: 80, rows: 24 };
+    expect(parseTerminalReplaySize(size)).toEqual(size);
+    for (const value of [
+      null,
+      {},
+      { ...size, version: 1 },
+      { ...size, seq: 0 },
+      { ...size, seq: 0x100000000 },
+      { ...size, cols: 501 },
+      { ...size, rows: NaN },
+    ])
+      expect(() => parseTerminalReplaySize(value)).toThrow();
+  });
   it("round trips UTF-8 and arbitrary bytes without string conversion", () => {
     for (const bytes of [
       new TextEncoder().encode("你好 🧪\r\n"),

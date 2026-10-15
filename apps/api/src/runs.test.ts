@@ -1,7 +1,28 @@
 import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
-import { activityNotificationsEnabled, activityPromptSnippet, listSpaceRuns } from "./runs.js";
+import {
+  activityNotificationsEnabled,
+  activityPromptSnippet,
+  activityRunFailure,
+  listSpaceRuns,
+} from "./runs.js";
+
+it("keeps reliability's unclassified failure projection free of raw error content", () => {
+  expect(
+    activityRunFailure({
+      status: "failed",
+      runtimePin: null,
+      error: "private fixture diagnostics",
+    }),
+  ).toEqual({});
+  expect(
+    activityRunFailure({
+      status: "cancelled",
+      error: "Ardur's usage limit is reached. Try again after it resets.",
+    }),
+  ).toEqual({});
+});
 
 it.each([null, "group"])(
   "routes delegated approvals to the scoped coordinator thread (%s)",
@@ -268,3 +289,38 @@ it.each([false, true])(
     });
   },
 );
+
+it("keeps the public provider name in activity and reliability projections", () => {
+  const pin = {
+    runtimeKind: "hermes",
+    provider: "zai-coding-cn",
+    modelId: "glm-5.3",
+    effort: "high",
+    credentialId: "fixture",
+    revision: 1,
+  };
+  const reason =
+    "Z.AI Coding CN is refusing requests right now (rate or usage limit). Try again later or check your plan.";
+  expect(
+    activityRunFailure({
+      status: "failed",
+      runtimeProblem: {
+        kind: "problem",
+        code: "runtime-unavailable",
+        pin,
+        reason,
+        reasonId: "provider-rate-limit",
+        actions: ["retry"],
+      },
+    }),
+  ).toEqual({
+    failureCategory: "provider-rate-limit",
+    failureRuntime: "Hermes",
+    failureProvider: "Z.AI Coding CN",
+  });
+  expect(activityRunFailure({ status: "failed", runtimePin: pin, error: reason })).toEqual({
+    failureCategory: "provider-rate-limit",
+    failureRuntime: "Hermes",
+    failureProvider: "Z.AI Coding CN",
+  });
+});

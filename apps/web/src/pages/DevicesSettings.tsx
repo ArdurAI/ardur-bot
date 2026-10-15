@@ -1,6 +1,7 @@
 import type {
   DesktopDeviceListenerState,
   DeviceGrantView,
+  DeviceListenerState,
   PairingPayload,
 } from "@ardurbot/contracts";
 import { DEFAULT_DEVICE_SCOPES } from "@ardurbot/contracts";
@@ -46,6 +47,7 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
     shortCode: string;
     expiresAt: string;
   } | null>(null);
+  const [serverListener, setServerListener] = useState<DeviceListenerState | null>(null);
   const [listener, setListener] = useState<DesktopDeviceListenerState | null>(null);
   const [consequential, setConsequential] = useState(false);
   const [delegate, setDelegate] = useState(false);
@@ -58,6 +60,14 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
     setDevices(state.devices);
     setPending(state.pending);
     setFingerprint(state.fingerprint);
+    setServerListener(state.listener);
+    if (desktop) {
+      try {
+        setListener(await desktop.state());
+      } catch {
+        if (!state.listener.enabled) setError(t`Restart the desktop app to update it.`);
+      }
+    }
   }
   async function act(work: () => Promise<unknown>) {
     setBusy(true);
@@ -72,6 +82,7 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
           [
             "Open Devices on your Mac.",
             "Phone pairing needs a home run by this app. Set up This computer to use it.",
+            "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device.",
             "Start your home before pairing a phone.",
             "Update your home before pairing a phone.",
             "Pair your phone again with this home.",
@@ -92,10 +103,6 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
   useEffect(() => {
     if (!owner) return;
     void refresh().catch(() => setError(t`Devices are unavailable; reconnect to your home.`));
-    void desktop
-      ?.state()
-      .then(setListener)
-      .catch(() => setError(t`Restart the desktop app to update it.`));
     const timer = setInterval(() => {
       void refresh().catch(() => undefined);
     }, 5_000);
@@ -113,14 +120,14 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
         <summary>{t`Home fingerprint`}</summary>
         <p className="break-all font-mono text-xs">{fingerprint}</p>
       </details>
-      {desktop && listener && !listener.available ? (
+      {serverListener && !serverListener.enabled && !listener?.available ? (
         <p role="status">
-          {listener.available === undefined
+          {desktop && listener?.available === undefined
             ? t`Restart the desktop app to update it.`
-            : t`Phone pairing needs a home run by this app. Set up This computer to use it.`}
+            : t`Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device.`}
         </p>
       ) : null}
-      {desktop && listener?.available ? (
+      {desktop && listener?.available && !serverListener?.enabled ? (
         <div className="flex items-center justify-between gap-3">
           <label htmlFor="lan-listener">{t`Your phone can reach this Mac on your network.`}</label>
           <Switch
@@ -137,7 +144,7 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
         </div>
       ) : null}
       <Button
-        disabled={busy}
+        disabled={busy || (!serverListener?.enabled && !listener?.enabled)}
         onClick={() =>
           void act(async () =>
             setPairing(
@@ -147,7 +154,7 @@ export function DevicesSettings({ owner }: { owner: boolean }) {
                   ...(consequential ? ["consequential" as const] : []),
                   ...(delegate ? ["delegate" as const] : []),
                 ],
-                hints: listener?.hints ?? [],
+                hints: [],
               }),
             ),
           )

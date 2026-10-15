@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { selectCatalogModel } from "./catalog-model-picker";
 import { captureScreenshot, signup } from "./helpers";
 
-test("onboarding uses compact model selects without misleading latest labels", async ({
+test("onboarding uses a searchable model picker without misleading latest labels", async ({
   page,
 }, testInfo) => {
   await page.route("**/rpc/me", async (route) => {
@@ -26,20 +27,19 @@ test("onboarding uses compact model selects without misleading latest labels", a
     timeout: 20_000,
   });
 
-  const provider = page.getByRole("combobox", { name: "Provider" });
-  await expect(provider).toContainText("OpenRouter");
+  await expect(page.getByRole("combobox", { name: "Provider" })).toHaveCount(0);
   await page.getByLabel("API key").fill("openrouter-only-key");
-  await provider.click();
-  await expect(page.getByRole("option", { name: "ChatGPT" })).toBeVisible();
-  await expect(page.getByRole("option", { name: "Vercel AI Gateway" })).toBeVisible();
-  await page.getByRole("option", { name: "Anthropic" }).click();
-  await expect(provider).toContainText("Anthropic");
+  await selectCatalogModel(page, "anthropic");
   await expect(page.getByLabel(/API key/)).toHaveValue("");
 
   const models = page.getByRole("combobox", { name: "Model", exact: true });
   await models.click();
+  await page.getByRole("combobox", { name: "Search models" }).fill("auto-updates");
   await expect(page.getByRole("option", { name: /auto-updates/ }).first()).toBeVisible();
-  const labels = await page.getByRole("option").allTextContents();
+  const labels = await page
+    .getByRole("option")
+    .locator('[data-slot="model-label"]')
+    .allTextContents();
   // "latest" is an upstream alias marker, so it lands on families like Claude Opus 4.5 while
   // newer models carry no marker. Rendered as-is it tells the user the opposite of the truth.
   expect(labels.filter((label) => /\blatest\b/i.test(label))).toEqual([]);
@@ -47,8 +47,18 @@ test("onboarding uses compact model selects without misleading latest labels", a
   // Select a non-default model and keep its user-facing alias visible in the compact trigger.
   const alias = labels.find((label) => label.includes("(auto-updates)"));
   expect(alias).toBeTruthy();
-  await page.getByRole("option", { name: alias! }).click();
-  await expect(models).toContainText(alias!);
+  await page
+    .getByRole("option")
+    .filter({ has: page.getByText(alias!, { exact: true }) })
+    .click();
+  await expect(models).toContainText("auto-updates");
+  const connection = page.getByRole("combobox", { name: "Choose connection" });
+  if (await connection.isVisible()) {
+    const options = await connection.locator("option").allTextContents();
+    const label = options.find((option) => option.startsWith("Anthropic"));
+    if (!label) throw new Error("Anthropic alias connection is missing.");
+    await connection.selectOption({ label });
+  }
 
   await page.route("**/rpc/models/probeOpenAiCompatible", async (route) => {
     await route.fulfill({
@@ -56,8 +66,7 @@ test("onboarding uses compact model selects without misleading latest labels", a
       body: JSON.stringify({ json: { models: ["probed-model"] } }),
     });
   });
-  await provider.click();
-  await page.getByRole("option", { name: "OpenAI-compatible" }).click();
+  await selectCatalogModel(page, "openai-compatible");
   await page.getByLabel("OpenAI-compatible server URL").fill("http://127.0.0.1:8090/v1");
   const manualModel = page.getByLabel("Model id");
   await expect(manualModel).toBeVisible();

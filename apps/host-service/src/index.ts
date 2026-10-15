@@ -10,10 +10,17 @@ import {
 import { receiveFrames, wsWire } from "@ardurbot/host-runtime/bridge-wire";
 import { installWin32NativeApi } from "@ardurbot/host-runtime/desktop-sandbox-win32-path";
 import { HostAgent } from "@ardurbot/host-runtime/host-agent";
+import { waitForTerminalCleanup } from "@ardurbot/host-runtime/terminal-cleanup";
 import WebSocket from "ws";
 import * as z from "zod";
 import { HostMcpAuthorizationError, readHostMcpConfiguration } from "./mcp-configuration.js";
 import { loadWin32NativeAddon } from "./native-addon.js";
+
+export { loadHostPty, macOSHostTerminalFactory } from "./host-terminal-pty.js";
+// Export for explicit injection by platform conformance tests and the later
+// platform-admission step. Shipping this adapter does not enable the capability.
+export { linuxHostTerminalFactory } from "./host-terminal-pty-linux.js";
+export { win32HostTerminalFactory, windowsTerminalJob } from "./host-terminal-pty-win32.js";
 
 // esbuild preserves the CJS bundle's own filename. ESM source mode has no packaged addon.
 installWin32NativeApi(() =>
@@ -44,13 +51,21 @@ const idle = setInterval(() => undefined, 60_000);
 function state(connected: boolean) {
   process.send?.({ type: "host-state", connected });
 }
+async function closeAgent(host = agent) {
+  try {
+    await waitForTerminalCleanup(host?.close());
+  } catch {
+    // The terminal provider already reported the failure by count; this entry
+    // point never writes to process logs, which could carry the host token.
+  }
+}
 async function revokeConfiguration() {
   stopped = true;
   configuration = undefined;
   clearTimeout(reconnect);
   clearInterval(healthTimer);
   clearInterval(mcpTimer);
-  agent?.close();
+  await closeAgent();
   socket?.terminate();
   state(false);
   await agent?.configureMcp([]);
@@ -125,15 +140,17 @@ async function connect() {
       current,
       (frame) => host.receive(frame),
       () => {
-        host.close();
+        const cleanup = closeAgent(host);
         state(false);
         clearInterval(healthTimer);
         clearInterval(mcpTimer);
-        if (!stopped)
-          reconnect = setTimeout(
-            () => void connect(),
-            Math.min(30_000, 500 * 2 ** Math.min(failures++, 6)),
-          );
+        void cleanup.then(() => {
+          if (!stopped)
+            reconnect = setTimeout(
+              () => void connect(),
+              Math.min(30_000, 500 * 2 ** Math.min(failures++, 6)),
+            );
+        });
       },
     );
     current.once("open", () => {
@@ -153,7 +170,7 @@ async function connect() {
   } catch (error) {
     if (error instanceof HostMcpAuthorizationError) await revokeConfiguration();
     state(false);
-    agent?.close();
+    void closeAgent();
     if (!stopped)
       reconnect = setTimeout(
         () => void connect(),
@@ -167,9 +184,10 @@ function stop() {
   clearTimeout(reconnect);
   clearInterval(healthTimer);
   clearInterval(mcpTimer);
-  agent?.close();
+  const cleanup = closeAgent();
   socket?.close();
-  setTimeout(() => process.exit(0), 1500).unref();
+  const grace = new Promise<void>((resolve) => setTimeout(resolve, 1500));
+  void Promise.all([cleanup, grace]).then(() => process.exit(0));
 }
 process.on("message", (message) => {
   if (message && typeof message === "object" && "type" in message && message.type === "stop") {

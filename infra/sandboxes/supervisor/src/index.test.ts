@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import http from "node:http";
 import net from "node:net";
-import { resolveSupervisorToken } from "@ardurbot/core";
+import { COMMAND_OUTPUT_LIMIT, resolveSupervisorToken } from "@ardurbot/core";
 import { describe, expect, it } from "vitest";
 import {
   MAX_SUPERVISOR_FILE_REQUEST_BYTES,
@@ -14,6 +14,7 @@ import {
 import {
   assertRequestIdentity,
   attemptComputerControl,
+  boundedExecOutputLimit,
   browserProfilePathForScreen,
   ComputerControlUnavailableError,
   clearComputerScreenRegistry,
@@ -28,6 +29,7 @@ import {
   hasValidBearerToken,
   interactiveScreenCommand,
   isComputerControlUnavailable,
+  MAX_EXEC_OUTPUT_BYTES,
   nextScreenIndex,
   normalizeWorkspaceRelative,
   parseObservation,
@@ -45,6 +47,16 @@ import {
 } from "./supervisor-logic.js";
 
 const token = resolveSupervisorToken(process.env);
+
+describe("exec output limit", () => {
+  it("keeps ordinary exec at the shell-log cap and allows a Git observation up to 1 MiB", () => {
+    expect(boundedExecOutputLimit(undefined)).toBe(COMMAND_OUTPUT_LIMIT);
+    expect(boundedExecOutputLimit(0)).toBe(COMMAND_OUTPUT_LIMIT);
+    expect(boundedExecOutputLimit(MAX_EXEC_OUTPUT_BYTES + 1)).toBe(COMMAND_OUTPUT_LIMIT);
+    expect(boundedExecOutputLimit(4096)).toBe(4096);
+    expect(boundedExecOutputLimit(MAX_EXEC_OUTPUT_BYTES)).toBe(MAX_EXEC_OUTPUT_BYTES);
+  });
+});
 
 describe("computer screen readiness", () => {
   it("waits for the server to actually answer HTTP requests before succeeding", async () => {

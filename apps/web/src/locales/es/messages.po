@@ -13,6 +13,11 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+#. js-lingui-explicit-id
+#: src/lib/goal-display-text.ts
+msgid "The goal reached owner review before this work started."
+msgstr "El objetivo llegó a la revisión del propietario antes de que comenzara este trabajo."
+
 #: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
@@ -34,8 +39,8 @@ msgstr ""
 msgid " (unread)"
 msgstr " (sin leer)"
 
-#. placeholder {0}: group.entries.length
-#: src/pages/ModelSettingsOverlay.tsx
+#. placeholder {0}: filteredOptions.length
+#: src/components/CatalogModelPicker.tsx
 msgid "{0, plural, one {# model} other {# models}}"
 msgstr "{0, plural, one {# modelo} other {# modelos}}"
 
@@ -143,12 +148,6 @@ msgstr ""
 msgid "{0} rollup hours"
 msgstr ""
 
-#. placeholder {0}: usage.runs
-#. placeholder {1}: usage.inputTokens + usage.outputTokens
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "{0} runs · {1} tokens"
-msgstr "{0} ejecuciones · {1} tokens"
-
 #. placeholder {0}: preview.runs
 #: src/pages/CompareStart.tsx
 msgid "{0} runs at these pins; hosted providers may bill per run"
@@ -240,6 +239,10 @@ msgstr ""
 msgid "{count} folders"
 msgstr ""
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "{count} measured runs"
+msgstr "{count} ejecuciones medidas"
+
 #: src/pages/LearningInsights.tsx
 msgid "{count} runs needed {connection}, which is not connected."
 msgstr ""
@@ -260,6 +263,14 @@ msgstr ""
 msgid "{gapCount} evidence gaps"
 msgstr "{gapCount} lagunas en las pruebas"
 
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h"
+msgstr "{hours} h"
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{hours} h {rest} min"
+msgstr "{hours} h {rest} min"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "hace {hours} h"
@@ -279,6 +290,10 @@ msgstr "{member} falló."
 #: src/lib/failure-category-copy.ts
 msgid "{member} stopped."
 msgstr "{member} se detuvo."
+
+#: src/pages/dashboard/NowPanel.tsx
+msgid "{minutes} min"
+msgstr "{minutes} min"
 
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
@@ -327,10 +342,15 @@ msgstr "{name} se detuvo antes de responder"
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
 msgstr "{pending, plural, one {# sugerencia para revisar} other {# sugerencias para revisar}}"
 
+#: src/lib/failure-category-copy.ts
+msgid "{provider} is refusing requests right now (rate or usage limit). Try again later or check your plan."
+msgstr "{provider} está rechazando solicitudes ahora (límite de frecuencia o uso). Inténtalo más tarde o revisa tu plan."
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{records, plural, one {# usage record} other {# usage records}}"
 msgstr "{records, plural, one {# registro de uso} other {# registros de uso}}"
@@ -339,9 +359,18 @@ msgstr "{records, plural, one {# registro de uso} other {# registros de uso}}"
 msgid "{remaining} left · bot is watching, not acting"
 msgstr "Quedan {remaining} · el bot observa, no actúa"
 
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "{runs, plural, one {# run} other {# runs}}"
+msgstr "{runs, plural, one {# ejecución} other {# ejecuciones}}"
+
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} could not finish this run. Check the runtime or change the pin."
 msgstr "{runtime} no pudo terminar esta ejecución. Revisa el entorno de ejecución o cambia el modelo fijado."
+
+#: src/lib/failure-category-copy.ts
+msgid "{runtime} could not finish this turn. Retry the run."
+msgstr "{runtime} no pudo completar este turno. Vuelve a intentar la ejecución."
 
 #: src/lib/failure-category-copy.ts
 msgid "{runtime} could not start a session. Check the runtime and try again."
@@ -404,6 +433,10 @@ msgid "{runtime}'s pinned model is unavailable. Change the pin and try again."
 msgstr "El modelo fijado de {runtime} no está disponible. Cambia el modelo fijado y vuelve a intentarlo."
 
 #: src/lib/failure-category-copy.ts
+msgid "{runtime}'s runtime stopped. Retry the run."
+msgstr "El entorno de ejecución de {runtime} se detuvo. Vuelve a intentar la ejecución."
+
+#: src/lib/failure-category-copy.ts
 msgid "{runtime}'s settings were not confirmed. Check this bot's settings and try again."
 msgstr "No se confirmaron los ajustes de {runtime}. Revisa los ajustes de este bot e inténtalo de nuevo."
 
@@ -431,6 +464,7 @@ msgstr ""
 msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "{tokens, plural, one {# token} other {# tokens}}"
 msgstr "{tokens, plural, one {# símbolo} other {# símbolos}}"
@@ -472,6 +506,10 @@ msgstr ""
 msgid "A saved shortcut is unavailable; choose another."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "A supporting record is missing or changed; review again."
+msgstr "Falta un registro de respaldo o ha cambiado; revíselo de nuevo."
+
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "About evidence"
 msgstr "Acerca de las pruebas"
@@ -487,6 +525,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Accept"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Accept result"
+msgstr "Aceptar resultado"
 
 #: src/pages/LearningObservation.tsx
 msgid "Acceptance"
@@ -564,6 +606,8 @@ msgstr ""
 msgid "Actions usually run automatically. Rules, safety checks, and integration policies may require confirmation."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
 msgstr "Activo"
@@ -746,10 +790,6 @@ msgstr "Avanzado..."
 #: src/pages/MemoryHistory.tsx
 msgid "After"
 msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "Agent computer"
-msgstr "Computadora del agente"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Agent connections"
@@ -1004,6 +1044,7 @@ msgid "API is back, but the update did not finish. Check the host logs."
 msgstr "La API volvió, pero la actualización no terminó. Revisa los logs del host."
 
 #: src/components/AskCard.tsx
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
@@ -1041,6 +1082,10 @@ msgstr "Apariencia"
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Applied"
 msgstr ""
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Applied limits"
+msgstr "Límites aplicados"
 
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/McpConfigEditor.tsx
@@ -1146,6 +1191,10 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
 msgstr "Argumentos"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Artifact"
+msgstr "Artefacto"
 
 #: src/pages/storage/StorageSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -1286,9 +1335,10 @@ msgid "Automatically start when you log in to your computer."
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Available"
-msgstr ""
+msgstr "Disponible"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
@@ -1393,8 +1443,9 @@ msgid "Beta"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "Binary file"
-msgstr ""
+msgstr "Archivo binario"
 
 #: src/components/integrations/manage/ToolPermissions.tsx
 msgid "Block"
@@ -1411,7 +1462,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "Bloqueado"
 
-#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, }, }) : row.reason
+#. placeholder {0}: row.blockerKey === "connect-linear" ? t`Connect Linear or grant a team member permission to read and write.` : row.blockerKey === "connect-github" ? t`Connect GitHub or grant a team member permission to read and write.` : row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName), bot: row.botName, provider: row.reasonProvider ?? i18n._(unknownProviderName), }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Bloqueado — {0}"
@@ -1428,6 +1479,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
@@ -1441,9 +1493,20 @@ msgstr ""
 msgid "Board files will be kept."
 msgstr "Se conservarán los archivos del tablero."
 
+#: src/pages/GoalBoardLink.tsx
+#: src/pages/GoalForm.tsx
+msgid "Board item"
+msgstr "Elemento del tablero"
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Board status"
 msgstr "Estado del tablero"
+
+#: src/pages/board/Board.tsx
+#: src/pages/GoalBoardLink.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Board update pending"
+msgstr "Actualización del tablero pendiente"
 
 #: src/pages/settings-sections.ts
 #: src/pages/storage/StorageSettings.tsx
@@ -1492,6 +1555,10 @@ msgstr "Bot a vincular"
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Bot token"
 msgstr ""
+
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Bot work is still paused after the update. Try again."
+msgstr "El trabajo de los bots sigue en pausa después de la actualización. Vuelve a intentarlo."
 
 #. placeholder {0}: botName ?? proposal.scope.botId
 #. placeholder {0}: botNames[rule.botId] ?? rule.botId
@@ -1573,6 +1640,10 @@ msgstr ""
 msgid "by {0}"
 msgstr ""
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "By bot"
+msgstr "Por bot"
+
 #: src/pages/customize/SkillsPage.tsx
 msgid "by you"
 msgstr ""
@@ -1599,6 +1670,7 @@ msgstr "No se puede alcanzar el servidor."
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/ReleaseInterruptedComputer.tsx
+#: src/components/RunEvidence.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -1621,6 +1693,7 @@ msgstr "No se puede alcanzar el servidor."
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/move-to-host.tsx
+#: src/pages/shell/runtime-settings.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "Cancelar"
@@ -1645,6 +1718,10 @@ msgstr "Cancelar respuesta"
 msgid "Cancel sign-in"
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Cancellation"
+msgstr "Cancelación"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -1660,12 +1737,18 @@ msgstr "cancelado"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Cancelled"
 msgstr "Cancelado"
 
 #: src/pages/settings-sections.ts
 msgid "Capabilities"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Capability checks"
+msgstr "Comprobaciones de capacidades"
 
 #: src/pages/group-model-control.tsx
 msgid "Captured for this group."
@@ -1706,6 +1789,15 @@ msgstr "Cambiar contraseña"
 #: src/pages/shell/provider-error-message.tsx
 msgid "Change pin"
 msgstr ""
+
+#. placeholder {0}: new Intl.ListFormat(i18n.locale, { style: "short", type: "unit" }).format( blockedNames, )
+#: src/pages/ModelDestinations.tsx
+msgid "Change these bots' models first: {0}"
+msgstr "Cambia primero los modelos de estos bots: {0}"
+
+#: src/pages/ModelDestinations.tsx
+msgid "Change this bot's model first."
+msgstr "Cambia primero el modelo de este bot."
 
 #: src/components/composer/command-description.ts
 msgid "Change this bot’s pin"
@@ -1761,6 +1853,8 @@ msgstr "Los inicios de sesión de ChatGPT solo funcionan dentro de Codex; añade
 msgid "Check"
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr ""
@@ -1779,6 +1873,10 @@ msgstr "Buscar actualizaciones"
 msgid "Check in."
 msgstr "Regístrate."
 
+#: src/components/RunEvidence.tsx
+msgid "Check key"
+msgstr "Comprobar clave"
+
 #: src/pages/Auth.tsx
 msgid "Check your email"
 msgstr "Revisa tu correo"
@@ -1791,6 +1889,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Checked {0}"
 msgstr "Comprobado {0}"
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Checked {time}"
+msgstr "Comprobado a las {time}"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Checking the download"
@@ -1856,11 +1958,15 @@ msgstr ""
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
-msgstr ""
+msgstr "Elige un modelo"
 
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Choose a model in Models to enable memory suggestions."
 msgstr ""
+
+#: src/lib/model-selection-error.ts
+msgid "Choose a model."
+msgstr "Elige un modelo."
 
 #: src/pages/Auth.tsx
 msgid "Choose a new password"
@@ -1869,6 +1975,10 @@ msgstr "Elige una contraseña nueva"
 #: src/components/composer/command-description.ts
 msgid "Choose a taught skill"
 msgstr ""
+
+#: src/components/CatalogModelPicker.tsx
+msgid "Choose connection"
+msgstr "Elegir conexión"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose effort"
@@ -2022,6 +2132,7 @@ msgid "Close navigation"
 msgstr "Cerrar navegación"
 
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Close panel"
 msgstr "Cerrar panel"
 
@@ -2029,6 +2140,10 @@ msgstr "Cerrar panel"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Close preview"
 msgstr "Cerrar vista previa"
+
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Close terminal"
+msgstr "Cerrar terminal"
 
 #: src/pages/SettingsOverlay.tsx
 msgid "Close user settings"
@@ -2146,6 +2261,7 @@ msgstr "Completado"
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Completed"
 msgstr "Completado"
 
@@ -2162,7 +2278,6 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
-#: src/pages/workspace/view-registry.ts
 msgid "Computer"
 msgstr "Computadora"
 
@@ -2205,6 +2320,10 @@ msgstr "Ubicación de la computadora no disponible. Elige una conexión compatib
 #: src/pages/shell/runtime-summary.tsx
 msgid "Computer location unavailable. Try again."
 msgstr "Ubicación de la computadora no disponible. Inténtalo de nuevo."
+
+#: src/pages/workspace/view-registry.ts
+msgid "Computer screen"
+msgstr "Pantalla del equipo"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2281,6 +2400,10 @@ msgstr "Confirmar contraseña"
 msgid "Confirm the phone fingerprint here before allowing it."
 msgstr ""
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Confirmed offline"
+msgstr "Confirmado sin conexión"
+
 #. placeholder {0}: conflict.path
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/MemoryImportExport.tsx
@@ -2328,6 +2451,16 @@ msgstr "Conectar clave de API"
 msgid "Connect Executor"
 msgstr "Conectar Executor"
 
+#: src/components/ai/CoordinationLine.tsx
+#: src/pages/TeamBoard.tsx
+msgid "Connect GitHub or grant a team member permission to read and write."
+msgstr "Conecta GitHub o da a un miembro del equipo permiso para leer y escribir."
+
+#: src/components/ai/CoordinationLine.tsx
+#: src/pages/TeamBoard.tsx
+msgid "Connect Linear or grant a team member permission to read and write."
+msgstr "Conecta Linear o da a un miembro del equipo permiso para leer y escribir."
+
 #: src/pages/shell/message-cards.tsx
 msgid "Connect MCP server “{name}”"
 msgstr "Conectar servidor MCP “{name}”"
@@ -2339,6 +2472,14 @@ msgstr "Conectar OAuth"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Connect remote account"
 msgstr ""
+
+#: src/lib/model-selection-error.ts
+msgid "Connect that model first."
+msgstr "Conecta primero ese modelo."
+
+#: src/lib/model-selection-error.ts
+msgid "Connect that model server first."
+msgstr "Conecta primero el servidor de ese modelo."
 
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-location-picker.tsx
@@ -2367,7 +2508,6 @@ msgstr "Conectar Treg"
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/McpOAuthCallback.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected"
@@ -2423,13 +2563,13 @@ msgstr "Conectando…"
 msgid "Connection"
 msgstr ""
 
-#: src/pages/shell/terminal-session.tsx
-msgid "Connection lost — reconnecting"
-msgstr ""
-
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Connection saved, but the test failed:"
 msgstr "Conexión guardada, pero la prueba falló:"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Connection settings"
+msgstr "Ajustes de conexión"
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -2496,6 +2636,10 @@ msgstr "Continuar"
 msgid "Continue in Background"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Continue the interrupted run from its saved results. Check any uncertain action before repeating it."
+msgstr "Continúa la ejecución interrumpida desde sus resultados guardados. Comprueba cualquier acción incierta antes de repetirla."
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Continue with ChatGPT"
 msgstr ""
@@ -2529,6 +2673,7 @@ msgstr "Coordinador"
 msgid "Coordinator bot"
 msgstr ""
 
+#: src/components/RunEvidence.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/memory/MemoryImport.tsx
 msgid "Copied"
@@ -2546,6 +2691,10 @@ msgstr ""
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy command"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Copy fingerprint"
+msgstr "Copiar huella digital"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Copy output"
@@ -2651,6 +2800,7 @@ msgstr ""
 msgid "Could not check teaching status. Refresh the view to continue."
 msgstr "No se pudo comprobar el estado de enseñanza. Actualiza la vista para continuar."
 
+#: src/lib/use-can-run.ts
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Could not check the model. Try again."
 msgstr "No se pudo comprobar el modelo. Inténtalo de nuevo."
@@ -2738,6 +2888,10 @@ msgstr "No se pudo continuar"
 msgid "Could not copy. Select and copy the prompt."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Could not copy. Select the fingerprint and copy it."
+msgstr "No se pudo copiar. Selecciona la huella digital y cópiala."
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Could not create bot"
 msgstr "No se pudo crear el bot"
@@ -2819,6 +2973,10 @@ msgstr ""
 msgid "Could not install connector"
 msgstr "No se pudo instalar el conector"
 
+#: src/pages/GoalForm.tsx
+msgid "Could not link that board item."
+msgstr "No se pudo vincular ese elemento del tablero."
+
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
@@ -2897,6 +3055,10 @@ msgstr ""
 msgid "Could not load model settings"
 msgstr "No se pudo cargar la configuración de modelos"
 
+#: src/pages/Onboarding.tsx
+msgid "Could not load models."
+msgstr "No se pudieron cargar los modelos."
+
 #: src/pages/LearningObservation.tsx
 msgid "Could not load observations."
 msgstr ""
@@ -2925,6 +3087,10 @@ msgstr ""
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Could not load settings. Try again."
 msgstr ""
+
+#: src/pages/Onboarding.tsx
+msgid "Could not load setup."
+msgstr "No se pudo cargar la configuración inicial."
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
@@ -2991,12 +3157,17 @@ msgstr ""
 #: src/components/ai/ChiefResultBubble.tsx
 #: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspaceChanges.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "Could not open file"
 msgstr "No se pudo abrir el archivo"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Could not open setup. Try again."
 msgstr ""
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Could not open this record."
+msgstr "No se pudo abrir este registro."
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Could not pair this account. Check its settings and try again."
@@ -3091,6 +3262,10 @@ msgstr "No se pudo restablecer la contraseña"
 #: src/pages/MemoryHistory.tsx
 msgid "Could not restore this revision. Reload and try again."
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not review result. Try again."
+msgstr "No se pudo revisar el resultado. Inténtalo de nuevo."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
@@ -3309,6 +3484,10 @@ msgstr "No se pudo actualizar la reacción"
 msgid "Could not update team messages"
 msgstr "No se pudieron actualizar los mensajes del equipo"
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not update the board. Try again."
+msgstr "No se pudo actualizar el tablero. Inténtalo de nuevo."
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check its settings and try again."
 msgstr "No se pudo actualizar este equipo. Revisa la configuración e inténtalo de nuevo."
@@ -3316,6 +3495,10 @@ msgstr "No se pudo actualizar este equipo. Revisa la configuración e inténtalo
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check the connection and try again."
 msgstr ""
+
+#: src/lib/goal-plan-phone-copy.ts
+msgid "Could not update the plan. Try again."
+msgstr "No se pudo actualizar el plan. Inténtalo de nuevo."
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Could not update this computer. Try again."
@@ -3358,6 +3541,10 @@ msgstr "No se pudo cargar la configuración de mensajería"
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't update messaging settings"
 msgstr "No se pudo actualizar la configuración de mensajería"
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "CPU"
+msgstr "CPU"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "CPU limit"
@@ -3537,6 +3724,14 @@ msgstr ""
 msgid "days"
 msgstr "días"
 
+#: src/components/GoalConditionSupport.tsx
+msgid "Decisions recorded"
+msgstr "Decisiones registradas"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Declared"
+msgstr "Declarado"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Decline"
 msgstr "Rechazar"
@@ -3626,6 +3821,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "deleted"
 msgstr "eliminado"
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "Deleted"
+msgstr "Eliminado"
 
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/dialogs.tsx
@@ -3771,6 +3970,10 @@ msgstr ""
 msgid "Dictation shortcut"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Diff is too large"
+msgstr "La diferencia es demasiado grande"
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Direct MCP"
 msgstr ""
@@ -3900,6 +4103,7 @@ msgstr "¿No tienes una cuenta?"
 #: src/lib/run-status-label.ts
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "Listo"
@@ -3985,6 +4189,10 @@ msgstr "p. ej. Hivenet Agent, Presales, bot de hojas de horas"
 msgid "Earlier message"
 msgstr "Mensaje anterior"
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Earlier output is unavailable"
+msgstr "La salida anterior no está disponible"
+
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/fleet/FleetSettings.tsx
@@ -4013,6 +4221,10 @@ msgstr ""
 msgid "Effective configuration"
 msgstr "Configuración efectiva"
 
+#: src/pages/GroupPanel.tsx
+msgid "Effects are still unsettled."
+msgstr "Los efectos aún no están resueltos."
+
 #: src/pages/TeamBoard.tsx
 msgid "Effort"
 msgstr ""
@@ -4032,10 +4244,15 @@ msgstr "Correo"
 msgid "Enable"
 msgstr ""
 
+#: src/pages/DevicesSettings.tsx
+msgid "Enable ARDURBOT_DEVICE_LISTENER_ENABLED on the server to pair a device."
+msgstr "Activa ARDURBOT_DEVICE_LISTENER_ENABLED en el servidor para vincular un dispositivo."
+
 #: src/lib/mcp-sign-in.ts
 msgid "Enable this server first, then sign in."
 msgstr ""
 
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "End this terminal?"
 msgstr "¿Cerrar este terminal?"
@@ -4132,6 +4349,10 @@ msgstr "Cada"
 msgid "every {intervalAmountSelect} {intervalUnitSelect}"
 msgstr "cada {intervalAmountSelect} {intervalUnitSelect}"
 
+#: src/pages/GroupPanel.tsx
+msgid "Every condition must pass."
+msgstr "Todas las condiciones deben aprobarse."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every day"
@@ -4204,9 +4425,17 @@ msgstr "Expandir"
 msgid "Expand {0}"
 msgstr "Expandir {0}"
 
+#: src/components/RunEvidence.tsx
+msgid "Expected fingerprint"
+msgstr "Huella digital esperada"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Experimental turned on for this runtime"
+msgstr "Se activó Experimental para este entorno de ejecución"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -4233,6 +4462,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Export data"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Export identity card"
+msgstr "Exportar tarjeta de identidad"
 
 #: src/pages/ComparePanel.tsx
 msgid "Export JSON"
@@ -4265,6 +4498,10 @@ msgstr ""
 msgid "External conversation"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Fail"
+msgstr "No cumplido"
+
 #: src/components/CloudAgentCard.tsx
 msgid "failed"
 msgstr "fallido"
@@ -4275,6 +4512,7 @@ msgstr "fallido"
 #: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "Failed"
 msgstr "Falló"
 
@@ -4329,6 +4567,10 @@ msgstr "Los archivos no están disponibles en este equipo."
 msgid "Filter"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Final owner review"
+msgstr "Revisión final del propietario"
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "Find a destination"
 msgstr ""
@@ -4354,6 +4596,10 @@ msgstr "Buscando…"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Fine-grained token"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Fingerprint"
+msgstr "Huella digital"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Finish setup"
@@ -4388,6 +4634,10 @@ msgstr "Finalizando conexión MCP…"
 #: src/pages/GuidedOnboarding.tsx
 msgid "First bot not created"
 msgstr "El primer bot aún no se ha creado"
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "First reply"
+msgstr "Primera respuesta"
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Fix"
@@ -4454,9 +4704,9 @@ msgstr ""
 msgid "Found on this Mac"
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Free"
-msgstr "Gratis"
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Four terminals are already open."
+msgstr "Ya hay cuatro terminales abiertos."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
@@ -4514,6 +4764,16 @@ msgstr ""
 msgid "Getting ready"
 msgstr ""
 
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Git changes"
+msgstr "Cambios de Git"
+
+#: src/pages/workspace/view-registry.ts
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Git changes are unavailable on this computer."
+msgstr "Los cambios de Git no están disponibles en este equipo."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Git event"
 msgstr "Evento de Git"
@@ -4534,6 +4794,14 @@ msgstr ""
 msgid "Goal"
 msgstr "Objetivo"
 
+#: src/pages/board/Board.tsx
+msgid "Goal accepted"
+msgstr "Objetivo aceptado"
+
+#: src/pages/board/Board.tsx
+msgid "Goal completed"
+msgstr "Objetivo completado"
+
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll check the request and choose the next step."
 msgstr "Entendido — revisaré la solicitud y elegiré el siguiente paso."
@@ -4547,12 +4815,24 @@ msgid "Got it — I’ll check what’s missing and ask before installing it."
 msgstr "Entendido — comprobaré qué falta y preguntaré antes de instalarlo."
 
 #: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to file this issue in Linear."
+msgstr "Entendido — elegiré a un miembro del equipo para registrar este issue en Linear."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — I’ll choose a team member to manage the GitHub repository."
+msgstr "Entendido — elegiré a un miembro del equipo para gestionar el repositorio de GitHub."
+
+#: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll choose a team member to put this in Notion."
 msgstr "Entendido — elegiré a un miembro del equipo para poner esto en Notion."
 
 #: src/components/ai/CoordinationLine.tsx
 msgid "Got it — I’ll keep {name} off this task."
 msgstr "Entendido — mantendré a {name} fuera de esta tarea."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Got it — this task needs you before I can assign it."
+msgstr "Entendido — esta tarea necesita tu ayuda antes de que pueda asignarla."
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -4693,6 +4973,10 @@ msgstr "Vinculado"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Host"
 msgstr ""
+
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Host account"
+msgstr "Cuenta del anfitrión"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "Host service:"
@@ -4933,6 +5217,10 @@ msgstr "Clave de API de instancia"
 msgid "Instruction"
 msgstr "Instrucción"
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Instruction delivery"
+msgstr "Entrega de instrucciones"
+
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/import/LocalImportPage.tsx
 msgid "Instructions"
@@ -5089,6 +5377,18 @@ msgstr ""
 msgid "key"
 msgstr "Clave"
 
+#: src/components/RunEvidence.tsx
+msgid "Key history"
+msgstr "Historial de claves"
+
+#: src/components/RunEvidence.tsx
+msgid "Key history is unavailable."
+msgstr "El historial de claves no está disponible."
+
+#: src/components/RunEvidence.tsx
+msgid "Key version"
+msgstr "Versión de la clave"
+
 #. placeholder {0}: target.context.slice(5)
 #: src/pages/fleet/target-name.ts
 msgid "kind ({0})"
@@ -5124,6 +5424,10 @@ msgstr ""
 msgid "Language"
 msgstr "Idioma"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last 7 days"
+msgstr "Últimos 7 días"
+
 #: src/pages/LearningCurator.tsx
 msgid "Last check"
 msgstr ""
@@ -5131,6 +5435,10 @@ msgstr ""
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Last checked"
 msgstr ""
+
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Last failure"
+msgstr "Último fallo"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Last present"
@@ -5148,6 +5456,10 @@ msgstr ""
 #: src/pages/DevicesSettings.tsx
 msgid "Last used"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Late usage arrived after acceptance."
+msgstr "Llegó uso tardío después de la aceptación."
 
 #: src/components/DesktopUpdates.tsx
 msgid "Later"
@@ -5366,6 +5678,7 @@ msgid "Loading your tools."
 msgstr ""
 
 #: src/App.tsx
+#: src/components/GoalConditionSupport.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
@@ -5376,6 +5689,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
 #: src/pages/workspace/WorkspaceChanges.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Loading…"
 msgstr "Cargando…"
@@ -5406,6 +5720,10 @@ msgstr ""
 #: src/pages/ModelDestinations.tsx
 msgid "Local only"
 msgstr ""
+
+#: src/components/CatalogModelPicker.tsx
+msgid "Local server"
+msgstr "Servidor local"
 
 #: src/pages/LocalSettings.tsx
 msgid "Local Server Settings"
@@ -5484,6 +5802,14 @@ msgstr "Marcar como leído"
 msgid "Mark as Unread"
 msgstr "Marcar como no leído"
 
+#: src/pages/GroupPanel.tsx
+msgid "Mark board update handled"
+msgstr "Marcar actualización del tablero como gestionada"
+
+#: src/lib/goal-plan-phone-copy.ts
+msgid "Mark done"
+msgstr "Marcar como hecho"
+
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"
 msgstr ""
@@ -5498,9 +5824,9 @@ msgstr "Máximo de imágenes por solicitud"
 msgid "Maximum output tokens"
 msgstr "Máximo de tokens de salida"
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "May not be available on your plan"
-msgstr ""
+msgstr "Puede que no esté disponible en tu plan"
 
 #: src/pages/settings-sections.ts
 msgid "MCP"
@@ -5552,6 +5878,7 @@ msgstr "Miembros (elige {GROUP_MEMBER_MIN}–{GROUP_MEMBER_MAX})"
 msgid "Memories"
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -5711,6 +6038,7 @@ msgstr "minuto"
 msgid "minutes"
 msgstr "minutos"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
@@ -5749,7 +6077,7 @@ msgstr "Modelo en este grupo"
 msgid "Model name"
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Model options"
 msgstr "Opciones del modelo"
 
@@ -5795,6 +6123,10 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 msgid "Models from server"
 msgstr "Modelos del servidor"
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "Modified"
+msgstr "Modificado"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Monthly"
@@ -5929,6 +6261,10 @@ msgstr "Compresión nativa"
 msgid "Native compression is not available with Hermes."
 msgstr "La compresión nativa no está disponible con Hermes."
 
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Native runtimes"
+msgstr "Entornos de ejecución nativos"
+
 #: src/pages/shell/TopNav.tsx
 msgid "Navigation"
 msgstr ""
@@ -5961,6 +6297,7 @@ msgstr ""
 msgid "Needs takeover"
 msgstr "Necesita toma de control"
 
+#: src/components/ai/CoordinationLine.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
 msgid "Needs you"
@@ -6023,6 +6360,10 @@ msgstr "Nueva habilidad"
 msgid "New space"
 msgstr "Nuevo space"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "New terminal"
+msgstr "Nuevo terminal"
+
 #: src/pages/ScratchpadSection.tsx
 msgid "New work item"
 msgstr "Nuevo elemento de trabajo"
@@ -6071,6 +6412,7 @@ msgid "No bots match"
 msgstr ""
 
 #: src/pages/workspace/WorkspaceChanges.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "No changes to show"
 msgstr "No hay cambios que mostrar"
 
@@ -6110,6 +6452,10 @@ msgstr ""
 msgid "No embedding service is configured."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "No expected key given; self-consistent only"
+msgstr "No se indicó una clave esperada; solo hay coherencia interna"
+
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
 msgstr "Aún no hay extensiones en el catálogo integrado. Usa Agregar para instalar un paquete de extensión (archivo .mcpb o .dxt) desde esta computadora."
@@ -6138,7 +6484,7 @@ msgstr "Ya no está activo"
 msgid "No managed app catalog is configured on this deployment."
 msgstr "No hay un catálogo de apps administradas configurado en este despliegue."
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "No matching models"
 msgstr "No hay modelos coincidentes"
 
@@ -6175,10 +6521,6 @@ msgstr ""
 msgid "No proposals"
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "No providers found."
-msgstr "No se encontraron proveedores."
-
 #: src/pages/dashboard/panels.ts
 #: src/pages/dashboard/WorkPanel.tsx
 msgid "No ready work"
@@ -6198,8 +6540,13 @@ msgstr "Sin resultados"
 msgid "No reviewer model yet."
 msgstr ""
 
+#: src/components/composer/RoutinesPanel.tsx
+msgid "No routines yet; a routine runs this bot on a schedule or when an event arrives."
+msgstr "Aún no hay rutinas; una rutina ejecuta este bot según un horario o cuando ocurre un evento."
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineHistory.tsx
+#: src/pages/settings/RuntimeReliability.tsx
 msgid "No runs yet"
 msgstr "Aún no hay ejecuciones"
 
@@ -6257,6 +6604,10 @@ msgstr ""
 msgid "None yet"
 msgstr "Ninguno aún"
 
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Not a Git repository"
+msgstr "No es un repositorio de Git"
+
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 msgid "Not approved"
@@ -6309,6 +6660,10 @@ msgstr "No está en el catálogo de plugins"
 msgid "Not initialized"
 msgstr "Sin inicializar"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Not measured"
+msgstr "No medido"
+
 #: src/pages/LearningInbox.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -6324,9 +6679,10 @@ msgid "Not recorded"
 msgstr ""
 
 #: src/pages/ComparePanel.tsx
+#: src/pages/fleet/ComputerLimitsDetails.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Not reported"
-msgstr ""
+msgstr "No informado"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Not requested"
@@ -6343,6 +6699,10 @@ msgstr "Sin sellar"
 #: src/pages/HostComputerSettings.tsx
 msgid "Not set up"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Not tested"
+msgstr "No probado"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not used"
@@ -6498,6 +6858,10 @@ msgstr ""
 msgid "Open Ardur"
 msgstr ""
 
+#: src/pages/GoalBoardLink.tsx
+msgid "Open board item"
+msgstr "Abrir elemento del tablero"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "Open bot settings"
@@ -6530,6 +6894,10 @@ msgstr "Abrir en ventana completa"
 #: src/pages/customize/SkillsPage.tsx
 msgid "Open learning inbox"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Open link"
+msgstr "Abrir enlace"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open links in built-in browser"
@@ -6720,8 +7088,16 @@ msgid "Park"
 msgstr "Aparcar"
 
 #: src/pages/dashboard/UsagePanel.tsx
+msgid "Partial cost"
+msgstr "Coste parcial"
+
+#: src/pages/dashboard/UsagePanel.tsx
 msgid "Partially reported"
 msgstr "Parcialmente reportado"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pass"
+msgstr "Cumplido"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
@@ -6773,6 +7149,10 @@ msgstr "Pausar mensajes del equipo"
 msgid "Paused"
 msgstr "En pausa"
 
+#: src/pages/GroupPanel.tsx
+msgid "Pending"
+msgstr "Pendiente"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "Permiso denegado para el socket"
@@ -6790,10 +7170,6 @@ msgstr ""
 msgid "Personal credential"
 msgstr "Credencial personal"
 
-#: src/pages/DevicesSettings.tsx
-msgid "Phone pairing needs a home run by this app. Set up This computer to use it."
-msgstr ""
-
 #: src/pages/LearningObservation.tsx
 msgid "pin"
 msgstr ""
@@ -6809,6 +7185,10 @@ msgstr "Fijado"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Placement"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Plan"
+msgstr "Plan"
 
 #: src/pages/account/AccountTables.tsx
 #: src/pages/settings-sections.ts
@@ -6936,6 +7316,10 @@ msgstr ""
 msgid "Private workspace with its own bots and groups."
 msgstr ""
 
+#: src/pages/fleet/ComputerLimitsDetails.tsx
+msgid "Processes"
+msgstr "Procesos"
+
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -6967,6 +7351,10 @@ msgstr ""
 msgid "Propose on a branch"
 msgstr ""
 
+#: src/components/GoalConditionSupport.tsx
+msgid "Proposed"
+msgstr "Propuesto"
+
 #: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Proposed consolidation"
@@ -6976,12 +7364,10 @@ msgstr ""
 msgid "provider"
 msgstr ""
 
-#: src/pages/Onboarding.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Provider"
 msgstr "Proveedor"
 
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Providers"
 msgstr "Proveedores"
@@ -7030,6 +7416,10 @@ msgstr "En cola"
 #: src/components/ai/CoordinationLine.tsx
 msgid "Queued for {name}"
 msgstr "En cola para {name}"
+
+#: src/components/composer/GroupRecipients.tsx
+msgid "Queued: {queued}"
+msgstr "En cola: {queued}"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Quick access shortcut"
@@ -7091,16 +7481,21 @@ msgstr "Leyendo el documento"
 msgid "Reads can run without asking once you allow them. Writes always ask."
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
-msgstr ""
+msgstr "Listo"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ready. The bot can use Hermes."
 msgstr "Listo. El bot puede usar Hermes."
+
+#: src/components/RunEvidence.tsx
+msgid "Reason"
+msgstr "Motivo"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -7154,9 +7549,17 @@ msgstr ""
 msgid "Reconnecting"
 msgstr "Reconectando"
 
+#: src/pages/shell/terminal-session.tsx
+msgid "Reconnecting terminal"
+msgstr "Volviendo a conectar el terminal"
+
 #: src/pages/dashboard/GovernancePanel.tsx
 msgid "Record evidence of bot decisions"
 msgstr "Registrar pruebas de las decisiones de los bots"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Recorded"
+msgstr "Registrado"
 
 #: src/pages/workspace/view-registry.ts
 #: src/pages/workspace/WorkspaceChanges.tsx
@@ -7228,6 +7631,7 @@ msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
+#: src/pages/workspace/WorkspaceGitChanges.tsx
 msgid "Refresh"
 msgstr "Actualizar"
 
@@ -7248,6 +7652,10 @@ msgstr "Carpetas registradas"
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Reject"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Reject result"
+msgstr "Rechazar resultado"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
@@ -7403,9 +7811,22 @@ msgstr "Reabrir"
 msgid "Replace API key"
 msgstr "Reemplazar clave de API"
 
+#: src/components/RunEvidence.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "Reemplazar clave"
+
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Replace key?"
+msgstr "¿Reemplazar la clave?"
+
+#: src/components/RunEvidence.tsx
+msgid "Replace the signing key? Runs already admitted keep their key; new runs sign with the new key."
+msgstr "¿Reemplazar la clave de firma? Las ejecuciones ya admitidas conservan su clave; las nuevas firman con la clave nueva."
+
+#: src/components/RunEvidence.tsx
+msgid "Replaced"
+msgstr "Reemplazada"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
@@ -7431,6 +7852,10 @@ msgstr ""
 #: src/pages/settings-support-links.tsx
 msgid "Report an issue"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Report is for another version"
+msgstr "El informe corresponde a otra versión"
 
 #: src/pages/TeamBoard.tsx
 msgid "Reported met"
@@ -7508,6 +7933,10 @@ msgstr ""
 #: src/pages/CompareStart.tsx
 msgid "Reserve a merge run"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Reserved"
+msgstr "Reservado"
 
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -7590,6 +8019,10 @@ msgid "Restricted"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
+msgid "Result changed; review again."
+msgstr "El resultado ha cambiado. Revísalo de nuevo."
+
+#: src/pages/GroupPanel.tsx
 msgid "Resume group messages"
 msgstr "Reanudar mensajes del grupo"
 
@@ -7615,9 +8048,11 @@ msgstr "Reanudar mensajes del equipo"
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-summary.tsx
 #: src/pages/system/SystemPage.tsx
 #: src/pages/workspace/WorkspacePane.tsx
@@ -7629,6 +8064,10 @@ msgstr "Reintentar"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Retry {0}"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Retry board update"
+msgstr "Reintentar actualización del tablero"
 
 #: src/App.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -7678,6 +8117,10 @@ msgstr ""
 msgid "Review model: {0}. Model usage may incur charges."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Review result"
+msgstr "Revisar resultado"
+
 #: src/pages/GitMemorySettings.tsx
 msgid "Review saved copy"
 msgstr ""
@@ -7694,6 +8137,10 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Review tools before your bots can use this account."
 msgstr ""
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Reviewed revision"
+msgstr "Revisión revisada"
 
 #: src/pages/LearningInbox.tsx
 msgid "Reviewer"
@@ -7723,9 +8170,22 @@ msgstr ""
 msgid "Revoke"
 msgstr "Revocar"
 
+#: src/components/RunEvidence.tsx
+msgid "Revoke key"
+msgstr "Revocar clave"
+
+#: src/components/RunEvidence.tsx
+msgid "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted."
+msgstr "¿Revocar la clave de firma? La firma se detiene ahora. Las firmas anteriores se verifican, pero las del segundo de revocación no son de confianza."
+
+#: src/components/RunEvidence.tsx
 #: src/pages/DevicesSettings.tsx
 msgid "Revoked"
-msgstr ""
+msgstr "Revocada"
+
+#: src/pages/GroupPanel.tsx
+msgid "Rework notes"
+msgstr "Notas de retrabajo"
 
 #: src/components/Context.tsx
 msgid "Rewritten {time}"
@@ -7767,6 +8227,10 @@ msgstr ""
 msgid "Run at"
 msgstr "Ejecutar a las"
 
+#: src/components/ThreadCommandBlock.tsx
+msgid "Run commands inside this bot's folder or a registered folder."
+msgstr "Ejecuta los comandos dentro de la carpeta de este bot o de una carpeta registrada."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Run history"
 msgstr "Historial de ejecuciones"
@@ -7782,6 +8246,10 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "Run on startup"
 msgstr ""
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Run record"
+msgstr "Registro de ejecución"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Run setup again"
@@ -7813,6 +8281,10 @@ msgstr "En ejecución · Detener"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "Ejecutando…"
+
+#: src/lib/evidence-key-phone-copy.ts
+msgid "Runs already admitted keep their key; new runs sign with the new key."
+msgstr "Las ejecuciones ya admitidas conservan su clave; las nuevas firman con la nueva clave."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
@@ -7930,6 +8402,10 @@ msgstr "Guardar instrucciones"
 msgid "Save model"
 msgstr "Guardar modelo"
 
+#: src/pages/group-model-control.tsx
+msgid "Save the group first."
+msgstr "Guarda primero el grupo."
+
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
@@ -8030,10 +8506,10 @@ msgstr "La pantalla no está disponible en este equipo."
 msgid "Screen recording"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/integrations/catalog/ResourcePicker.tsx
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/board/Board.tsx
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
@@ -8063,13 +8539,9 @@ msgstr ""
 msgid "Search integrations.sh"
 msgstr ""
 
-#: src/pages/ModelSettingsOverlay.tsx
+#: src/components/CatalogModelPicker.tsx
 msgid "Search models"
 msgstr "Buscar modelos"
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Search providers"
-msgstr "Buscar proveedores"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Search run output"
@@ -8265,6 +8737,11 @@ msgstr ""
 msgid "Set up memory search"
 msgstr ""
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/settings/NativeRuntimeSettings.tsx
+msgid "Set up on the home device"
+msgstr "Configurar en el dispositivo principal"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr ""
@@ -8325,6 +8802,7 @@ msgstr "Compartido con el equipo"
 msgid "Sharing"
 msgstr "Uso compartido"
 
+#: src/components/CatalogModelPicker.tsx
 #: src/components/ShowAllModels.tsx
 msgid "Show all models"
 msgstr ""
@@ -8365,6 +8843,7 @@ msgstr ""
 msgid "Showing {start}–{end} of {total}"
 msgstr ""
 
+#: src/components/CatalogModelPicker.tsx
 #: src/lib/localized-provider-hint.ts
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/Auth.tsx
@@ -8440,6 +8919,14 @@ msgstr ""
 msgid "Sign-in was declined."
 msgstr ""
 
+#: src/components/RunEvidence.tsx
+msgid "Signed by a different key"
+msgstr "Firmado con una clave diferente"
+
+#: src/components/RunEvidence.tsx
+msgid "Signed by the expected key"
+msgstr "Firmado con la clave esperada"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
 msgstr ""
@@ -8447,6 +8934,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Signed in on this computer as {identity}"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Signing identity"
+msgstr "Identidad de firma"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 #: src/pages/customize/PluginsPage.tsx
@@ -8500,6 +8991,10 @@ msgstr "Falta el socket"
 msgid "Software update"
 msgstr "Actualización de software"
 
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Some changes are not shown"
+msgstr "Algunos cambios no se muestran"
+
 #: src/pages/ide/IdePage.tsx
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "Algunas entradas tienen nombres no compatibles y están ocultas ({hiddenCount})."
@@ -8531,6 +9026,10 @@ msgstr ""
 #: src/pages/LearningInbox.tsx
 msgid "Source revision"
 msgstr ""
+
+#: src/components/RunEvidence.tsx
+msgid "Space"
+msgstr "Espacio"
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "Space board"
@@ -8592,6 +9091,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "SSH machine"
 msgstr ""
+
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Staged"
+msgstr "Preparados"
 
 #: src/pages/LearningCurator.tsx
 msgid "Stale"
@@ -8661,6 +9164,7 @@ msgstr "Iniciando"
 msgid "Starting…"
 msgstr "Iniciando…"
 
+#: src/components/GoalConditionSupport.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Status"
@@ -8765,6 +9269,10 @@ msgstr "Almacenado cifrado"
 msgid "Stored securely. Never shown here."
 msgstr "Almacenado de forma segura. Nunca se muestra aquí."
 
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Streaming"
+msgstr "Transmisión"
+
 #: src/pages/Shell.tsx
 msgid "subagent"
 msgstr "subagente"
@@ -8774,6 +9282,10 @@ msgstr "subagente"
 msgid "Submit"
 msgstr "Enviar"
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "Success"
+msgstr "Éxito"
+
 #: src/pages/LearningInbox.tsx
 msgid "Suggested content"
 msgstr ""
@@ -8782,6 +9294,11 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Superseded"
 msgstr ""
+
+#. placeholder {0}: link.recordId
+#: src/components/GoalConditionSupport.tsx
+msgid "Support {0}"
+msgstr "Apoyar {0}"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -8884,13 +9401,22 @@ msgstr ""
 #: src/pages/ide/IdePage.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/TerminalCollection.tsx
 #: src/pages/workspace/view-registry.ts
 msgid "Terminal"
 msgstr "Terminal"
 
+#: src/pages/workspace/TerminalCollection.tsx
+msgid "Terminal {number}"
+msgstr "Terminal {number}"
+
 #: src/pages/shell/computer-terminal.tsx
 msgid "Terminal could not open; try again"
 msgstr ""
+
+#: src/pages/shell/terminal-session.tsx
+msgid "Terminal expired"
+msgstr "El terminal ha caducado"
 
 #: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
@@ -8944,6 +9470,10 @@ msgstr "La API no volvió. Actualiza esta página."
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "The bot stopped responding. Retry the run."
+msgstr "El bot dejó de responder. Reintenta la ejecución."
+
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "The computer is busy. Wait for it to finish."
 msgstr "El ordenador está ocupado. Espera a que termine."
@@ -8983,6 +9513,10 @@ msgstr "Se volvió a cargar la selección de modelo del grupo. Elige de nuevo."
 #: src/pages/shell/runtime-settings.tsx
 msgid "The Hermes install on this computer failed its safety check."
 msgstr "La instalación de Hermes en este equipo no superó la comprobación de seguridad."
+
+#: src/components/RunEvidence.tsx
+msgid "The key changed. Reload and try again."
+msgstr "La clave cambió. Recarga e inténtalo de nuevo."
 
 #: src/pages/shell/runtime-summary.tsx
 msgid "The last update was interrupted."
@@ -9036,8 +9570,13 @@ msgstr "Pensando"
 #: src/pages/ide/terminal.tsx
 #: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/terminal-controller.ts
+#: src/pages/workspace/TerminalCollection.tsx
 msgid "This action could not finish; try again."
 msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "This action may already have happened. Check its outcome before trying again."
+msgstr "Es posible que esta acción ya se haya realizado. Comprueba el resultado antes de volver a intentarlo."
 
 #: src/pages/LearningInbox.tsx
 msgid "This board item changed after it was filed, so it was left open for review on the Board."
@@ -9077,6 +9616,10 @@ msgstr ""
 msgid "This board item was completed."
 msgstr ""
 
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This bot"
+msgstr "Este bot"
+
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr ""
@@ -9106,9 +9649,21 @@ msgstr ""
 msgid "This chat is view-only"
 msgstr "Este chat es de solo lectura"
 
+#: src/pages/group-model-control.tsx
+msgid "This choice needs a supported computer and bot settings."
+msgstr "Esta opción requiere un equipo compatible y la configuración del bot."
+
 #: src/pages/SharedCommand.tsx
 msgid "This command is not available to this account."
 msgstr ""
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because it exceeds 64 KB. Put code in a file and run that file."
+msgstr "Este comando no se ejecutó porque supera los 64 KB. Guarda el código en un archivo y ejecuta ese archivo."
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "This command was not run because its request is invalid. Check the command and folder."
+msgstr "Este comando no se ejecutó porque su solicitud no es válida. Revisa el comando y la carpeta."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
@@ -9127,6 +9682,10 @@ msgstr "esta computadora"
 msgid "This computer"
 msgstr "Esta computadora"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This computer · {botName}'s folder"
+msgstr "Esta computadora · Carpeta de {botName}"
+
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration is too complex."
 msgstr "Esta configuración es demasiado compleja."
@@ -9134,6 +9693,15 @@ msgstr "Esta configuración es demasiado compleja."
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This configuration version is not supported."
 msgstr "Esta versión de la configuración no es compatible."
+
+#: src/lib/failure-category-copy.ts
+#: src/pages/settings/RuntimeReliability.tsx
+msgid "This connection"
+msgstr "Esta conexión"
+
+#: src/lib/model-selection-error.ts
+msgid "This connection cannot serve that model."
+msgstr "Esta conexión no puede servir ese modelo."
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "This field is not supported."
@@ -9150,6 +9718,10 @@ msgstr "Este archivo no es Markdown UTF-8 válido."
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file is read-only. Open a copy to edit it."
 msgstr "Este archivo es de solo lectura. Abre una copia para editarlo."
+
+#: src/lib/git-changes-phone-copy.ts
+msgid "This file looks like it contains a secret."
+msgstr "Este archivo parece contener un secreto."
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "This file no longer exists. Save it as a new file or close it."
@@ -9210,6 +9782,10 @@ msgstr "Esto reemplaza los archivos del ordenador. ¿Continuar?"
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "Este enlace de restablecimiento no es válido o expiró"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "This run continued in a new session after a restart."
+msgstr "Esta ejecución continuó en una nueva sesión después de un reinicio."
 
 #: src/lib/failure-category-copy.ts
 msgid "This runtime"
@@ -9310,13 +9886,13 @@ msgstr ""
 msgid "Title"
 msgstr "Título"
 
+#: src/components/composer/GroupRecipients.tsx
+msgid "To {names}"
+msgstr "Para {names}"
+
 #: src/components/PeerMessageReceipt.tsx
 msgid "to {peer}"
 msgstr "a {peer}"
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
-msgstr ""
 
 #: src/pages/shell/bot-picker.tsx
 msgid "To:"
@@ -9364,9 +9940,21 @@ msgstr ""
 msgid "Told {name} to stand down"
 msgstr "Le pedí a {name} que se detuviera"
 
+#: src/components/GoalConditionSupport.tsx
+msgid "Tool"
+msgstr "Herramienta"
+
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Tool access mode"
 msgstr ""
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Tool authorization"
+msgstr "Autorización de herramientas"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Tool record"
+msgstr "Registro de herramienta"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Tool sources"
@@ -9442,6 +10030,11 @@ msgstr "Escribe tu respuesta"
 msgid "Unassigned"
 msgstr "Sin asignar"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unattributed usage"
+msgstr "Uso sin atribuir"
+
+#: src/components/CatalogModelPicker.tsx
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/TeamBoard.tsx
@@ -9478,14 +10071,24 @@ msgid "Uninstall"
 msgstr ""
 
 #: src/components/ai/CompactWorkRecord.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
 msgstr "Desconocido"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Unknown bot"
+msgstr "Bot desconocido"
+
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr ""
+
+#: src/lib/model-selection-error.ts
+msgid "Unknown model for that provider"
+msgstr "Modelo desconocido para ese proveedor"
 
 #: src/components/ai/CompactWorkRecord.tsx
 msgid "Unknown: {title}"
@@ -9506,6 +10109,14 @@ msgstr "Desfijar"
 msgid "Unsaved changes"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Unstaged"
+msgstr "Sin preparar"
+
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
+msgid "Unsupported"
+msgstr "No compatible"
+
 #. placeholder {0}: pending.file.name
 #: src/pages/Shell.tsx
 msgid "Unsupported file type: {0}"
@@ -9518,6 +10129,10 @@ msgstr ""
 #: src/pages/GoalForm.tsx
 msgid "Until (defaults to eight hours)"
 msgstr "Hasta (ocho horas por defecto)"
+
+#: src/pages/workspace/WorkspaceGitChanges.tsx
+msgid "Untracked"
+msgstr "Sin seguimiento"
 
 #: src/pages/Shell.tsx
 msgid "Up to 4 files, 10 MB each"
@@ -9561,6 +10176,10 @@ msgstr "Falló la actualización"
 msgid "Update finished with errors"
 msgstr "La actualización terminó con errores"
 
+#: src/components/SoftwareUpdateSection.tsx
+msgid "Update paused because a bot is still working. Try again."
+msgstr "La actualización se pausó porque un bot sigue trabajando. Inténtalo de nuevo."
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr ""
@@ -9578,6 +10197,11 @@ msgstr "Actualizado hace 1 min"
 #: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "Actualizaciones"
+
+#: src/components/SoftwareUpdateSection.tsx
+#: src/pages/Shell.tsx
+msgid "Updating — your bots will continue after the update"
+msgstr "Actualizando — tus bots continuarán después de la actualización"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx
@@ -9614,8 +10238,13 @@ msgstr ""
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
+#: src/pages/settings/RuntimeCapabilityChecks.tsx
 msgid "Usage"
 msgstr "Uso"
+
+#: src/pages/GroupPanel.tsx
+msgid "Usage incomplete"
+msgstr "Datos de uso incompletos"
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Use {hostLabel}"
@@ -9625,6 +10254,10 @@ msgstr "Usar {hostLabel}"
 #: src/pages/Onboarding.tsx
 msgid "Use a found model"
 msgstr "Usar un modelo encontrado"
+
+#: src/components/ThreadCommandBlock.tsx
+msgid "Use a path inside this bot's folder or a registered folder."
+msgstr "Usa una ruta dentro de la carpeta de este bot o de una carpeta registrada."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Use a token"
@@ -9695,6 +10328,7 @@ msgstr ""
 
 #: src/components/OllamaSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 msgid "Use this model"
 msgstr "Usar este modelo"
 
@@ -9707,6 +10341,10 @@ msgstr "Usa KiB enteros."
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Use whole seconds."
 msgstr "Usa segundos enteros."
+
+#: src/pages/GroupPanel.tsx
+msgid "Used"
+msgstr "Usado"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"
@@ -9721,6 +10359,10 @@ msgstr "Usa los permisos de esa cuenta."
 #: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "Usando {currentId}"
+
+#: src/components/GoalConditionSupport.tsx
+msgid "Verdict"
+msgstr "Veredicto"
 
 #: src/components/RunEvidence.tsx
 msgid "Verified"
@@ -9737,6 +10379,11 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "Verificando…"
+
+#. placeholder {0}: entry.version
+#: src/components/RunEvidence.tsx
+msgid "Version {0}"
+msgstr "Versión {0}"
 
 #: src/pages/board/Board.tsx
 msgid "View"
@@ -9770,6 +10417,10 @@ msgstr "Falló la voz"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Waiting for"
+msgstr "Esperando a"
 
 #: src/lib/working-indicator.ts
 msgid "Waiting for a free place"
@@ -9937,6 +10588,10 @@ msgstr ""
 msgid "Work"
 msgstr "Trabajo"
 
+#: src/pages/GroupPanel.tsx
+msgid "Work is still active."
+msgstr "El trabajo sigue en curso."
+
 #: src/pages/board/BoardColumns.tsx
 msgid "Work items"
 msgstr "Elementos de trabajo"
@@ -9984,6 +10639,10 @@ msgstr "Espacio de trabajo"
 msgid "Workspace or server ID"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Workspace pane"
+msgstr "Panel del espacio de trabajo"
+
 #: src/components/integrations/catalog/BotToolReview.tsx
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Write"
@@ -9997,6 +10656,7 @@ msgstr ""
 msgid "Yesterday"
 msgstr "Ayer"
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/Shell.tsx
 msgid "You"

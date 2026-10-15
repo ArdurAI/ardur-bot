@@ -55,6 +55,44 @@ describe("workspace registry", () => {
       availableWorkspaceViews({ computer, context: null, terminal: false }).map((view) => view.id),
     ).toEqual(["tasks", "routines", "screen"]);
   });
+  it.each(["live", "saved", "unavailable"] as const)(
+    "uses server file policy for a host bot (%s), with Terminal still unavailable",
+    (files) => {
+      const host: ComputerStatus = {
+        ...computer,
+        kind: "desktop",
+        runsOnHost: true,
+        capabilities: {
+          graphical: false,
+          interactiveTerminal: false,
+        },
+      };
+      const described = { ...context, files, runsOnHost: true };
+      const views = availableWorkspaceViews({ computer: host, context: described }).map(
+        (view) => view.id,
+      );
+      for (const view of ["files", "ide", "changes"])
+        expect(views.includes(view as (typeof views)[number])).toBe(files !== "unavailable");
+      expect(views).not.toContain("terminal");
+      expect(
+        workspaceViews.ide.available({
+          computer: host,
+          context: { ...described, rootId: undefined },
+        }),
+      ).toBe(false);
+    },
+  );
+  it("offers Git changes only when the described context supports it", () => {
+    expect(
+      availableWorkspaceViews({ computer, context: { ...context, git: true } }).map(
+        (view) => view.id,
+      ),
+    ).toEqual(["tasks", "files", "ide", "changes", "gitChanges", "terminal", "routines", "screen"]);
+    expect(workspaceViews.gitChanges.available({ computer, context })).toBe(false);
+    expect(
+      workspaceViews.gitChanges.available({ computer, context: { ...context, git: true } }),
+    ).toBe(true);
+  });
   it("uses only described file policy, not a computer kind or saved connection", () => {
     expect(workspaceViews.files.available({ computer })).toBe(false);
     expect(

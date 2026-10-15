@@ -154,12 +154,22 @@ export async function expireComputerControl(
   computerId: string,
   leaseId: string,
   now = new Date(),
+  ended?: { fence: number; providerRef: string; screenGeneration: number },
 ): Promise<boolean> {
   const computer = await deps.prisma.computer.findUnique({ where: { id: computerId } });
   if (!computer || computer.controlLeaseId !== leaseId) return false;
+  // A terminal grace expiry can end only the exact generation whose processes were cleaned up.
+  if (
+    ended &&
+    (computer.controlFence !== ended.fence ||
+      computer.providerRef !== ended.providerRef ||
+      computer.screenGeneration !== ended.screenGeneration)
+  )
+    return false;
   const botId = computer.controlBotId;
   if (!botId) {
     if (
+      !ended &&
       computer.controlLeaseExpiresAt &&
       computer.controlLeaseExpiresAt.getTime() > now.getTime()
     ) {
@@ -198,7 +208,17 @@ export async function expireComputerControl(
       }
     }
     const cleared = await deps.prisma.computer.updateMany({
-      where: { id: computer.id, controlLeaseId: leaseId },
+      where: {
+        id: computer.id,
+        controlLeaseId: leaseId,
+        ...(ended
+          ? {
+              controlFence: ended.fence,
+              providerRef: ended.providerRef,
+              screenGeneration: ended.screenGeneration,
+            }
+          : {}),
+      },
       data: {
         controlHolder: "none",
         controlLeaseId: null,
@@ -210,7 +230,11 @@ export async function expireComputerControl(
     return cleared.count === 1;
   }
 
-  if (computer.controlLeaseExpiresAt && computer.controlLeaseExpiresAt.getTime() > now.getTime()) {
+  if (
+    !ended &&
+    computer.controlLeaseExpiresAt &&
+    computer.controlLeaseExpiresAt.getTime() > now.getTime()
+  ) {
     await scheduleComputerControlExpiry(
       deps.jobs,
       computer.id,
@@ -223,7 +247,17 @@ export async function expireComputerControl(
   // Deny API input before touching the provider. Retaining the lease ID makes a
   // failed provider revocation recoverable by the job retry or reconciler.
   const claimed = await deps.prisma.computer.updateMany({
-    where: { id: computer.id, controlLeaseId: leaseId },
+    where: {
+      id: computer.id,
+      controlLeaseId: leaseId,
+      ...(ended
+        ? {
+            controlFence: ended.fence,
+            providerRef: ended.providerRef,
+            screenGeneration: ended.screenGeneration,
+          }
+        : {}),
+    },
     data: { controlHolder: "none" },
   });
   if (claimed.count !== 1) return false;

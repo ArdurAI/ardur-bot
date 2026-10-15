@@ -1,21 +1,23 @@
+import type { IntegrationSetupState, ThinkingLevel } from "@ardurbot/contracts";
 import {
   DEFAULT_CONNECTION_CONTEXT_WINDOW,
   DEFAULT_MODEL_MAX_TOKENS,
-  type IntegrationSetupState,
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
+  MODEL_ID_MAX_LENGTH,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   openAiCompatibleConnectReady,
   openAiCompatibleProbeSuccessMessage,
   parseModelContextWindow,
   parseModelMaxImagesPerPrompt,
   parseModelMaxTokens,
-  type ThinkingLevel,
 } from "@ardurbot/contracts";
+import type { ModelConnectionChoice, SetupStep } from "@ardurbot/core";
 import {
   createModelProbe,
   initialModelProbeState,
   recommendedDefaultModelId,
+  setupStep,
 } from "@ardurbot/core";
 import {
   Button,
@@ -28,23 +30,22 @@ import {
   SelectValue,
 } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FeatureDocsLink } from "../components/FeatureDocsLink";
 import { IntegrationSetup } from "../components/integrations/IntegrationSetup";
 import { OllamaSettings } from "../components/OllamaSettings";
-import type { ModelCatalogEntry } from "../lib/model-auth";
+import type { ModelCatalogEntry, ModelCredential } from "../lib/model-auth";
 import { modelContextLabel } from "../lib/model-context-label";
+import { modelSelectionErrorMessage } from "../lib/model-selection-error";
 import { rpc } from "../lib/rpc";
 import { thinkingLevelOptions } from "../lib/thinking-level-options";
 import { useFirstBotSetup } from "../lib/use-first-bot-setup";
 import { useModelOAuthSignIn } from "../lib/use-model-oauth-signin";
 
-const CUSTOM_MODEL_OPTION = "__ardurbot_custom_model__";
-function providerLabel(entry: ModelCatalogEntry): string {
-  return entry.provider === "openai-codex" ? "ChatGPT" : (entry.providerName ?? entry.provider);
-}
+const CatalogModelPicker = lazy(() => import("../components/CatalogModelPicker"));
 
+const CUSTOM_MODEL_OPTION = "__ardurbot_custom_model__";
 function nextStepAfterModel(needsIntegrationSetup: boolean): "integrations" | "bot" {
   return needsIntegrationSetup ? "integrations" : "bot";
 }
@@ -54,12 +55,15 @@ export function OnboardingPage() {
   const navigate = useNavigate();
   const ensureFirstBot = useFirstBotSetup();
   const fieldId = useId();
-  const [step, setStep] = useState<"loading" | "model" | "integrations" | "bot">("loading");
+  const [step, setStep] = useState<SetupStep>("loading");
   const [integrationSetup, setIntegrationSetup] = useState<IntegrationSetupState | null>(null);
   const needsIntegrationSetup = integrationSetup?.needsSetup ?? false;
   const [integrationServers, setIntegrationServers] = useState<string[]>([]);
   const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
+  const [credentials, setCredentials] = useState<ModelCredential[]>([]);
+  const [credentialId, setCredentialId] = useState<string | undefined>();
   const [provider, setProvider] = useState("openrouter");
+  const [pickedEntry, setPickedEntry] = useState<ModelCatalogEntry | null>(null);
   const [modelId, setModelId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -75,6 +79,13 @@ export function OnboardingPage() {
   const [modelProbe] = useState(() => createModelProbe(setProbe));
   const resetOpenAiCompatibleProbe = modelProbe.reset;
   const createStartedRef = useRef(false);
+  const accountConfirmedRef = useRef(false);
+  const mountedRef = useRef(false);
+  const readInFlightRef = useRef(false);
+  const [readAttempt, setReadAttempt] = useState(0);
+  const [savingModel, setSavingModel] = useState(false);
+  const savingModelRef = useRef(false);
+  const selectionRevisionRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -95,43 +106,69 @@ export function OnboardingPage() {
   });
 
   useEffect(() => {
-    void Promise.all([
-      rpc.me(),
-      rpc.models.list().catch(() => []),
-      rpc.integrationSetup.get().catch(() => null),
-    ])
-      .then(([me, models, integrations]) => {
-        setIntegrationSetup(integrations);
-        setCatalog(models);
-        const defaultProvider = me.defaultProvider ?? models[0]?.provider ?? "";
-        const recommendedId = recommendedDefaultModelId(
-          defaultProvider,
-          models.filter((entry) => entry.provider === defaultProvider).map((entry) => entry.id),
-        );
-        const preferred =
-          models.find(
-            (entry) => entry.provider === me.defaultProvider && entry.id === me.defaultModel,
-          ) ??
-          models.find((entry) => entry.provider === defaultProvider && entry.id === recommendedId);
-        if (preferred) {
-          setProvider(preferred.provider);
-          setModelId(preferred.provider === OPENAI_COMPATIBLE_PROVIDER_ID ? "" : preferred.id);
-        }
-        setStep(me.needsModel ? "model" : integrations?.needsSetup ? "integrations" : "bot");
-      })
-      .catch(() => setStep("bot"));
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       modelProbe.invalidate();
     };
-  }, []);
+  }, [modelProbe]);
 
-  const providers = useMemo(() => {
-    const seen = new Map<string, ModelCatalogEntry>();
-    for (const entry of catalog) {
-      if (!seen.has(entry.provider)) seen.set(entry.provider, entry);
-    }
-    return [...seen.values()];
-  }, [catalog]);
+  useEffect(() => {
+    let active = true;
+    readInFlightRef.current = true;
+    accountConfirmedRef.current = false;
+    setStep("loading");
+    void Promise.allSettled([
+      rpc.me(),
+      Promise.all([rpc.models.list(), rpc.models.credentials()]),
+      rpc.integrationSetup.get().catch(() => null),
+    ]).then(([account, catalogRead, integrationRead]) => {
+      if (!active) return;
+      readInFlightRef.current = false;
+      const integrations = integrationRead.status === "fulfilled" ? integrationRead.value : null;
+      const nextStep = setupStep(
+        account.status === "fulfilled"
+          ? { status: "loaded", value: account.value }
+          : { status: "failed" },
+        catalogRead.status === "fulfilled"
+          ? { status: "loaded", value: catalogRead.value[0] }
+          : { status: "failed" },
+        integrations?.needsSetup,
+      );
+      setStep(nextStep);
+      if (account.status !== "fulfilled" || catalogRead.status !== "fulfilled") return;
+      accountConfirmedRef.current = true;
+      const me = account.value;
+      const [models, connections] = catalogRead.value;
+      setCredentials(connections);
+      setIntegrationSetup(integrations);
+      setCatalog(models);
+      const defaultProvider = me.defaultProvider ?? models[0]?.provider ?? "";
+      const recommendedId = recommendedDefaultModelId(
+        defaultProvider,
+        models.filter((entry) => entry.provider === defaultProvider).map((entry) => entry.id),
+      );
+      const preferred =
+        models.find(
+          (entry) => entry.provider === me.defaultProvider && entry.id === me.defaultModel,
+        ) ??
+        models.find((entry) => entry.provider === defaultProvider && entry.id === recommendedId);
+      if (preferred) {
+        setProvider(preferred.provider);
+        setModelId(preferred.provider === OPENAI_COMPATIBLE_PROVIDER_ID ? "" : preferred.id);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [readAttempt]);
+
+  function retrySetup() {
+    if (readInFlightRef.current || !mountedRef.current) return;
+    // Lock before React renders so repeated clicks cannot schedule another read.
+    readInFlightRef.current = true;
+    setReadAttempt((attempt) => attempt + 1);
+  }
 
   const modelsForProvider = useMemo(
     () => catalog.filter((entry) => entry.provider === provider),
@@ -139,6 +176,7 @@ export function OnboardingPage() {
   );
 
   const selected =
+    (pickedEntry?.provider === provider ? pickedEntry : undefined) ??
     modelsForProvider.find((entry) => entry.id === modelId) ??
     modelsForProvider.find(
       (entry) =>
@@ -156,22 +194,18 @@ export function OnboardingPage() {
     baseUrl,
     modelId,
   });
+  const credential = credentials.find((entry) => entry.id === credentialId);
+  const connectionReady = Boolean(
+    credential?.hasKey && !credential.connectionIssue && !selected?.placeholder,
+  );
   const canSaveModel = Boolean(
     selected &&
       modelId.trim() &&
       !oauthPending &&
-      (isOpenAiCompatible ? openAiCompatibleReady : acceptsKey && apiKey.trim()),
+      (connectionReady ||
+        (isOpenAiCompatible ? openAiCompatibleReady : acceptsKey && apiKey.trim())),
   );
   const otherModelLabel = t`Other model…`;
-  // Base UI Select.Value only resolves labels when Root gets `items`.
-  const providerItems = useMemo(
-    () => providers.map((entry) => ({ value: entry.provider, label: providerLabel(entry) })),
-    [providers],
-  );
-  const modelItems = useMemo(
-    () => modelsForProvider.map((entry) => ({ value: entry.id, label: entry.label })),
-    [modelsForProvider],
-  );
   const probeModelItems = useMemo(
     () => [
       ...probeModels.map((id) => ({ value: id, label: id })),
@@ -194,9 +228,9 @@ export function OnboardingPage() {
   }
 
   function selectProvider(nextProvider: string) {
-    if (nextProvider === provider) return;
     cancelOAuthAttempt();
     setProvider(nextProvider);
+    setCredentialId(undefined);
     setApiKey("");
     setModelId(
       nextProvider === OPENAI_COMPATIBLE_PROVIDER_ID
@@ -218,6 +252,16 @@ export function OnboardingPage() {
     resetOpenAiCompatibleProbe();
     setError(null);
     setNotice(null);
+  }
+
+  function chooseModel(choice: ModelConnectionChoice | null) {
+    selectionRevisionRef.current += 1;
+    selectProvider(choice?.entry.provider ?? "");
+    setPickedEntry(choice?.entry ?? null);
+    if (!choice) return;
+    setModelId(choice.entry.placeholder ? "" : choice.entry.id);
+    setCredentialId(choice.credential?.id);
+    setBaseUrl(choice.credential?.baseUrl ?? "");
   }
 
   async function probeServerModels() {
@@ -247,10 +291,15 @@ export function OnboardingPage() {
   }
 
   async function saveModel() {
-    if (!canSaveModel) return;
+    if (!canSaveModel || savingModelRef.current) return;
+    savingModelRef.current = true;
+    setSavingModel(true);
+    const selectionRevision = selectionRevisionRef.current;
     setError(null);
     try {
-      if (isOpenAiCompatible) {
+      if (connectionReady) {
+        await rpc.models.setDefault({ provider, modelId, credentialId });
+      } else if (isOpenAiCompatible) {
         const parsedMaxImagesPerPrompt = parseModelMaxImagesPerPrompt(
           maxImagesPerPrompt,
           supportsImages,
@@ -278,6 +327,7 @@ export function OnboardingPage() {
         }
         await rpc.models.connect({
           provider,
+          credentialId,
           baseUrl: baseUrl.trim(),
           modelId: modelId.trim(),
           reasoning,
@@ -287,19 +337,25 @@ export function OnboardingPage() {
           supportsImages,
           maxImagesPerPrompt: maxImagesPerPromptInput,
           apiKey: apiKey.trim() || undefined,
-          label: selected?.providerName ?? provider,
+          label: credential?.label ?? selected?.providerName ?? provider,
         });
       } else if (apiKey) {
         await rpc.models.connect({
           provider,
+          credentialId,
           apiKey,
           modelId,
-          label: selected?.providerName ?? provider,
+          label: credential?.label ?? selected?.providerName ?? provider,
         });
       }
+      if (!mountedRef.current || selectionRevision !== selectionRevisionRef.current) return;
       setStep(nextStepAfterModel(needsIntegrationSetup));
     } catch (err) {
-      setError(err instanceof Error ? err.message : t`Could not save model`);
+      if (!mountedRef.current) return;
+      setError(modelSelectionErrorMessage(err, t`Could not save model`));
+    } finally {
+      savingModelRef.current = false;
+      if (mountedRef.current) setSavingModel(false);
     }
   }
 
@@ -313,13 +369,15 @@ export function OnboardingPage() {
   }
 
   async function createFirstBot() {
-    if (createStartedRef.current) return;
+    if (createStartedRef.current || !accountConfirmedRef.current || !mountedRef.current) return;
     createStartedRef.current = true;
     setError(null);
     try {
       const bot = await ensureFirstBot();
+      if (!mountedRef.current) return;
       for (const serverId of integrationServers) {
         await rpc.mcp.assignments.approve({ botId: bot.id, serverId });
+        if (!mountedRef.current) return;
       }
       // Onboarding continues conversationally in the thread: greeting first,
       // then the focus choice (immediate for the first bot).
@@ -327,11 +385,14 @@ export function OnboardingPage() {
         .start({ botId: bot.id })
         .then(() => true)
         .catch(() => false);
+      if (!mountedRef.current) return;
       if (started) {
         await rpc.onboarding.promptFocus({ botId: bot.id }).catch(() => undefined);
       }
+      if (!mountedRef.current) return;
       navigate(`/app/${bot.id}`);
     } catch (err) {
+      if (!mountedRef.current) return;
       createStartedRef.current = false;
       setError(err instanceof Error ? err.message : t`Could not create your bot`);
     }
@@ -345,7 +406,7 @@ export function OnboardingPage() {
   return (
     <div className="min-h-full bg-background px-6 py-12">
       <div className="mx-auto w-full max-w-[560px]">
-        {step !== "loading" ? (
+        {step === "model" || step === "integrations" || step === "bot" ? (
           <div className="mb-4 flex justify-end">
             <FeatureDocsLink featureId="onboarding" title={t`Connect a model`} />
           </div>
@@ -355,45 +416,72 @@ export function OnboardingPage() {
             <Trans>Loading…</Trans>
           </p>
         ) : null}
+        {step === "account-error" || step === "catalog-error" ? (
+          <div role="alert">
+            <p className="text-sm text-destructive">
+              {step === "account-error" ? (
+                <Trans>Could not load setup.</Trans>
+              ) : (
+                <Trans>Could not load models.</Trans>
+              )}
+            </p>
+            <Button className="mt-4" onClick={retrySetup}>
+              <Trans>Retry</Trans>
+            </Button>
+          </div>
+        ) : null}
         {step === "model" ? (
           <div>
             <h1 className="text-[32px] font-medium text-foreground">
               <Trans>Connect a model</Trans>
             </h1>
-            <div className="mt-8 block text-sm font-medium text-foreground">
-              <span>
-                <Trans>Provider</Trans>
-              </span>
-              <Select
-                value={provider}
-                onValueChange={(value) => {
-                  if (typeof value !== "string" || !value) return;
-                  selectProvider(value);
-                }}
-                items={providerItems}
+            <div className="mt-8">
+              <Suspense
+                fallback={
+                  <p>
+                    <Trans>Loading…</Trans>
+                  </p>
+                }
               >
-                <SelectTrigger aria-label={t`Provider`} className="mt-2 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {providers.map((entry) => (
-                    <SelectItem key={entry.provider} value={entry.provider}>
-                      {providerLabel(entry)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <CatalogModelPicker
+                  catalog={catalog}
+                  credentials={credentials}
+                  provider={provider}
+                  modelId={modelId}
+                  credentialId={credentialId}
+                  onChange={chooseModel}
+                  disabled={savingModel}
+                />
+              </Suspense>
             </div>
-            {provider === "ollama" ? (
+            {connectionReady && error ? (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
+            {connectionReady ? (
+              <Button className="mt-6" onClick={() => void saveModel()} disabled={oauthPending}>
+                <Trans>Use this model</Trans>
+              </Button>
+            ) : provider === "ollama" ? (
               <div className="mt-6">
                 <OllamaSettings
+                  credentialId={credentialId}
+                  modelId={modelId || undefined}
                   onChanged={async () => {
-                    setCatalog(await rpc.models.list());
+                    const [models, connections] = await Promise.all([
+                      rpc.models.list(),
+                      rpc.models.credentials(),
+                    ]);
+                    if (mountedRef.current) {
+                      setCatalog(models);
+                      setCredentials(connections);
+                    }
                   }}
                   onReady={() => setStep(nextStepAfterModel(needsIntegrationSetup))}
                 />
               </div>
-            ) : (
+            ) : selected ? (
               <>
                 <div className="mt-6 block text-sm text-foreground">
                   {isOpenAiCompatible ? (
@@ -459,6 +547,7 @@ export function OnboardingPage() {
                         ) : (
                           <Input
                             value={modelId}
+                            maxLength={MODEL_ID_MAX_LENGTH}
                             onChange={(e) => {
                               setManualModelId(true);
                               setModelId(e.target.value);
@@ -516,34 +605,7 @@ export function OnboardingPage() {
                         maxImagesLabel={t`Maximum images per request`}
                       />
                     </>
-                  ) : (
-                    <>
-                      <span className="font-medium">
-                        <Trans>Model</Trans>
-                      </span>
-                      <Select
-                        value={selected?.id ?? modelId}
-                        onValueChange={(value) => {
-                          if (typeof value !== "string" || !value) return;
-                          if (value === modelId) return;
-                          cancelOAuthAttempt();
-                          setModelId(value);
-                        }}
-                        items={modelItems}
-                      >
-                        <SelectTrigger aria-label={t`Model`} className="mt-2 w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {modelsForProvider.map((entry) => (
-                            <SelectItem key={`${entry.provider}:${entry.id}`} value={entry.id}>
-                              {entry.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </>
-                  )}
+                  ) : null}
                 </div>
                 {subscriptionSignIn ? (
                   <div className="mt-4">
@@ -611,7 +673,7 @@ export function OnboardingPage() {
                       </div>
                     ) : (
                       <Button
-                        disabled={oauthPending}
+                        disabled={oauthPending || savingModel}
                         onClick={() => beginSelectedSubscriptionSignIn()}
                       >
                         {oauthPending ? <Trans>Starting…</Trans> : signInLabel}
@@ -660,11 +722,15 @@ export function OnboardingPage() {
                 {notice ? <p className="mt-3 text-sm text-success">{notice}</p> : null}
                 {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
                 <div className="mt-6 flex gap-3">
-                  <Button disabled={!canSaveModel} onClick={() => void saveModel()}>
+                  <Button disabled={!canSaveModel || savingModel} onClick={() => void saveModel()}>
                     <Trans>Continue</Trans>
                   </Button>
                 </div>
               </>
+            ) : (
+              <Button className="mt-6" disabled>
+                <Trans>Continue</Trans>
+              </Button>
             )}
           </div>
         ) : null}

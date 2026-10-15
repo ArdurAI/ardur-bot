@@ -42,6 +42,7 @@ import {
   bumpMcpServerRevision,
   CodexConnections,
   ComputerBusyError,
+  canBotRun,
   cancelComputerRunWork,
   checkpointAndRecordComputerWorkspace,
   clearInactiveUserComputerControl,
@@ -50,6 +51,7 @@ import {
   createVoiceProvider,
   defaultCatalogModelId,
   deletePushToken,
+  deliverPendingGoalBoardUpdates,
   deploymentAutoReviewDefault,
   deploymentHostLabel,
   destroyBot,
@@ -93,13 +95,14 @@ import {
   provisionComputer,
   pullOllamaModel,
   queueComputerUpdate,
+  registeredRuntimeCapabilityReport,
   releaseComputerExecutionLease,
   replaceComputer,
+  requestedBotPin,
   resolveAutoReviewChecker,
   resolveBotWorkspacePath,
   revokeScreenControl,
   runtimeComputerLocation,
-  SUBSCRIPTION_SIGN_IN_PROVIDERS,
   sanitizeComposioError,
   savePushToken,
   scheduleComputerControlExpiry,
@@ -118,6 +121,7 @@ import type {
   ComputerStatus,
   Me,
   RuntimeAvailability,
+  RuntimeKind,
   SpaceNavigation,
 } from "@ardurbot/contracts";
 import {
@@ -144,6 +148,7 @@ import {
   runtimeSupportsLocation,
   usableModelId,
 } from "@ardurbot/contracts";
+import { BoardError } from "@ardurbot/contracts/board";
 import { HostHealthSchema } from "@ardurbot/contracts/host-bridge";
 import { LOCAL_IMPORT_INVALID_FOLDER_CODE } from "@ardurbot/contracts/local-import";
 import { appContract } from "@ardurbot/contracts/rpc";
@@ -161,6 +166,7 @@ import {
 import { decodeHistoricalHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
+  acceptGoal,
   appendEventInTransaction,
   BotSectionNameConflictError,
   CannotDeleteDefaultSpaceError,
@@ -174,17 +180,26 @@ import {
   createThreadMessageInTransaction,
   deleteEmptySpaceForMember,
   deleteUnreferencedCredentialSecret,
+  findBoundModelCredential,
   findDefaultModelCredential,
   findDefaultVoiceCredential,
   findModelCredential,
   findSpaceMemoryConfig,
+  findUserModelCredentials,
   formatMessagingLinkCode,
+  GoalBoardDeliveryConflict,
+  GoalConditionSupportError,
+  GoalPlanConflict,
+  GoalReviewConflict,
   getBotCommunicationPolicy,
   getGoal,
+  getGoalRevision,
   getUserPreferences,
+  goalBoardResult,
   InvalidSpaceNameError,
   IsolationError,
   issueMessagingLinkCode,
+  linkGoal,
   listBotCommunicationDeliveries,
   listDelegations,
   lockOwnedGroup,
@@ -192,10 +207,13 @@ import {
   newestVoiceCredentialOrder,
   Prisma,
   parseComputerMode,
+  recordGoalPlanStepOutcome,
+  rejectGoal,
   releaseSpaceDeletionClaim,
   renewSpaceDeletionClaim,
   requestCancel,
   resetBriefRetriesForConnection,
+  reviewGoalCondition,
   SPACE_DELETION_CLAIM_TIMEOUT_MS,
   SpaceDeletionInProgressError,
   SpaceLimitError,
@@ -204,9 +222,13 @@ import {
   selectSpaceModelPreference,
   selectSpaceVoicePreference,
   setBotCommunicationPaused,
+  settleGoalBoardDelivery,
+  settleGoalPlanStep,
   startGoal,
   stopGoal,
+  submitGoal,
   touchGroupUpdatedAt,
+  updateGoalPlan,
   updateUserPreferences,
 } from "@ardurbot/db";
 import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
@@ -224,14 +246,15 @@ import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { MemoryRedactionError } from "@ardurbot/memory";
 import type { Router } from "@orpc/server";
-import { implement, ORPCError } from "@orpc/server";
+import { implement, ORPCError, ValidationError } from "@orpc/server";
 import { createAccountService } from "./account.js";
 import { exportDownload } from "./account-export.js";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
 import { createAgentSkillsService } from "./agent-skills.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
-import { boardCall, createBoard } from "./board.js";
+import { boardCall, boardOwnerRun, createBoard } from "./board.js";
+import { updateOwnerBoardItem } from "./board-update.js";
 import { botModelPinUpdate } from "./bot-model-pin.js";
 import {
   botProfileLabelsChanged,
@@ -260,9 +283,24 @@ import {
 import { createContextService } from "./context.js";
 import type { RouterContext } from "./customization-routes.js";
 import { createCustomizationRoutes } from "./customization-routes.js";
-import { dashboardNow, routineOverview, usageSummary } from "./dashboard.js";
-import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
-import { runEvidenceSummary } from "./evidence.js";
+import {
+  dashboardNow,
+  routineOverview,
+  runtimeReliabilitySummary,
+  usageSummary,
+} from "./dashboard.js";
+import {
+  getModelDestinations,
+  setModelDestinations,
+  validateDefaultModelDestinations,
+} from "./delegation-policy.js";
+import {
+  evidenceKeyHistory,
+  replaceSpaceEvidenceKey,
+  revokeSpaceEvidenceKey,
+  runEvidenceRecord,
+  runEvidenceSummary,
+} from "./evidence.js";
 import { listSpaceFeatures, setSpaceFeature } from "./features.js";
 import {
   fleetBotPreference,
@@ -274,6 +312,7 @@ import {
   savePlacement,
   testFleetTarget,
 } from "./fleet.js";
+import { authorizeGoalBoardLink, goalBoardService } from "./goal-board.js";
 import { updateGroupMemberModelPin } from "./group-model-pin.js";
 import { guidedSetupStatus } from "./guided-setup.js";
 import { hermesAvailabilityConnectionSupported } from "./hermes-availability.js";
@@ -304,9 +343,14 @@ import {
 } from "./memory-provider-config.js";
 import { memoryContext, memoryRpc } from "./memory-routes.js";
 import { createChannelPairing } from "./messaging-dispatch.js";
-import { validateModelPinSelection } from "./model-pin-validation.js";
+import { modelDefaultSelectionIssue } from "./model-default-selection.js";
+import {
+  botRunComputerLocation,
+  validateBotCanRun,
+  validateModelPinSelection,
+} from "./model-pin-validation.js";
 import { notificationActivity } from "./notification-activity.js";
-import { ollamaConnection, ollamaStatus } from "./ollama.js";
+import { ollamaCatalogStates, ollamaConnection, ollamaStatus } from "./ollama.js";
 import {
   chooseFocus,
   dismissFocus,
@@ -315,6 +359,7 @@ import {
   startOnboarding,
 } from "./onboarding.js";
 import { getProtectedLocations, patchProtectedLocations } from "./protected-locations.js";
+import type { RemoteDevicesDeps } from "./remote-devices.js";
 import { createRemoteDevices } from "./remote-devices.js";
 import { routineHistory } from "./routine-history.js";
 import { listSpaceRuns } from "./runs.js";
@@ -334,11 +379,7 @@ import { assertTeachingSendAllowed, createTaughtSkillsService } from "./taught-s
 import { acceptTeamTask, teamBoard } from "./team.js";
 import type { createTerminalRoutes } from "./terminal-routes.js";
 import { guardComputerTakeover } from "./terminal-takeover.js";
-import {
-  isPeerRun,
-  loadMessagePage,
-  shouldForwardPeerThreadEvent,
-} from "./thread-message-pages.js";
+import { loadMessagePage, shouldForwardThreadEvent } from "./thread-message-pages.js";
 import {
   reactToThreadMessage,
   resolveThreadTarget,
@@ -361,6 +402,7 @@ import {
   voiceContext,
 } from "./voice.js";
 import { createWorkspaceFiles } from "./workspace-files.js";
+import { createWorkspaceGit } from "./workspace-git.js";
 import { workspaceTasks } from "./workspace-tasks.js";
 
 const MAX_COMPUTER_TEXT_FILE_BYTES = 2 * 1024 * 1024;
@@ -536,6 +578,8 @@ function mcpAssignmentDto(row: {
 }
 
 export interface RouterDeps {
+  listenerState?: RemoteDevicesDeps["listenerState"];
+  trustedDesktopHints?: RemoteDevicesDeps["trustedDesktopHints"];
   runtime?: AgentRuntime;
   resolveComparisonPin?: DelegationResolver;
   hostBridge?: HostBridge;
@@ -620,6 +664,74 @@ function hermesLocalInstallOffer(
   return undefined;
 }
 
+/** Enqueues the coordinator wake a plan change queued (same wake for every plan RPC). */
+async function enqueueGoalPlanWake(
+  deps: Pick<RouterDeps, "prisma" | "jobs">,
+  spaceId: string,
+  goal: { id: string; plan?: { revision: number; steps: unknown[] } | null },
+) {
+  const wake = await deps.prisma.run.findUnique({
+    where: {
+      spaceId_clientNonce: {
+        spaceId,
+        clientNonce: `goal-plan:${goal.id}:${goal.plan?.revision ?? 0}`,
+      },
+    },
+    select: { id: true, status: true },
+  });
+  if (wake?.status === "queued")
+    await deps.jobs.enqueue(runContinueJob(wake.id)).catch((error) => {
+      getLogger().error("goal plan wake enqueue", error);
+    });
+}
+
+async function goalReviewCall<T>(action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof IsolationError) throw new ORPCError("FORBIDDEN");
+    if (error instanceof GoalConditionSupportError)
+      throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
+    if (error instanceof GoalBoardDeliveryConflict)
+      throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
+    if (error instanceof GoalReviewConflict)
+      throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
+    if (error instanceof GoalPlanConflict)
+      throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
+      throw new ORPCError("CONFLICT", { data: { reason: "already-reviewed" } });
+    throw error;
+  }
+}
+
+function scheduleGoalBoard(deps: RouterDeps) {
+  void deliverPendingGoalBoardUpdates({
+    prisma: deps.prisma,
+    dataDir: deps.dataDir,
+    lockPool: deps.lockPool,
+    ownerRun: deps.hostBridge ? boardOwnerRun(deps.hostBridge) : undefined,
+  }).catch((error) => getLogger().error("goal board delivery", error));
+}
+
+async function goalLinkOrRefuse(
+  deps: RouterDeps,
+  actor: RouterContext["actor"],
+  link: { workspaceId: string; itemId: string } | null,
+) {
+  if (!actor?.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+  try {
+    return await authorizeGoalBoardLink(actor, link, goalBoardService(deps));
+  } catch (error) {
+    if (error instanceof IsolationError) throw new ORPCError("FORBIDDEN");
+    if (error instanceof BoardError)
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Could not link that board item.",
+        data: { reason: "board-link" },
+      });
+    throw error;
+  }
+}
+
 export function createRouter(deps: RouterDeps): Router<typeof appContract, RouterContext> {
   const board = createBoard(deps);
   const comparisons = createComparisons({
@@ -640,7 +752,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     origin?: string;
   }>();
   const channelPairing = createChannelPairing(deps);
-  const remoteDevices = createRemoteDevices({ ...deps, publicUrl: deps.env.webOrigin });
+  const remoteDevices = createRemoteDevices(deps);
   const account = createAccountService({ ...deps, remoteDevices });
   const repos = createRepos(deps.prisma, {
     sandboxProvider: deps.env.sandboxProvider,
@@ -694,13 +806,28 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
 
   const authed = os.use(async ({ context, next }) => {
     if (!context.actor) throw new ORPCError("UNAUTHORIZED");
-    return next({ context: { ...context, actor: context.actor } });
+    try {
+      return await next({ context: { ...context, actor: context.actor } });
+    } catch (error) {
+      if (
+        error instanceof ORPCError &&
+        error.code === "BAD_REQUEST" &&
+        error.cause instanceof ValidationError &&
+        error.cause.issues.some(
+          (issue) => issue.message === "Choose a model." && issue.path?.at(-1) === "modelId",
+        )
+      ) {
+        throw new ORPCError("BAD_REQUEST", { message: "Choose a model." });
+      }
+      throw error;
+    }
   });
 
   const systemSettings = createSystemSettings(deps.prisma);
   const commands = createCommandRoutes(deps);
   const ide = createIdeFiles(deps);
   const workspaceFiles = createWorkspaceFiles(deps);
+  const workspaceGit = createWorkspaceGit({ sandbox: deps.sandbox, files: workspaceFiles });
   const ideChanges = createIdeChanges(deps, ide);
   return os.router({
     ...createCustomizationRoutes(deps),
@@ -787,6 +914,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
       tasks: authed.workspace.tasks.handler(({ context, input }) =>
         workspaceTasks(deps.prisma, context.actor, input.botId),
+      ),
+      git: authed.workspace.git.handler(({ context, input }) =>
+        workspaceGit.observe(context.actor, input, context.signal),
       ),
     },
     terminal: {
@@ -1148,6 +1278,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     runtimes: {
+      reliability: authed.runtimes.reliability.handler(({ context }) =>
+        runtimeReliabilitySummary(deps.prisma, context.actor),
+      ),
+      capabilities: authed.runtimes.capabilities.handler(({ input }) =>
+        registeredRuntimeCapabilityReport(input.runtimeKind),
+      ),
       availability: authed.runtimes.availability.handler(async ({ context, input }) => {
         if (input.runtimeKind === "hermes") {
           const bot = input.botId ? await repos.getBot(context.actor, input.botId) : null;
@@ -1326,27 +1462,41 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     models: {
       validatePin: authed.models.validatePin.handler(async ({ context, input }) => {
-        await validateModelPinSelection(deps, context.actor, input);
+        await validateBotCanRun(deps, context.actor, input, input);
         return { ok: true };
       }),
       list: authed.models.list.handler(async ({ context }) => {
-        const state = await ollamaStatus(deps, context.actor, context.signal);
+        const connections = await findUserModelCredentials(
+          deps.prisma,
+          context.actor.userId,
+          "ollama",
+        );
+        const states = await ollamaCatalogStates(
+          deps,
+          context.actor,
+          connections.map((connection) => connection.id),
+          context.signal,
+        );
         return [
           ...listPiCatalog(),
           scriptedCatalogEntry,
           ollamaCatalogPlaceholder,
-          ...ollamaCatalog(state.models, state.credentialId ?? ""),
+          ...states.flatMap((state) => ollamaCatalog(state.models, state.credentialId ?? "")),
         ];
       }),
-      ollama: authed.models.ollama.handler(({ context }) =>
-        ollamaStatus(deps, context.actor, context.signal),
+      ollama: authed.models.ollama.handler(({ context, input }) =>
+        ollamaStatus(deps, context.actor, context.signal, undefined, input?.credentialId),
       ),
       testOllama: authed.models.testOllama.handler(({ context, input }) =>
         ollamaStatus(deps, context.actor, context.signal, input.baseUrl),
       ),
       pullOllama: authed.models.pullOllama.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
-        const connection = await ollamaConnection(deps, context.actor);
+        const connection = await ollamaConnection(deps, context.actor, input.credentialId).catch(
+          (error) => {
+            throw new ORPCError("BAD_REQUEST", { message: ollamaErrorMessage(error) });
+          },
+        );
         if (!connection) throw new ORPCError("BAD_REQUEST", { message: "Connect Ollama first." });
         return (async function* () {
           try {
@@ -1367,15 +1517,8 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           },
           orderBy: newestModelCredentialOrder,
         });
-        // OAuth markers need the stored secret too, and only subscription
-        // sign-in providers can hold an OAuth credential.
-        const secretRows = rows.filter(
-          (row) =>
-            row.provider === OPENAI_COMPATIBLE_PROVIDER_ID ||
-            row.provider === "anthropic" ||
-            row.provider === "ollama" ||
-            row.provider in SUBSCRIPTION_SIGN_IN_PROVIDERS,
-        );
+        // Return connection metadata only; absent or unreadable storage is not ready.
+        const secretRows = rows;
         const secrets = secretRows.length
           ? await deps.prisma.secret.findMany({
               where: {
@@ -1395,25 +1538,35 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             defaultModel: preference?.modelId ?? null,
           };
           const ciphertext = ciphertextById.get(row.secretId);
-          if (!ciphertext) return modelCredentialDto(selected);
+          if (!ciphertext) return { ...modelCredentialDto(selected), hasKey: false };
           try {
             return modelCredentialDto(selected, deps.secrets.load(ciphertext, row.secretId));
           } catch {
-            return modelCredentialDto(selected);
+            return { ...modelCredentialDto(selected), hasKey: false };
           }
         });
       }),
       connect: authed.models.connect.handler(async ({ context, input }) => {
+        const selectedCredential = input.credentialId
+          ? await findBoundModelCredential(
+              deps.prisma,
+              context.actor,
+              input.provider,
+              input.credentialId,
+            )
+          : null;
+        if (input.credentialId && !selectedCredential)
+          throw new ORPCError("NOT_FOUND", { message: "Connect that model first." });
+        const requestedModelId =
+          usableModelId(input.modelId) ?? defaultCatalogModelId(input.provider);
         let plaintext: string;
         try {
           let previousPlaintext: string | undefined;
           let omitVisionModelIds = false;
           if (input.provider === OPENAI_COMPATIBLE_PROVIDER_ID) {
-            const credential = await findModelCredential(
-              deps.prisma,
-              context.actor,
-              input.provider,
-            );
+            const credential =
+              selectedCredential ??
+              (await findModelCredential(deps.prisma, context.actor, input.provider));
             if (credential) {
               const secret = await deps.prisma.secret.findFirst({
                 where: { id: credential.secretId, userId: context.actor.userId, spaceId: null },
@@ -1450,8 +1603,28 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             });
           input.modelId = input.modelId ?? result.models[0]?.id;
         }
+        if (input.provider !== "ollama" || input.modelId) {
+          const metadata = modelCredentialDto(
+            {
+              id: input.credentialId ?? "pending",
+              provider: input.provider,
+              label: input.label ?? input.provider,
+              isDefault: false,
+              defaultModel: input.modelId ?? requestedModelId,
+            },
+            plaintext,
+          );
+          const issue = modelDefaultSelectionIssue(
+            input.provider,
+            input.modelId ?? requestedModelId,
+            metadata,
+            [...listPiCatalog(), scriptedCatalogEntry],
+          );
+          if (issue) throw new ORPCError("BAD_REQUEST", { message: issue });
+        }
         return persistModelCredential(deps, context.actor, {
           provider: input.provider,
+          credentialId: input.credentialId,
           plaintext,
           label: input.label,
           modelId: input.modelId,
@@ -1530,18 +1703,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         return { ok: true as const };
       }),
       setDefault: authed.models.setDefault.handler(async ({ context, input }) => {
-        if (input.provider === "ollama") {
-          const state = await ollamaStatus(deps, context.actor, context.signal);
-          if (state.issue || !state.models.some((model) => model.id === input.modelId))
-            throw new ORPCError("BAD_REQUEST", {
-              message: state.issue ?? "This Ollama model is not installed. Change pin.",
-            });
-        }
         await withSerializableRetry(() =>
           deps.prisma.$transaction(
             async (tx) => {
               const credential = await tx.userModelCredential.findFirst({
-                where: { userId: context.actor.userId, provider: input.provider },
+                where: {
+                  userId: context.actor.userId,
+                  provider: input.provider,
+                  ...(input.credentialId ? { id: input.credentialId } : {}),
+                },
                 orderBy: newestModelCredentialOrder,
               });
               if (!credential) {
@@ -1549,12 +1719,47 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                   message: `No model credential is connected for ${input.provider}.`,
                 });
               }
-              await selectSpaceModelPreference(
-                tx,
-                context.actor,
-                credential.id,
-                usableModelId(input.modelId) ?? defaultCatalogModelId(input.provider),
+              const modelId = usableModelId(input.modelId) ?? defaultCatalogModelId(input.provider);
+              const secret = await tx.secret.findFirst({
+                where: { id: credential.secretId, userId: context.actor.userId, spaceId: null },
+                select: { ciphertext: true },
+              });
+              if (!secret)
+                throw new ORPCError("BAD_REQUEST", { message: "Connect that model first." });
+              let plaintext: string;
+              try {
+                plaintext = deps.secrets.load(secret.ciphertext, credential.secretId);
+              } catch {
+                throw new ORPCError("BAD_REQUEST", { message: "Connect that model first." });
+              }
+              const metadata = modelCredentialDto(
+                { ...credential, defaultModel: modelId, isDefault: false },
+                plaintext,
               );
+              const issue = modelDefaultSelectionIssue(input.provider, modelId, metadata, [
+                ...listPiCatalog(),
+                scriptedCatalogEntry,
+              ]);
+              if (issue) throw new ORPCError("BAD_REQUEST", { message: issue });
+              if (input.provider === "ollama") {
+                const state = await ollamaStatus(
+                  deps,
+                  context.actor,
+                  context.signal,
+                  metadata.baseUrl,
+                );
+                if (state.issue || !state.models.some((model) => model.id === modelId))
+                  throw new ORPCError("BAD_REQUEST", {
+                    message: state.issue ?? "This Ollama model is not installed. Change pin.",
+                  });
+              }
+
+              await validateDefaultModelDestinations(
+                { ...deps, prisma: tx as PrismaClient },
+                context.actor,
+                { provider: input.provider, modelId, credentialId: credential.id },
+              );
+              await selectSpaceModelPreference(tx, context.actor, credential.id, modelId);
             },
             { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
           ),
@@ -1602,7 +1807,23 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
       create: authed.bots.create.handler(async ({ context, input }) => {
         try {
-          return await repos.createBot(context.actor, input);
+          return await repos.createBot(context.actor, {
+            ...input,
+            onCreated: async (tx, botId) => {
+              await validateBotCanRun(
+                { ...deps, prisma: tx as PrismaClient },
+                context.actor,
+                {
+                  runtimeKind: "pi",
+                  provider: null,
+                  modelId: null,
+                  credentialId: null,
+                  effort: null,
+                },
+                { botId },
+              );
+            },
+          });
         } catch (error) {
           if (
             error instanceof NewBotTeamLocationConflictError ||
@@ -1627,6 +1848,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
       duplicate: authed.bots.duplicate.handler(async ({ context, input }) => {
         const source = await repos.getBot(context.actor, input.botId);
+        // Refuse the source with the same run sentence before legacy container guards.
+        // The creation hook still checks the final allocated computer inside the transaction.
+        await validateBotCanRun(deps, context.actor, requestedBotPin(source), {
+          botId: source.id,
+          inheritBotPin: true,
+        });
         const sourceKind = computerExecutionKind(
           await runtimeComputerLocation(deps.prisma, source.computer),
         );
@@ -1660,6 +1887,14 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 ? null
                 : decodeHistoricalHermesRuntimeConfig(source.runtimeConfig),
             runtimeExperimental: source.runtimeExperimental,
+            onCreated: async (tx, botId) => {
+              await validateBotCanRun(
+                { ...deps, prisma: tx as PrismaClient },
+                context.actor,
+                requestedBotPin(source),
+                { botId, inheritBotPin: true },
+              );
+            },
           })
           .catch((error: unknown) => {
             if (
@@ -1722,7 +1957,58 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           });
           if (!section) throw new IsolationError();
         }
-        const modelPinUpdate = await botModelPinUpdate(deps, context.actor, existing, input);
+        const policies =
+          (input.runtimeKind ?? existing.runtimeKind) === "hermes"
+            ? {
+                botPolicy: existing.allowedModelDestinations,
+                spacePolicy: (
+                  await deps.prisma.space.findUnique({ where: { id: context.actor.spaceId } })
+                )?.allowedModelDestinations,
+              }
+            : undefined;
+        const modelPinUpdate = await botModelPinUpdate(
+          deps,
+          context.actor,
+          existing,
+          input,
+          policies,
+        );
+        if (
+          [
+            "runtimeKind",
+            "runtimeExperimental",
+            "modelProvider",
+            "modelId",
+            "thinkingLevel",
+            "modelCredentialId",
+            "runtimeConfig",
+          ].some((key) => key in input)
+        ) {
+          await validateBotCanRun(
+            deps,
+            context.actor,
+            {
+              runtimeKind: (modelPinUpdate.runtimeKind ?? existing.runtimeKind) as RuntimeKind,
+              provider: (modelPinUpdate.modelProvider === undefined
+                ? existing.modelProvider
+                : modelPinUpdate.modelProvider) as string | null,
+              modelId: (modelPinUpdate.modelId === undefined
+                ? existing.modelId
+                : modelPinUpdate.modelId) as string | null,
+              credentialId: (modelPinUpdate.modelCredentialId === undefined
+                ? existing.modelCredentialId
+                : modelPinUpdate.modelCredentialId) as string | null,
+              effort: (modelPinUpdate.thinkingLevel === undefined
+                ? existing.thinkingLevel
+                : modelPinUpdate.thinkingLevel) as string | null,
+            },
+            {
+              botId: existing.id,
+              runtimeExperimental: input.runtimeExperimental,
+              ollamaSelectionValidated: modelPinUpdate.modelProvider === "ollama",
+            },
+          );
+        }
         const configSave = prepareRuntimeConfigSave(
           existing,
           input,
@@ -1783,6 +2069,28 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         if (currentMode === input.mode) {
           return repos.setBotComputer(context.actor, bot.id, input.mode);
         }
+        const placementProblem = canBotRun({
+          pin: {
+            runtimeKind: bot.runtimeKind as RuntimeKind,
+            provider: bot.modelProvider,
+            modelId: bot.modelId,
+            credentialId: bot.modelCredentialId,
+            effort: bot.thinkingLevel,
+            revision: bot.modelPinRevision,
+          },
+          placement: {
+            computer: await botRunComputerLocation(
+              deps,
+              context.actor,
+              bot.computer,
+              bot.id,
+              input.mode,
+            ),
+            experimental: bot.runtimeExperimental,
+          },
+        });
+        if (placementProblem)
+          throw new ORPCError("BAD_REQUEST", { message: placementProblem.reason });
         const claimed = await deps.prisma.$transaction(async (tx) => {
           await tx.$queryRaw`SELECT id FROM computers WHERE id = ${bot.computerId} FOR UPDATE`;
           return tx.bot.updateMany({
@@ -2116,9 +2424,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           input.cursor,
           context.signal,
         )) {
-          if (await isPeerRun(deps.prisma, event.runId, peerRunCache)) {
-            if (!shouldForwardPeerThreadEvent(event)) continue;
-          }
+          if (!(await shouldForwardThreadEvent(deps.prisma, event, peerRunCache))) continue;
           yield event;
         }
       }),
@@ -2528,7 +2834,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         }
       }),
       status: authed.computer.status.handler(({ context, input }) =>
-        computerStatus(deps, context.actor, input.botId),
+        computerStatus(deps, context.actor, input.botId, input.includeLimits),
       ),
       boot: authed.computer.boot.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
@@ -6166,8 +6472,31 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
     },
     evidence: {
+      record: authed.evidence.record.handler(({ context, input }) =>
+        runEvidenceRecord(deps.prisma, context.actor, input.recordId),
+      ),
       runSummary: authed.evidence.runSummary.handler(({ context, input }) =>
-        runEvidenceSummary(deps.prisma, context.actor, input.runId),
+        runEvidenceSummary(deps.prisma, context.actor, input.runId, input.expectedFingerprint),
+      ),
+      keyHistory: authed.evidence.keyHistory.handler(({ context }) =>
+        evidenceKeyHistory(deps.prisma, context.actor, context.authSessionId),
+      ),
+      replaceKey: authed.evidence.replaceKey.handler(({ context, input }) =>
+        replaceSpaceEvidenceKey(
+          deps,
+          context.actor,
+          context.authSessionId,
+          input.expectedFingerprint,
+        ),
+      ),
+      revokeKey: authed.evidence.revokeKey.handler(({ context, input }) =>
+        revokeSpaceEvidenceKey(
+          deps.prisma,
+          context.actor,
+          context.authSessionId,
+          input.expectedFingerprint,
+          input.reason,
+        ),
       ),
     },
     board: {
@@ -6209,12 +6538,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         ),
       ),
       update: authed.board.update.handler(({ context, input }) =>
-        boardCall(async () =>
-          (await board.service.provider(context.actor, input.workspaceId)).update(
-            input.id,
-            input.patch,
-          ),
-        ),
+        boardCall(() => updateOwnerBoardItem(board.service, context.actor, input)),
       ),
       claim: authed.board.claim.handler(({ context, input }) =>
         boardCall(async () =>
@@ -6288,10 +6612,86 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     goals: {
+      submit: authed.goals.submit.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const revision = await goalReviewCall(() => submitGoal(deps.prisma, context.actor, input));
+        scheduleGoalBoard(deps);
+        return revision;
+      }),
+      accept: authed.goals.accept.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const verdict = await goalReviewCall(() => acceptGoal(deps.prisma, context.actor, input));
+        scheduleGoalBoard(deps);
+        return verdict;
+      }),
+      reject: authed.goals.reject.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const verdict = await goalReviewCall(() => rejectGoal(deps.prisma, context.actor, input));
+        const wake = await deps.prisma.run.findUnique({
+          where: {
+            spaceId_clientNonce: {
+              spaceId: context.actor.spaceId,
+              clientNonce: `goal-rework:${input.revisionId}`,
+            },
+          },
+          select: { id: true, status: true },
+        });
+        if (wake?.status === "queued")
+          await deps.jobs.enqueue(runContinueJob(wake.id)).catch((error) => {
+            getLogger().error("goal rework enqueue", error);
+          });
+        return verdict;
+      }),
+      reviewCondition: authed.goals.reviewCondition.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return goalReviewCall(() => reviewGoalCondition(deps.prisma, context.actor, input));
+      }),
+      planUpdate: authed.goals.planUpdate.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const goal = await goalReviewCall(() =>
+          updateGoalPlan(deps.prisma, { actor: context.actor }, input),
+        );
+        await enqueueGoalPlanWake(deps, context.actor.spaceId, goal);
+        return goal;
+      }),
+      planStep: authed.goals.planStep.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const goal = await goalReviewCall(() =>
+          settleGoalPlanStep(deps.prisma, { actor: context.actor }, input),
+        );
+        await enqueueGoalPlanWake(deps, context.actor.spaceId, goal);
+        return goal;
+      }),
+      planOutcome: authed.goals.planOutcome.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const goal = await goalReviewCall(() =>
+          recordGoalPlanStepOutcome(deps.prisma, { actor: context.actor }, input),
+        );
+        await enqueueGoalPlanWake(deps, context.actor.spaceId, goal);
+        return goal;
+      }),
       start: authed.goals.start.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
-        const goal = await startGoal(deps.prisma, context.actor, input);
+        const link =
+          input.boardWorkspaceId && input.boardItemId
+            ? await goalLinkOrRefuse(deps, context.actor, {
+                workspaceId: input.boardWorkspaceId,
+                itemId: input.boardItemId,
+              })
+            : null;
+        const goal = await startGoal(
+          deps.prisma,
+          context.actor,
+          link ? { ...input, boardWorkspaceId: link.workspaceId, boardItemId: link.itemId } : input,
+        );
         const first = await deps.prisma.run.findUnique({
           where: {
             spaceId_clientNonce: {
@@ -6313,10 +6713,45 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           throw new ORPCError("FORBIDDEN");
         return getGoal(deps.prisma, context.actor, input.groupId);
       }),
+      revision: authed.goals.revision.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return getGoalRevision(deps.prisma, context.actor, input);
+      }),
       stop: authed.goals.stop.handler(({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
         return stopGoal(deps.prisma, context.actor, input.goalId);
+      }),
+      link: authed.goals.link.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const link =
+          input.boardWorkspaceId && input.boardItemId
+            ? await goalLinkOrRefuse(deps, context.actor, {
+                workspaceId: input.boardWorkspaceId,
+                itemId: input.boardItemId,
+              })
+            : null;
+        return linkGoal(deps.prisma, context.actor, {
+          goalId: input.goalId,
+          boardWorkspaceId: link?.workspaceId ?? null,
+          boardItemId: link?.itemId ?? null,
+        });
+      }),
+      boardDelivery: authed.goals.boardDelivery.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const goal = await goalReviewCall(() =>
+          settleGoalBoardDelivery(deps.prisma, context.actor, input),
+        );
+        scheduleGoalBoard(deps);
+        return goal;
+      }),
+      boardResult: authed.goals.boardResult.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return goalBoardResult(deps.prisma, context.actor, input.workspaceId, input.itemId);
       }),
     },
     delegations: {
@@ -6337,7 +6772,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         getModelDestinations(deps.prisma, context.actor, input.botId),
       ),
       setPolicy: authed.delegations.setPolicy.handler(({ context, input }) =>
-        setModelDestinations(deps.prisma, context.actor, input),
+        setModelDestinations(deps, context.actor, input),
       ),
       protectedLocations: authed.delegations.protectedLocations.handler(({ context, input }) =>
         getProtectedLocations(deps.prisma, context.actor, input.botId),
@@ -6678,6 +7113,7 @@ async function computerStatus(
   deps: RouterDeps,
   actor: Actor,
   botId: string,
+  includeLimits = false,
 ): Promise<ComputerStatus> {
   const repos = createRepos(deps.prisma, { sandboxProvider: deps.env.sandboxProvider });
   let bot = await repos.getBot(actor, botId);
@@ -6692,7 +7128,27 @@ async function computerStatus(
     }),
     bot.computer ? deploymentHostLabel(deps.prisma) : Promise.resolve(undefined),
   ]);
-  return toComputerStatus(botId, bot.computer, busyBotName, hostLabel);
+  const observedComputer = bot.computer;
+  const appliedLimits =
+    includeLimits && observedComputer?.providerRef && observedComputer.state === "running"
+      ? await deps.sandbox
+          .appliedLimits?.(toComputerRef(observedComputer), {
+            ...computerContext(actor, botId, "computer.limits"),
+            signal: AbortSignal.timeout(2000),
+          })
+          .catch(() => null)
+      : null;
+  // Do not attach an observation to a replacement computer or a changed generation.
+  if (appliedLimits && observedComputer) {
+    bot = await repos.getBot(actor, botId);
+    if (
+      bot.computer?.id !== observedComputer.id ||
+      bot.computer.screenGeneration !== observedComputer.screenGeneration ||
+      bot.computer.providerRef !== observedComputer.providerRef
+    )
+      return toComputerStatus(botId, bot.computer, busyBotName, hostLabel);
+  }
+  return toComputerStatus(botId, bot.computer, busyBotName, hostLabel, appliedLimits);
 }
 
 async function runComputerReplace(
@@ -6911,6 +7367,7 @@ async function persistModelCredential(
   actor: Actor,
   input: {
     provider: string;
+    credentialId?: string;
     plaintext: string;
     label?: string;
     modelId?: string;
@@ -6932,9 +7389,15 @@ async function persistModelCredential(
       async (tx) => {
         throwIfAborted(input.signal);
         const existing = await tx.userModelCredential.findFirst({
-          where: { userId: actor.userId, provider: input.provider },
+          where: {
+            userId: actor.userId,
+            provider: input.provider,
+            ...(input.credentialId ? { id: input.credentialId } : {}),
+          },
           orderBy: newestModelCredentialOrder,
         });
+        if (input.credentialId && !existing)
+          throw new ORPCError("NOT_FOUND", { message: "Connect that model first." });
         throwIfAborted(input.signal);
         const secret = await tx.secret.create({
           data: {
@@ -6983,6 +7446,11 @@ async function persistModelCredential(
           defaultModel = preference?.modelId ?? null;
           isDefault = preference?.isDefault ?? false;
         } else {
+          await validateDefaultModelDestinations({ ...deps, prisma: tx as PrismaClient }, actor, {
+            provider: input.provider,
+            modelId: defaultModel,
+            credentialId: credential.id,
+          });
           await selectSpaceModelPreference(tx, actor, credential.id, defaultModel);
         }
         throwIfAborted(input.signal);

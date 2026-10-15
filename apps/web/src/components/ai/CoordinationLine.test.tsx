@@ -59,6 +59,34 @@ describe("CoordinationLine", () => {
     vi.unstubAllGlobals();
   });
 
+  it("renders a blocked assignment without promising a message or member choice", () => {
+    const dispatch: ChiefDispatch = {
+      requestMessageId: "request",
+      revision: 1,
+      memberId: "chief",
+      memberName: "Chief",
+      state: "needs-owner",
+      blockerKey: "connect-linear",
+      reason: "Connect Linear or grant a team member permission to read and write.",
+    };
+    act(() =>
+      root.render(
+        <ChiefDispatchLine
+          dispatch={dispatch}
+          detail="Got it — this task needs you before I can assign it."
+        />,
+      ),
+    );
+    expect(container.querySelector("button")?.getAttribute("aria-label")).toBe(
+      "Needs you · Connect Linear or grant a team member permission to read and write.",
+    );
+    expect(container.querySelector('[data-testid="chief-activity"]')?.textContent).toBe(
+      dispatch.reason,
+    );
+    expect(container.textContent).not.toMatch(/Messaged|Queued|choose a team member/);
+    act(() => root.render(<ChiefReceiptText receiptKey="needs-owner" />));
+    expect(container.textContent).toBe("Got it — this task needs you before I can assign it.");
+  });
   it("collapses a finished round to one line with the counts", () => {
     act(() =>
       root.render(

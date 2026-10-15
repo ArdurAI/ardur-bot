@@ -318,6 +318,8 @@ model DeploymentSettings {
   defaultModelId                  String?
   deploymentModelCredentialCipher String?
   computerHost                    String?
+  restartDrainId                  String?
+  restartDrainUntil               DateTime?
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt
 
@@ -755,6 +757,8 @@ model Run {
   /// run holds a lease. Display only: the continue job's own availableAt schedules it.
   providerRetryAt      DateTime?
   checkpoint           String?
+  /// Encrypted versioned turn context and effect receipts; separate from takeover markers.
+  turnCheckpoint       String?
   clientNonce          String?
   /// Thread position held for this run's reply from its first visible text, so a
   /// message the owner sends while the run is active lands below the saved reply.
@@ -765,6 +769,8 @@ model Run {
   routineId            String?
   routine              Routine?         @relation(fields: [routineId], references: [id], onDelete: SetNull)
   startedAt            DateTime?
+  /// First non-empty reply text observed by the leased executor; never backfilled.
+  firstReplyAt         DateTime?
   completedAt          DateTime?
   botOutcomeReturnedAt DateTime?
   messagingMirroredAt  DateTime?
@@ -786,6 +792,7 @@ model Run {
   @@index([trigger, status, messagingMirroredAt, updatedAt])
   @@index([trigger, status, teamChatMirroredAt, updatedAt])
   @@index([spaceId, userId, createdAt])
+  @@index([spaceId, userId, status, completedAt])
   @@index([spaceId, botId])
   @@index([originDeviceGrantId, status])
   @@index([remoteRootTaskId, status])
@@ -825,6 +832,8 @@ model Attempt {
   error      String?
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
+  /// Runtime and usage callbacks have drained, even when counts remain unknown.
+  usageSettledAt DateTime?
 
   @@index([runId])
   @@map("attempts")
@@ -1272,6 +1281,8 @@ model UsageRecord {
   counterEpoch String?
   counterMode String?
   lastSequence Int?
+  /// Final collection receipt; independent of measured coverage.
+  collectionFinishedAt DateTime?
   purpose String @default("legacy")
   coverage String @default("partial")
   categoryCoverage Json?
@@ -2199,13 +2210,23 @@ model TeamGoal {
   maxDepth Int @default(1)
   maxHops Int @default(6)
   untilAt DateTime
+  boardWorkspaceId String?
+  boardItemId String?
+  boardWorkspace BoardWorkspace? @relation(fields: [boardWorkspaceId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   stoppedAt DateTime?
   runs Run[]
+  revisions GoalRevision[]
+  verdicts GoalVerdict[]
+  settlements GoalSettlement[]
+  boardDeliveries GoalBoardDelivery[]
+  planSteps GoalPlanStep[]
+  planRevision Int @default(1)
 
   @@index([spaceId, userId, groupId, status])
   @@index([threadId, status])
+  @@index([boardWorkspaceId, boardItemId])
   @@map("team_goals")
 }
 model Delegation {
@@ -2485,9 +2506,13 @@ model EvidenceKey {
   publicKeyPem String
   privateKeyCiphertext String
   secretRecordId String
+  version Int @default(1)
   createdAt DateTime @default(now())
+  replacedAt DateTime?
   revokedAt DateTime?
+  revokedReason String?
 
+  @@unique([spaceId, version])
   @@index([spaceId])
   @@map("evidence_keys")
 }
@@ -2549,6 +2574,7 @@ model BoardWorkspace {
   follows BoardFollow[]
   notices BoardNotification[]
   scratchpadItems ScratchpadItem[]
+  goals TeamGoal[]
 
   @@unique([spaceId, path])
   @@index([spaceId, enabled])
@@ -2716,4 +2742,135 @@ model BotBrief {
   @@index([threadId, leaseExpiresAt])
   @@index([spaceId, userId, botId])
   @@map("bot_briefs")
+}
+
+
+model GoalRevision {
+  id String @id @default(cuid())
+  goalId String
+  goal TeamGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  summary String
+  conditions Json
+  artifacts Json
+  reports Json
+  attempts Int
+  accountingSnapshot Json
+  createdAt DateTime @default(now())
+
+  verdicts GoalVerdict[]
+
+  @@index([goalId, createdAt])
+  @@map("goal_revisions")
+}
+
+model GoalVerdict {
+  id String @id @default(cuid())
+  goalId String
+  goal TeamGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  revisionId String
+  revision GoalRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+  actorId String
+  type String
+  reworkNotes String?
+  createdAt DateTime @default(now())
+
+  @@unique([goalId, revisionId])
+  @@index([goalId, createdAt])
+  @@map("goal_verdicts")
+}
+
+/// Durable final-settlement marker written when the owner accepts a goal. Usage that
+/// settles after this marker is recorded as a discrepancy; it never reopens the result.
+model GoalSettlement {
+  id String @id @default(cuid())
+  spaceId String
+  userId String
+  goalId String @unique
+  goal TeamGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  revisionId String
+  rootTaskId String
+  actorId String
+  usedTokens Int
+  reservedTokens Int
+  createdAt DateTime @default(now())
+
+  discrepancies GoalSettlementDiscrepancy[]
+
+  @@index([spaceId, userId])
+  @@index([rootTaskId])
+  @@map("goal_settlements")
+}
+
+model GoalSettlementDiscrepancy {
+  id String @id @default(cuid())
+  settlementId String
+  settlement GoalSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  usageRecordId String
+  tokens Int
+  createdAt DateTime @default(now())
+
+  @@index([settlementId])
+  @@map("goal_settlement_discrepancies")
+}
+
+/// Durable board update for one goal revision. Acceptance is never inferred from a worker.
+/// One step of the goal's revisioned project plan. Plan-local identity is clientId;
+/// rows are never deleted: leaving the plan cancels a step, finishing records an outcome.
+model GoalPlanStep {
+  id String @id @default(cuid())
+  goalId String
+  goal TeamGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  clientId String
+  /// The plan revision that last changed this step; every change names the revision it was based on.
+  revision Int
+  title String
+  /// A group member bot id, or the owner's user id when ownerIsUser.
+  ownerId String
+  ownerIsUser Boolean @default(false)
+  condition String
+  status String @default("pending")
+  prerequisiteIds String[] @default([])
+  /// The submitted array position, starting at 0; reads order by this with the row id as tie-breaker.
+  position Int @default(0)
+  /// The recorded outcome (actor, support links, time) that moved the step to done.
+  outcome Json?
+  /// Exactly-once dispatch guards: set together, cleared only by an explicit reopen.
+  dispatchRunId String?
+  dispatchDelegationId String?
+  dispatch Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([goalId, clientId])
+  @@index([goalId])
+  @@map("goal_plan_steps")
+}
+
+model GoalBoardDelivery {
+  id String @id @default(cuid())
+  goalId String
+  goal TeamGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  revisionId String
+  transition String
+  spaceId String
+  userId String
+  workspaceId String
+  itemId String
+  commentText String
+  state String @default("pending")
+  claimToken String?
+  claimGeneration Int @default(0)
+  claimExpiresAt DateTime?
+  commentReceipt String?
+  closeReceipt String?
+  retryAt DateTime?
+  attempts Int @default(0)
+  failure String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([goalId, revisionId, transition])
+  @@index([state, retryAt, claimExpiresAt])
+  @@index([spaceId, userId, workspaceId, itemId])
+  @@map("goal_board_deliveries")
 }

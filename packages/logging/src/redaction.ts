@@ -10,14 +10,39 @@ const REDACT_KEYS = new Set([
   "headers",
 ]);
 // Bindings and text assignments must recognize the same credential families.
+// Long credential words anywhere in a key include plural collections and value suffixes.
+// Only explicit counters and named references below are exempt from masking.
 const SENSITIVE_KEY =
-  /password|passwd|secret|token|credential|authorization|cookie|(?:api|private|access|client|auth)key/i;
+  /password|passwd|passphrase|authorization|cookie|(?:api|private|access|client|auth|signing|encryption|master|app|ssh)key|secret|token|credential/i;
+// Short code names need a whole-key match so words such as "hotplug" stay readable.
+const AUTH_CODE_KEY = /^(?:authcode|t?otp)$/i;
 // References, counts and presence flags describe credentials without containing them.
-const METADATA_KEY = /(?:secret|token|credential)(?:id|count|absent|present)$/i;
+const METADATA_KEY =
+  /^(?:(?:max|min|num|total)tokens?|(?:used|remaining|input|output|prompt|completion|cached|reasoning|context)tokens|tokens?(?:used|remaining)|(?:known|required|missing)secrets|secret(?:names|ref|store))$|(?:secret|token|credential)(?:id|count|absent|present)$/i;
+
+function matchesCredentialKey(key: string): boolean {
+  const normalized = key.replace(/[^a-z0-9]/gi, "");
+  // PAT is a suffix with a separator or camel-case boundary, never part of "compat".
+  return (
+    SENSITIVE_KEY.test(normalized) ||
+    AUTH_CODE_KEY.test(normalized) ||
+    /[_-]pat$/i.test(key) ||
+    /[A-Za-z0-9]Pat$/.test(key)
+  );
+}
 
 function isSensitiveKey(key: string): boolean {
   const normalized = key.replace(/[^a-z0-9]/gi, "");
-  return !METADATA_KEY.test(normalized) && SENSITIVE_KEY.test(normalized);
+  return !METADATA_KEY.test(normalized) && matchesCredentialKey(key);
+}
+
+// After a literal backslash, "\npassword" is an escape and a key, but "\token" is a
+// backslash and a key. Drop the escape letter only when the rest still names a
+// credential word; otherwise classify the whole word, so neither reading leaks.
+function unescapeCredentialKey(key: string, escaped: boolean): string {
+  if (!escaped || !/^[ntr]/.test(key)) return key;
+  const rest = key.slice(1);
+  return matchesCredentialKey(rest) ? rest : key;
 }
 
 function redactValue(value: unknown, seen = new WeakSet<object>()): unknown {
@@ -95,21 +120,119 @@ function containerEnd(text: string, start: number): number {
   return text.length;
 }
 
-function redactAssignments(text: string, credentialsOnly = false): string {
+// Literal escapes can be part of a credential, even before key-like text.
+// Only real delimiters end an unquoted value; ambiguous suffixes stay masked.
+function valueEnd(text: string, start: number): number {
+  let end = start;
+  while (end < text.length) {
+    const character = text[end]!;
+    if (/[\s"',;}&\]]/.test(character)) break;
+    end++;
+  }
+  return end;
+}
+
+function unquotedValueEnd(text: string, start: number): number {
+  while (start < text.length) {
+    const quote = text[start];
+    if (quote === '"' || quote === "'") {
+      const end = quotedEnd(text, start);
+      return text[end] === quote ? end + 1 : end;
+    }
+    if (quote === "{" || quote === "[") return containerEnd(text, start);
+
+    let end = valueEnd(text, start);
+    // A scheme and credential can occur under any sensitive key. Preserve
+    // a following spaced assignment, not '=' or ':' within the credential.
+    let credential = end;
+    while (text[credential] === " " || text[credential] === "\t") credential++;
+    if (
+      end > start &&
+      credential > end &&
+      /^[A-Za-z][A-Za-z0-9._+-]*$/.test(text.slice(start, end)) &&
+      !/^[A-Za-z0-9_-]+\s+[:=]/.test(text.slice(credential))
+    ) {
+      end = credential;
+      if (text[end] === '"' || text[end] === "'") {
+        const credentialQuote = text[end];
+        end = quotedEnd(text, end);
+        if (text[end] === credentialQuote) end++;
+      } else {
+        end = valueEnd(text, end);
+      }
+    }
+
+    // The run may have swallowed the next sensitive key, glued after an escape or
+    // any other character. Keep it masked and include its value; repeat for chains.
+    // Scan back from the separator: an end-anchored regex backtracks on long runs.
+    const separator = end - 1;
+    if (end <= start || !/[:=]/.test(text[separator]!) || !/[ \t]/.test(text[end] ?? ""))
+      return end;
+    let keyStart = separator;
+    while (keyStart > start && /[A-Za-z0-9_-]/.test(text[keyStart - 1]!)) keyStart--;
+    const gluedKey = text.slice(keyStart, separator);
+    if (!gluedKey || !isSensitiveKey(unescapeCredentialKey(gluedKey, text[keyStart - 1] === "\\")))
+      return end;
+    start = end;
+    while (text[start] === " " || text[start] === "\t") start++;
+  }
+  return start;
+}
+
+// Command output may contain source. Only bare, plainly executable/type-like values
+// qualify; token-shaped values and quoted strings still follow the conservative path.
+function isCodeValue(text: string, start: number): boolean {
+  if (/^["'`]/.test(text.slice(start, start + 1))) return false;
+  if (/^(?:\$\{[^{}]+\}|\{\{[^{}]+\}\})/.test(text.slice(start))) return true;
+  if (/^[{[]/.test(text.slice(start, start + 1))) return false;
+  const value = text.slice(start, valueEnd(text, start));
+  if (PLACEHOLDER.test(value)) return true;
+  if (
+    (value.length >= 32 && /^[A-Za-z0-9_+/=-]+$/.test(value)) ||
+    /^(?:gh[pousr]_|github_pat_|AKIA|ASIA|sk-|xai-|ak_|ck_)/.test(value)
+  )
+    return false;
+  // A number under a credential key can be a PIN, password or one-time code; named
+  // counters such as maxTokens are exempt by key, so every other number stays masked.
+  if (/^[+-]?(?:\d+(?:\.\d+)?|0x[\da-f]+)$/i.test(value)) return false;
+  const rest = text.slice(start);
+  // Do not mistake an authorization scheme followed by an opaque value for source.
+  const identifier = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/.exec(rest)?.[0];
+  if (!identifier) return false;
+  const suffix = rest.slice(identifier.length);
+  if (suffix.startsWith("(")) return true;
+  if (!/^\??[ \t]*(?:[,;}\]\r\n]|$|\\[ntr])/.test(suffix)) return false;
+  if (identifier.includes(".")) return true;
+  // A bare word can equally be a YAML/environment credential. Preserve only
+  // explicit type syntax. Named collection references are handled by key classification.
+  return (
+    /^(?:string|number|boolean|unknown|never|any|void|bigint|symbol|object)$/.test(identifier) &&
+    /^[ \t]*;/.test(suffix)
+  );
+}
+
+function redactAssignments(text: string, credentialsOnly = false, commandOutput = false): string {
   const keys = new RegExp(ASSIGNMENT_KEY);
   const parts: string[] = [];
   let copied = 0;
   for (let match = keys.exec(text); match; match = keys.exec(text)) {
     const key = match[2] ?? match[3]!;
+    // A literal escape's letter can be captured as the next bare key's prefix.
+    const escaped = match[2] === undefined && text[match.index - 1] === "\\";
+    const credentialKey = unescapeCredentialKey(key, escaped);
     // Diagnostics also hide addresses and bare "key" assignments; a credential check keeps them.
     const privacyKey =
-      !credentialsOnly && (match[2] !== undefined ? /email/i.test(key) : /^key$/i.test(key));
-    if (!isSensitiveKey(key) && !privacyKey) continue;
+      !credentialsOnly &&
+      (match[2] !== undefined
+        ? /email/i.test(key)
+        : (escaped ? /^[ntr]?key$/i : /^key$/i).test(key));
+    if (!isSensitiveKey(credentialKey) && !privacyKey) continue;
     const start = keys.lastIndex;
     const quote = text[start];
+    if (commandOutput && match[2] === undefined && isCodeValue(text, start)) continue;
     let end = start;
     let replacement = REDACTED;
-    if (quote === '"' || quote === "'") {
+    if (quote === '"' || quote === "'" || (commandOutput && quote === "`")) {
       end = quotedEnd(text, start);
       const closed = text[end] === quote;
       const value = text.slice(start + 1, end);
@@ -118,30 +241,7 @@ function redactAssignments(text: string, credentialsOnly = false): string {
       if (closed && PLACEHOLDER.test(value)) continue;
       replacement = `${quote}${REDACTED}${closed ? quote : ""}`;
     } else {
-      if (quote === "{" || quote === "[") {
-        end = containerEnd(text, start);
-      } else {
-        while (end < text.length && !/[\s"',;}&\]]/.test(text[end]!)) end++;
-        // A scheme and credential can occur under any sensitive key. Preserve
-        // a following spaced assignment, not '=' or ':' within the credential.
-        let credential = end;
-        while (text[credential] === " " || text[credential] === "\t") credential++;
-        if (
-          end > start &&
-          credential > end &&
-          /^[A-Za-z][A-Za-z0-9._+-]*$/.test(text.slice(start, end)) &&
-          !/^[A-Za-z0-9_-]+\s+[:=]/.test(text.slice(credential))
-        ) {
-          end = credential;
-          if (text[end] === '"' || text[end] === "'") {
-            const credentialQuote = text[end];
-            end = quotedEnd(text, end);
-            if (text[end] === credentialQuote) end++;
-          } else {
-            while (end < text.length && !/[\s"',;}&\]]/.test(text[end]!)) end++;
-          }
-        }
-      }
+      end = unquotedValueEnd(text, start);
       keys.lastIndex = end;
       if (end === start) continue;
       // Replacing a JSON scalar or container must leave valid JSON, too.
@@ -179,11 +279,22 @@ export function redactCredentialText(text: string): string {
   return redactText(text, true);
 }
 
-function redactText(text: string, credentialsOnly: boolean): string {
+/** Source-aware redaction for retained shell output only; logs and memories stay conservative. */
+export function redactCommandOutput(text: string): string {
+  return redactText(text, false, true);
+}
+
+function redactText(text: string, credentialsOnly: boolean, commandOutput = false): string {
+  // Remove blocks first: a preceding credential assignment can consume the BEGIN marker.
+  // An unfinished block stays secret through the end of the string.
+  let result = text.replace(
+    /-----BEGIN [A-Z ]*PRIVATE KEY(?:-----|(?=\r?\n|$))[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g,
+    REDACTED,
+  );
   // Hide URL credentials before their password/host suffix can look like an email.
-  let result = text.includes("@") ? text.replace(CREDENTIAL_URL, `$1${REDACTED}@`) : text;
+  if (result.includes("@")) result = result.replace(CREDENTIAL_URL, `$1${REDACTED}@`);
   if (!credentialsOnly && result.includes("@")) result = result.replace(EMAIL, REDACTED);
-  result = redactAssignments(result, credentialsOnly);
+  result = redactAssignments(result, credentialsOnly, commandOutput);
   for (const [pattern, replacement] of TEXT_REDACTIONS)
     result = result.replace(pattern, replacement);
   // SHA-1 commit IDs share the AWS key length but are public provenance, not credentials.

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AgentRunRequest, AgentUsage } from "@ardurbot/adapter-kit";
+import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts";
 import type { HostFrame, HostOperation } from "@ardurbot/contracts/host-bridge";
 import { HermesRuntimeConfigV2Schema } from "@ardurbot/contracts/runtime-config";
 import { effectiveRuntimeConfigHash } from "@ardurbot/core/node/runtime-config-hash";
@@ -1039,5 +1040,112 @@ describe("worker-owned remote runtime callbacks", () => {
     turn.model.apiKey = "fixture-secret";
     await expect(collect(runtime(invoke).run(turn))).rejects.toThrow("own sign-in");
     expect(invoke).not.toHaveBeenCalled();
+  });
+});
+
+it("acknowledges host restart progress only after the executor persists it", async () => {
+  const input = request();
+  let release!: () => void;
+  const stored = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  input.saveCheckpoint = vi.fn(async () => {
+    await stored;
+    return true;
+  });
+  let acknowledged = false;
+  const remote = runtime(async (callback) => {
+    expect(
+      await callback(
+        frame("saveCheckpoint", [
+          [{ role: "assistant", content: "saved" }],
+          [{ type: "usage", provider: "test", model: "pinned", inputTokens: 3, outputTokens: 5 }],
+        ]),
+      ),
+    ).toBe(true);
+    acknowledged = true;
+  });
+  const work = collect(remote.run(input));
+  await vi.waitFor(() => expect(input.saveCheckpoint).toHaveBeenCalledOnce());
+  expect(acknowledged).toBe(false);
+  release();
+  await work;
+  expect(acknowledged).toBe(true);
+});
+
+it("names a paired host provider 429 from the worker catalog without extending the host turn", async () => {
+  const run = request();
+  run.model = {
+    ...run.model,
+    provider: "zai-coding-cn",
+    id: "glm-5.3",
+    thinkingLevel: "high",
+    runtimePin: {
+      runtimeKind: "hermes",
+      provider: "zai-coding-cn",
+      modelId: "glm-5.3",
+      effort: "high",
+      credentialId: "fixture",
+      revision: 1,
+    },
+  };
+  const problem = runtimePinProblem(
+    run.model.runtimePin!,
+    "runtime-unavailable",
+    "host sentence",
+    "provider-rate-limit",
+  );
+  const adapter = new RemoteHostRuntime(
+    {
+      health: async () => ({
+        generation: "00000000-0000-4000-8000-000000000001",
+        capabilities: { providerRelay: 1 },
+      }),
+      request: async function* (operation: { request: { model: unknown } }) {
+        expect(operation.request.model).not.toHaveProperty("providerName");
+        yield { channel: "event", data: { type: "text", text: "fixture" } };
+        throw new RuntimePinError(problem);
+      },
+    } as unknown as HostClient,
+    "hermes",
+    async (_request, _context, fence) => ({
+      broker: {
+        grant: {
+          id: "00000000-0000-4000-8000-000000000002",
+          token: "a".repeat(43),
+          expiresAt: Date.now() + 60000,
+        },
+        revoke: vi.fn(),
+      } as unknown as HermesProviderBroker,
+      scope: {
+        runId: run.runId,
+        botId: run.botId,
+        userId: "fixture",
+        spaceId: "fixture",
+        operationId: fence.operationId,
+        leaseOwner: "fixture",
+        leaseFence: 1,
+        hostGeneration: createHash("sha256")
+          .update("00000000-0000-4000-8000-000000000001")
+          .digest()
+          .readUIntBE(0, 6),
+        configurationHash: "fixture",
+        pin: {
+          credentialId: "fixture",
+          provider: "zai-coding-cn",
+          modelId: "glm-5.3",
+          effort: "high",
+        },
+      },
+    }),
+  );
+  await expect(
+    collect(adapter.run(run, { userId: "fixture", spaceId: "fixture" })),
+  ).rejects.toMatchObject({
+    problem: {
+      reasonId: "provider-rate-limit",
+      reason:
+        "Z.AI Coding CN is refusing requests right now (rate or usage limit). Try again later or check your plan.",
+    },
   });
 });

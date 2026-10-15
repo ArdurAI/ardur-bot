@@ -24,13 +24,15 @@ import type {
   ComputerInput,
   ComputerRef,
   ControlLeaseRef,
+  GitChangesResult,
   PortableFile,
   ProcessEvent,
   SandboxProvider,
   ScreenRequest,
   ScreenSession,
 } from "@ardurbot/adapter-kit";
-import { IDE_FILE_BYTES } from "@ardurbot/contracts";
+import { GIT_OBSERVATION_TEXT_SIDE_BYTES } from "@ardurbot/adapter-kit";
+import { CommandRefusalError, IDE_FILE_BYTES } from "@ardurbot/contracts";
 import { HOST_FILE_BYTES, hostEnvironmentNote } from "@ardurbot/contracts/host-bridge";
 import { parseRegisteredFolders } from "@ardurbot/contracts/host-folders";
 import {
@@ -51,9 +53,11 @@ import {
   openChildDirectoryViaDirectoryFdWin32,
   openExistingChildViaDirectoryFdWin32,
   pathFromDirectoryFd,
+  resolveWin32FinalPath,
   win32NtRelativeAvailable,
 } from "./desktop-sandbox-win32-path.js";
 import { hostCapacity } from "./fleet/capacity.js";
+import { observeHostGitChanges, redactGitChanges } from "./git-reader.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
 import type { HostGuardrailConfig } from "./host-guardrails.js";
 import {
@@ -64,12 +68,7 @@ import {
   seatbeltProfile,
 } from "./host-guardrails.js";
 import { verifyHostIntegration } from "./host-integrations.js";
-import {
-  confinedHostCwd,
-  FILE_LOCATION_REFUSAL,
-  hostCommand,
-  resolvedRoots,
-} from "./host-policy.js";
+import { confinedHostCwd, hostCommand, resolvedRoots } from "./host-policy.js";
 
 const O_NOFOLLOW = constants.O_NOFOLLOW ?? 0;
 
@@ -367,11 +366,11 @@ export class DesktopSandboxProvider implements SandboxProvider {
   async listFiles(
     computer: ComputerRef,
     directory: string,
-    _context: AdapterContext,
+    context: AdapterContext,
   ): Promise<ComputerFileEntry[]> {
     const box = this.requiredBox(computer);
-    const { root, target } = await this.fileTarget(box.home, directory, true);
-    const resolvedRoot = await realpath(root);
+    const { root, target } = await this.fileTarget(box.home, directory, true, context.fileRoot);
+    const resolvedRoot = root;
     const relative = path.isAbsolute(directory) ? directory : normalizeWorkspacePath(directory);
     const guarded = (await this.guardrail()).paths;
     this.assertNotGuarded(guarded, target);
@@ -395,6 +394,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
               path.relative(resolvedRoot, path.join(target, entry.name)),
               true,
               (candidate) => this.assertNotGuarded(guarded, candidate),
+              resolvedRoot,
             );
         this.assertNotGuarded(guarded, child);
         const info = literalName ? await lstat(child) : await stat(child);
@@ -412,11 +412,11 @@ export class DesktopSandboxProvider implements SandboxProvider {
   async readFile(
     computer: ComputerRef,
     filePath: string,
-    _context?: AdapterContext,
+    context?: AdapterContext,
     options?: { maxBytes?: number; preview?: boolean },
   ) {
     const box = this.requiredBox(computer);
-    const { root, target } = await this.fileTarget(box.home, filePath, true);
+    const { root, target } = await this.fileTarget(box.home, filePath, true, context?.fileRoot);
     this.assertNotGuarded((await this.guardrail()).paths, target);
     if (this.opts.restricted)
       return readContainedWorkspaceFile(
@@ -441,11 +441,42 @@ export class DesktopSandboxProvider implements SandboxProvider {
     );
   }
 
-  async writeFile(computer: ComputerRef, file: PortableFile) {
+  async gitChanges(
+    computer: ComputerRef,
+    request: { path?: string },
+    context: AdapterContext,
+  ): Promise<GitChangesResult> {
+    const box = this.requiredBox(computer);
+    // Root narrowing reuses the held-handle realpath checks; the observation
+    // itself only accepts a `.git` directory directly inside this root. A Team
+    // bot asks for its own subfolder, mirroring the workspace file requests.
+    const base = context.fileRoot ? normalizeWorkspacePath(context.fileRoot) : "";
+    const { root } = await this.fileTarget(box.home, base, true, context.fileRoot);
+    const guarded = (await this.guardrail()).paths;
+    const result = await observeHostGitChanges(root, {
+      path: request.path,
+      readWorktreeFile: async (relative, options) => {
+        const target = await localWorkspaceTarget(root, relative, true, (candidate) =>
+          this.assertNotGuarded(guarded, candidate),
+        );
+        this.assertNotGuarded(guarded, target);
+        return readContainedWorkspaceFile(
+          root,
+          target,
+          GIT_OBSERVATION_TEXT_SIDE_BYTES + 1,
+          true,
+          options?.signal,
+        );
+      },
+    });
+    return redactGitChanges(result);
+  }
+
+  async writeFile(computer: ComputerRef, file: PortableFile, context?: AdapterContext) {
     if (this.opts.restricted && process.platform === "win32" && !win32NtRelativeAvailable())
       throw new Error("Host file writes require native directory handles on Windows.");
     const box = this.requiredBox(computer);
-    const { root, target } = await this.fileTarget(box.home, file.path, false);
+    const { root, target } = await this.fileTarget(box.home, file.path, false, context?.fileRoot);
     this.assertNotGuarded((await this.guardrail()).paths, target);
     const handle = await openContainedWorkspaceFile(root, target, file.executable ? 0o700 : 0o600);
     try {
@@ -517,31 +548,45 @@ export class DesktopSandboxProvider implements SandboxProvider {
   }
 
   /** Select a trusted root before using the existing race-resistant contained file helpers. */
-  private async fileTarget(home: string, requested: string, mustExist: boolean) {
+  private async fileTarget(home: string, requested: string, mustExist: boolean, fileRoot?: string) {
     if (requested.includes("\0") || requested.split(/[/\\]/u).includes(".."))
-      throw new Error(FILE_LOCATION_REFUSAL);
+      throw new CommandRefusalError("file-location");
     let root = home;
     let relative = requested;
-    if (path.isAbsolute(requested)) {
+    if (fileRoot !== undefined) {
+      const normalized = normalizeDesktopWorkspacePath(fileRoot);
+      const canonicalHome = await realpath(home);
+      root = path.resolve(canonicalHome, normalized);
+      // A Team root itself cannot be redirected into a sibling bot's folder.
+      if ((await realpath(root)) !== root) throw new CommandRefusalError("file-location");
+      relative = path.relative(normalized || ".", requested);
+      if (path.isAbsolute(requested) || !isAllowedDesktopPath(path.resolve(root, relative), [root]))
+        throw new CommandRefusalError("file-location");
+    } else if (path.isAbsolute(requested)) {
       const roots = await this.allowedRoots(home);
       const available = [...roots, ...(await resolvedRoots(roots))];
       const match = available.find((candidate) => isAllowedDesktopPath(requested, [candidate]));
-      if (!match) throw new Error(FILE_LOCATION_REFUSAL);
+      if (!match) throw new CommandRefusalError("file-location");
       root = match;
       relative = path.relative(root, requested);
     }
+    root = await workspaceRealpath(root);
     const guarded = (await this.guardrail()).paths;
     // Check before creating missing parents, as well as after realpath resolution.
-    this.assertNotGuarded(guarded, path.resolve(await realpath(root), relative));
+    this.assertNotGuarded(guarded, path.resolve(root, relative));
     try {
-      const target = await localWorkspaceTarget(root, relative, mustExist, (candidate) =>
-        this.assertNotGuarded(guarded, candidate),
+      const target = await localWorkspaceTarget(
+        root,
+        relative,
+        mustExist,
+        (candidate) => this.assertNotGuarded(guarded, candidate),
+        root,
       );
       this.assertNotGuarded(guarded, target);
       return { root, target };
     } catch (error) {
       if (error instanceof Error && error.message === "Path escapes the computer workspace")
-        throw new Error(FILE_LOCATION_REFUSAL);
+        throw new CommandRefusalError("file-location");
       throw error;
     }
   }
@@ -594,8 +639,10 @@ async function readContainedWorkspaceFile(
   target: string,
   maxBytes: number,
   preview = false,
+  signal?: AbortSignal,
 ) {
-  const resolvedHome = await realpath(home);
+  signal?.throwIfAborted();
+  const resolvedHome = home;
   const parent = await open(
     path.dirname(target),
     constants.O_RDONLY | (constants.O_DIRECTORY ?? 0),
@@ -614,6 +661,7 @@ async function readContainedWorkspaceFile(
     const buffer = Buffer.alloc(maxBytes + 1);
     let offset = 0;
     while (offset < buffer.length) {
+      signal?.throwIfAborted();
       const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset);
       if (!bytesRead) break;
       offset += bytesRead;
@@ -631,12 +679,13 @@ async function localWorkspaceTarget(
   relative: string,
   mustExist: boolean,
   assertTarget?: (target: string) => void,
+  canonicalHome?: string,
 ) {
   const normalized = normalizeDesktopWorkspacePath(relative);
   const candidate = path.resolve(home, normalized);
   if (!isAllowedDesktopPath(candidate, [home]))
     throw new Error("Path escapes the computer workspace");
-  const resolvedHome = await realpath(home);
+  const resolvedHome = canonicalHome ?? (await workspaceRealpath(home));
   if (!mustExist) {
     // Walk/create parents from a held directory fd so a junction swap cannot
     // redirect mkdir outside the workspace between validation and creation.
@@ -733,21 +782,21 @@ async function localWorkspaceTarget(
       await parentHandle.close().catch(() => undefined);
     }
   }
-  const resolved = await realpath(candidate);
+  const resolved = await workspaceRealpath(candidate);
   if (!isAllowedDesktopPath(resolved, [resolvedHome]))
     throw new Error("Path escapes the computer workspace");
   return resolved;
 }
 
 async function openContainedWorkspaceFile(home: string, target: string, mode: number) {
-  const resolvedHome = await realpath(home);
+  const resolvedHome = home;
   const parentPath = path.dirname(target);
   const name = path.basename(target);
   if (!name || name === "." || name === "..") {
     throw new Error("Path escapes the computer workspace");
   }
 
-  const parentReal = await realpath(parentPath);
+  const parentReal = await workspaceRealpath(parentPath);
   if (!isAllowedDesktopPath(parentReal, [resolvedHome])) {
     throw new Error("Path escapes the computer workspace");
   }
@@ -780,11 +829,7 @@ async function openContainedWorkspaceFile(home: string, target: string, mode: nu
         created = true;
         await handle.chmod(mode).catch(() => undefined);
       }
-      try {
-        openedPath = pathFromDirectoryFd(handle.fd);
-      } catch {
-        openedPath = path.join(containedParent, name);
-      }
+      openedPath = pathFromDirectoryFd(handle.fd);
     } else {
       // Prefer directory-fd relative opens so a parent path swap cannot redirect creates.
       const viaDirFd = childPathViaDirFd(parentHandle.fd, name);
@@ -869,7 +914,7 @@ async function assertContainedDirectoryHandle(
     if (named?.isSymbolicLink() || !isAllowedDesktopPath(resolved, [resolvedHome])) {
       throw new Error("Path escapes the computer workspace");
     }
-    const fully = await realpath(resolved);
+    const fully = await workspaceRealpath(resolved);
     if (!isAllowedDesktopPath(fully, [resolvedHome])) {
       throw new Error("Path escapes the computer workspace");
     }
@@ -916,7 +961,7 @@ async function assertContainedFileHandle(
     ) {
       throw new Error("Path escapes the computer workspace");
     }
-    const fully = await realpath(resolved);
+    const fully = await workspaceRealpath(resolved);
     if (!isAllowedDesktopPath(fully, [resolvedHome])) {
       throw new Error("Path escapes the computer workspace");
     }
@@ -975,15 +1020,12 @@ function childPathViaDirFd(fd: number, name: string) {
 
 async function realpathFromFd(fd: number) {
   if (process.platform === "linux") return realpath(`/proc/self/fd/${fd}`);
-  if (process.platform === "win32") {
-    try {
-      return pathFromDirectoryFd(fd);
-    } catch {
-      // Hosts that only pretend to be win32 (unit tests) lack the Win32 APIs.
-      return undefined;
-    }
-  }
+  if (win32NtRelativeAvailable()) return pathFromDirectoryFd(fd);
   return undefined;
+}
+
+async function workspaceRealpath(target: string) {
+  return win32NtRelativeAvailable() ? resolveWin32FinalPath(target) : realpath(target);
 }
 
 function hasErrorCode(error: unknown, code: string): error is NodeJS.ErrnoException {

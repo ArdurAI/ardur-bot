@@ -5,6 +5,7 @@ import { TerminalRegistry } from "./terminal.js";
 import type { TerminalProcess } from "./terminal-process.js";
 
 const grant = {
+  authority: "fixture-authority",
   leaseId: "test-lease",
   fence: 1,
   generation: "test-container",
@@ -26,6 +27,43 @@ function process() {
 }
 afterEach(() => vi.useRealTimers());
 describe("Docker terminal registry", () => {
+  it("admits four exact-grant sessions, closes only one and revokes every old fence", async () => {
+    const registry = new TerminalRegistry(() => 1_000);
+    const processes = [process(), process(), process(), process()];
+    const sessions = await Promise.all(
+      processes.map((p) => registry.open("computer", grant, async () => p)),
+    );
+    await expect(registry.open("computer", grant, async () => process())).rejects.toThrow("busy");
+    await registry.close(sessions[1]!.id);
+    expect(registry.sessions.size).toBe(3);
+    expect(registry.current(sessions[0]!.id, "computer")).toBeDefined();
+    await expect(registry.command("computer", async () => {})).rejects.toThrow();
+    const replacement = await registry.open(
+      "computer",
+      { ...grant, fence: 2, leaseId: "next-lease" },
+      async () => process(),
+    );
+    expect(registry.sessions.size).toBe(1);
+    for (const p of processes) expect(p.close).toHaveBeenCalledOnce();
+    expect(() => registry.current(sessions[0]!.id, "computer")).toThrow();
+    await expect(registry.open("computer", grant, async () => process())).rejects.toThrow("Stale");
+    await registry.close(replacement.id);
+  });
+  it.each([
+    { leaseId: "other" },
+    { generation: "other" },
+    { authority: "other" },
+    { authority: undefined },
+    { workingRoot: "/another" },
+    { startedAt: "changed" },
+  ])("refuses a different shared authority: %s", async (change) => {
+    const registry = new TerminalRegistry(() => 1_000);
+    const one = await registry.open("computer", grant, async () => process());
+    await expect(
+      registry.open("computer", { ...grant, ...change }, async () => process()),
+    ).rejects.toThrow("busy");
+    await registry.close(one.id);
+  });
   it("atomically admits either a command or a terminal, never both", async () => {
     const registry = new TerminalRegistry(() => 1_000),
       p = process();

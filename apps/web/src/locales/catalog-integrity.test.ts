@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { COMMAND_REFUSALS } from "@ardurbot/contracts";
 import { FAILURE_CATEGORIES } from "@ardurbot/contracts/failure-categories";
 import { createCompiledCatalog, getCatalogForFile, getCatalogs } from "@lingui/cli/api";
 import { getConfig } from "@lingui/conf";
@@ -43,6 +44,26 @@ async function translations(locale: string) {
 }
 
 describe("web catalogs", () => {
+  it.each(locales)(
+    "renders both command refusals through the configured %s catalog",
+    async (locale) => {
+      const sources = await sourceMessages;
+      const { source, errors } = createCompiledCatalog(locale, await translations(locale), {
+        namespace: "json",
+      });
+      expect(errors).toEqual([]);
+      i18n.load(locale, JSON.parse(source).messages);
+      i18n.activate(locale);
+      for (const text of Object.values(COMMAND_REFUSALS)) {
+        const id = [...sources].find(([, message]) => message === text)?.[0];
+        expect(id).toBeDefined();
+        const shown = i18n._(id!);
+        expect(shown).toBeTruthy();
+        if (locale !== "en") expect(shown).not.toBe(text);
+        else expect(shown).toBe(text);
+      }
+    },
+  );
   it.each(locales)("pairs every msgid in the %s catalog with one msgstr", (locale) => {
     const broken = readFileSync(catalogFile(locale), "utf8")
       .split(/\n{2,}/)

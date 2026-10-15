@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import type { MessageBlock } from "@ardurbot/contracts";
+import { GOAL_FREEZE_CANCELLED } from "@ardurbot/contracts";
+import { i18n } from "@lingui/core";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -32,6 +35,33 @@ describe("NarrationBlocks", () => {
     });
 
     expect(container.textContent).toContain("First fixture token");
+  });
+
+  it("translates the stored freeze reason in ordinary chat", () => {
+    const sentence = "The goal reached owner review before this work started.";
+    const catalog = readFileSync("apps/web/src/locales/ru/messages.po", "utf8");
+    const entry = `msgid ${JSON.stringify(sentence)}\nmsgstr "`;
+    const at = catalog.indexOf(entry);
+    expect(at).toBeGreaterThanOrEqual(0);
+    const translation = catalog.slice(at + entry.length, catalog.indexOf('"\n', at + entry.length));
+    i18n.load("ru", { [sentence]: translation });
+    i18n.activate("ru");
+    try {
+      act(() =>
+        root.render(
+          <NarrationBlocks
+            blocks={[
+              { kind: "text", text: `Coordinator → Worker: cancelled.\n${GOAL_FREEZE_CANCELLED}` },
+            ]}
+          />,
+        ),
+      );
+      expect(container.textContent).toContain(translation);
+      expect(container.textContent).not.toContain(GOAL_FREEZE_CANCELLED);
+      expect(container.textContent).not.toContain(sentence);
+    } finally {
+      i18n.activate("en");
+    }
   });
 
   it("renders text and progress narration in order", () => {

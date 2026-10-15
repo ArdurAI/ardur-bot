@@ -12,6 +12,7 @@ import type { ChiefReceipt, ThreadSendResult } from "@ardurbot/contracts";
 import {
   type Actor,
   ContextSnapshotSchema,
+  canonicalDispatchJson,
   GROUP_MEMBER_MIN,
   type GroupMember,
   type MessageBlock,
@@ -29,25 +30,27 @@ import { RunPlacementSchema } from "@ardurbot/contracts/fleet";
 import {
   ACTIVE_RUN_STATUSES,
   chiefIntent,
-  chiefWantsIndividualReplies,
-  hasMentionToken,
   isActive,
   parseChiefCorrection,
   progressMessageId,
   projectMessages,
-  resolveAddressedBotIds,
   runFailureError,
 } from "@ardurbot/core";
 import { localTaskClassifier } from "@ardurbot/core/effort-router";
+import {
+  groupMentionBotIds,
+  groupMessageRecipientIds,
+} from "@ardurbot/core/group-message-recipients";
 import { deriveMessageQuote } from "@ardurbot/core/message-quote";
+import type { createRepos } from "@ardurbot/db";
 import {
   answerWaitingRunWithTextInTransaction,
   appendEventInTransaction,
   applyChiefCorrectionInTransaction,
   createChiefReceipt,
-  createGroupRepos,
-  createRepos,
   createThreadMessageInTransaction,
+  DeviceRequestError,
+  deviceDigest,
   expireComputerExecutionLeases,
   findChiefCorrectionPlan,
   goalExhaustionReason,
@@ -58,6 +61,7 @@ import {
   type PrismaClient,
   readChiefReceipt,
   recordStoppedGroupAskOutcomesInTransaction,
+  resolveReadableThreadTarget,
   saveChiefSelection,
   type ThreadEvents,
   touchGroupUpdatedAt,
@@ -72,6 +76,7 @@ import {
 } from "./artifacts.js";
 import { resolveComposerReferences } from "./composer-references.js";
 import { resolveBusyBotName, toComputerStatus } from "./computer-status.js";
+import type { DeviceRoomContext } from "./device-room-context.js";
 import { storedRunFailure } from "./run-failure-kind.js";
 import { withSerializableRetry } from "./serializable-retry.js";
 import { recordThreadFeedback } from "./thread-feedback.js";
@@ -89,6 +94,7 @@ export type ThreadTarget =
       groupId: string;
       threadId: string;
       groupName: string;
+      groupRouting?: ThreadSnapshot["groupRouting"];
       members: GroupMember[];
       memberBotIds: string[];
     };
@@ -300,7 +306,8 @@ async function lockAndLoadGroupMembers(
       members: {
         where: { bot: { archivedAt: null } },
         include: { bot: { select: { id: true, name: true, color: true } } },
-        orderBy: { createdAt: "asc" },
+        // Same order as the room snapshot, so the previewed default is the one that answers.
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       },
     },
   });
@@ -317,41 +324,35 @@ export async function resolveThreadTarget(
   actor: Actor,
   input: { botId?: string; groupId?: string; threadId?: string },
 ): Promise<ThreadTarget> {
-  const repos = createRepos(prisma);
-  const groupRepos = createGroupRepos(prisma);
-  if (input.botId) {
-    const bot = await repos.getBot(actor, input.botId);
-    if (!bot.thread) throw new IsolationError();
-    let threadId = bot.thread.id;
-    if (input.threadId && input.threadId !== threadId) {
-      const conversation = await prisma.externalConversation.findFirst({
-        where: {
-          botId: bot.id,
-          userId: actor.userId,
-          spaceId: actor.spaceId,
-          thread: { id: input.threadId },
-        },
-        select: { id: true },
-      });
-      if (!conversation) throw new IsolationError();
-      threadId = input.threadId;
-    }
-    return {
-      kind: "bot",
-      botId: bot.id,
-      threadId,
-      bot,
-    };
-  }
-  if (input.groupId) {
-    const group = await groupRepos.getGroupTarget(actor, input.groupId);
-    if (!group.thread) throw new IsolationError();
+  const target = await resolveReadableThreadTarget(prisma, actor, input);
+  if (target.kind === "bot") return target;
+  if (target.kind === "group") {
+    const { group } = target;
     const members = mapGroupMembers(group.members);
     return {
       kind: "group",
       groupId: group.id,
       threadId: group.thread.id,
       groupName: group.name,
+      groupRouting: {
+        coordinatorBotId: members.some((member) => member.botId === group.coordinatorBotId)
+          ? group.coordinatorBotId
+          : null,
+        defaultBotId:
+          routeIncoming({
+            text: "",
+            bots: members.map((member) => ({
+              botId: member.botId,
+              name: member.name,
+              threadId: group.thread!.id,
+            })),
+            groupCoordinatorId: group.coordinatorBotId,
+            lastActiveThread: group.thread.runs?.[0]
+              ? { botId: group.thread.runs[0].botId, threadId: group.thread.id }
+              : null,
+            spaceCoordinatorId: group.space?.coordinatorBotId,
+          })?.botId ?? null,
+      },
       members,
       memberBotIds: members.map((member) => member.botId),
     };
@@ -556,6 +557,7 @@ export async function threadSnapshot(
   return {
     groupId: target.groupId,
     groupName: target.groupName,
+    groupRouting: target.groupRouting,
     members: target.members,
     threadId: target.threadId,
     cursor: core.last?.seq ?? -1,
@@ -693,6 +695,8 @@ function mapRun(run: {
   routingRule?: unknown;
   error: string | null;
   providerRetryAt: Date | null;
+  turnCheckpoint?: string | null;
+  leaseOwner?: string | null;
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
@@ -727,6 +731,7 @@ function mapRun(run: {
         ? runFailureError({ type: "run.failed", payload: { error: run.error } })
         : run.error,
     providerRetryAt: run.providerRetryAt?.toISOString() ?? null,
+    restarting: run.status === "running" && Boolean(run.turnCheckpoint) && run.leaseOwner === null,
     startedAt: run.startedAt?.toISOString() ?? null,
     completedAt: run.completedAt?.toISOString() ?? null,
     createdAt: run.createdAt.toISOString(),
@@ -750,8 +755,31 @@ export async function sendThreadMessage(
     replyQuote?: string;
     clientNonce?: string;
   },
+  deviceContext?: DeviceRoomContext,
 ) {
   const traceStarted = traceNow();
+  const deviceRequestFingerprint = deviceContext
+    ? deviceDigest(canonicalDispatchJson({ text: input.text }))
+    : undefined;
+  const verifyDeviceReplay = async () => {
+    if (!deviceContext) return;
+    if (
+      target.kind !== "group" ||
+      !input.clientNonce ||
+      !input.text ||
+      input.board ||
+      input.artifactIds?.length ||
+      input.mentions?.length ||
+      input.replyToMessageId
+    )
+      throw new DeviceRequestError("This action is unavailable from this device.");
+    await deps.prisma.$transaction(async (tx) => {
+      const live = await deviceContext.verify(tx, actor);
+      await lockAndLoadGroupMembers(tx, actor, target);
+      await deviceContext.replay(tx, live, target.threadId, input.clientNonce!, input.text!);
+    });
+  };
+  await verifyDeviceReplay();
   const existing = await replayExistingSend(deps, target.threadId, input.clientNonce);
   if (existing) {
     if (existing.kind !== "receipt-only") tracePoint(existing.runId, "admission.replayed");
@@ -764,6 +792,7 @@ export async function sendThreadMessage(
 
   const commit = () =>
     deps.prisma.$transaction(async (tx) => {
+      const deviceGrant = deviceContext ? await deviceContext.verify(tx, actor) : undefined;
       const contextReferences = (input.mentions ?? []).flatMap((mention) =>
         typeof mention !== "string" && (mention.kind === "mcp" || mention.kind === "folder")
           ? [{ kind: mention.kind, id: mention.id }]
@@ -1000,7 +1029,7 @@ export async function sendThreadMessage(
           : Promise.resolve(null),
         tx.run.findFirst({
           where: { threadId: target.threadId, spaceId: actor.spaceId, userId: actor.userId },
-          orderBy: { createdAt: "desc" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         }),
         tx.teamGoal?.findFirst({
           where: {
@@ -1045,18 +1074,12 @@ export async function sendThreadMessage(
               replyToMessageId: input.replyToMessageId,
             })
           : undefined;
-      const addressedBotIds = resolveAddressedBotIds({
+      const mentionBotIds = groupMentionBotIds({
         text: input.text ?? "",
         members: members.map((member) => ({ id: member.botId, name: member.name })),
+        explicitMentions: mentionTargets.botMentionIds,
       });
-      const explicit = members.filter(
-        (member) =>
-          chiefWantsIndividualReplies(input.text ?? "") ||
-          mentionTargets.botMentionIds.includes(member.botId) ||
-          hasMentionToken(input.text ?? "", member.name) ||
-          hasMentionToken(input.text ?? "", "everyone") ||
-          addressedBotIds.includes(member.botId),
-      );
+      const explicit = members.filter((member) => mentionBotIds.includes(member.botId));
       const routed = routeIncoming({
         text: input.text ?? "",
         bots: members.map((member) => ({
@@ -1073,12 +1096,19 @@ export async function sendThreadMessage(
         spaceCoordinatorId: spaceRouting?.coordinatorBotId,
       });
       if (!routed) throw new IsolationError("Group send did not resolve a target");
-      const targetBotIds =
-        correction && groupRouting?.coordinatorBotId
-          ? [groupRouting.coordinatorBotId]
-          : explicit.length
-            ? explicit.map((member) => member.botId)
-            : [routed.botId];
+      const targetBotIds = groupMessageRecipientIds({
+        text: input.text ?? "",
+        members: members.map((member) => ({ id: member.botId, name: member.name })),
+        explicitMentions: mentionTargets.botMentionIds,
+        replyBotId: replyTarget?.botId,
+        coordinatorBotId: groupRouting?.coordinatorBotId,
+        defaultBotId: routed.botId,
+      });
+      if (deviceContext && deviceGrant) {
+        if (correction && correctionPlan)
+          throw new DeviceRequestError("This action is unavailable from this device.");
+        for (const botId of targetBotIds) await deviceContext.authority(tx, deviceGrant, botId);
+      }
       const { blocks: attachmentBlocks, artifacts } = await resolveGroupSendAttachments(
         { prisma: tx },
         actor,
@@ -1125,6 +1155,7 @@ export async function sendThreadMessage(
             actorId: actor.userId,
             blocks,
             runIds: [],
+            ...(deviceRequestFingerprint ? { deviceRequestFingerprint } : {}),
           },
         });
         const { receipt, eventSeq } = await createChiefReceipt(tx, {
@@ -1163,6 +1194,7 @@ export async function sendThreadMessage(
             actorId: actor.userId,
             blocks,
             runIds: [],
+            ...(deviceRequestFingerprint ? { deviceRequestFingerprint } : {}),
           },
         });
         const { receipt, eventSeq } = await createChiefReceipt(tx, {
@@ -1308,6 +1340,19 @@ export async function sendThreadMessage(
         runs.push(run);
       }
       const firstRun = runs[0];
+      if (deviceContext && deviceGrant) {
+        for (const run of runs) {
+          await deviceContext.bindRun(
+            tx,
+            deviceGrant,
+            run,
+            input.clientNonce!,
+            input.text!,
+            target.threadId,
+            activeByBotId.has(run.botId) || answeredByBotId.has(run.botId),
+          );
+        }
+      }
       const eventBotId = firstRun?.botId ?? targetBotIds[0];
       if (!eventBotId) throw new IsolationError("Group send did not resolve a target");
       if (firstRun) {
@@ -1315,7 +1360,7 @@ export async function sendThreadMessage(
         const createdRuns = runs.filter(
           (run) => !activeByBotId.has(run.botId) && !answeredByBotId.has(run.botId),
         );
-        if (createdRuns.length) {
+        if (createdRuns.length && !deviceContext) {
           await cancelSupersededQueuedRuns(tx, {
             threadId: target.threadId,
             botIds: createdRuns.map((run) => run.botId),
@@ -1337,19 +1382,13 @@ export async function sendThreadMessage(
           actorId: actor.userId,
           blocks,
           runIds: runs.map((run) => run.id),
+          ...(deviceRequestFingerprint ? { deviceRequestFingerprint } : {}),
           replyToMessageId: input.replyToMessageId,
           replyQuote,
         },
       });
       if (chiefSend && chiefBotId && firstRun) {
-        const { receipt, eventSeq } = await createChiefReceipt(tx, {
-          ...actor,
-          threadId: target.threadId,
-          chiefBotId,
-          requestMessageId: message.id,
-          key: intent.key,
-        });
-        await saveChiefSelection(tx, {
+        const selection = await saveChiefSelection(tx, {
           spaceId: actor.spaceId,
           userId: actor.userId,
           groupId: target.groupId,
@@ -1360,12 +1399,21 @@ export async function sendThreadMessage(
           taskId: firstRun.taskId,
           operation: intent.operation,
         });
+        const { receipt, eventSeq } = await createChiefReceipt(tx, {
+          ...actor,
+          threadId: target.threadId,
+          chiefBotId,
+          requestMessageId: message.id,
+          key: intent.key,
+          selection,
+        });
         return { message, runs, eventSeq, receipt };
       }
       return { message, runs, eventSeq: event.seq };
     });
 
   const committed = await withSerializableRetry(commit).catch(async (error) => {
+    await verifyDeviceReplay();
     const winner = await replayExistingSend(deps, target.threadId, input.clientNonce);
     if (winner) return { replay: winner } as const;
     throw error;

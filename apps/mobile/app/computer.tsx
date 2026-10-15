@@ -1,6 +1,6 @@
 import type { ComputerMode, ComputerReleaseReason } from "@ardurbot/contracts";
 import { COMPUTER_PROFILES } from "@ardurbot/contracts";
-import { useLocalSearchParams, useNavigation } from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 import {
@@ -34,6 +34,7 @@ export default function Computer() {
   const { t } = useI18n();
   const tokens = useMobileTokens();
   const navigation = useNavigation();
+  const router = useRouter();
   const { botId, name: nameParam } = useLocalSearchParams<{ botId?: string; name?: string }>();
   const name = nameParam || t("Bot");
   const [computer, setComputer] = useState<ComputerStatus | null>(null);
@@ -304,6 +305,14 @@ export default function Computer() {
         disabled={switching}
         onChange={(mode) => void setComputerMode(mode)}
       />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("Git changes")}
+        onPress={() => router.push({ pathname: "/git-changes", params: { botId: botId ?? "" } })}
+        style={{ marginTop: 16 }}
+      >
+        <Text style={{ color: tokens.foreground }}>{t("Git changes")}</Text>
+      </Pressable>
 
       <Modal
         visible={booting || computerOpen}

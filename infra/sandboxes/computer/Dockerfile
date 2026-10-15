@@ -1,5 +1,7 @@
 ARG IMAGE_PROFILE=base
-FROM debian:bookworm-slim AS capture-builder
+# #199: CI supplies a public mirror prefix; local builds keep Docker Hub defaults.
+ARG DOCKERHUB_LIBRARY_PREFIX=
+FROM ${DOCKERHUB_LIBRARY_PREFIX}debian:bookworm-slim AS capture-builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libx11-dev \
@@ -14,7 +16,7 @@ COPY xcapture.c .
 RUN cc -O3 -fPIC -shared -Wall -Wextra -Werror -o libardurbot-xcapture.so xcapture.c \
     -lX11 -lXext -lXdamage -lXfixes -lXtst -lpng
 
-FROM debian:bookworm-slim AS profile-base
+FROM ${DOCKERHUB_LIBRARY_PREFIX}debian:bookworm-slim AS profile-base
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb \
     x11vnc \
@@ -68,7 +70,7 @@ USER 1000:1000
 CMD ["/usr/local/bin/ardurbot-computer"]
 
 # A dated package archive fixes the developer tool set without growing Standard.
-FROM node:24.13.1-bookworm-slim AS developer-node
+FROM ${DOCKERHUB_LIBRARY_PREFIX}node:24.13.1-bookworm-slim AS developer-node
 FROM profile-base AS profile-developer
 USER root
 RUN rm -f /etc/apt/sources.list.d/debian.sources \

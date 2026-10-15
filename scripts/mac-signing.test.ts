@@ -68,7 +68,7 @@ describe("optional macOS release signing", () => {
     expect(config.mac.notarize).toBe(true);
     expect(config.mac.strictVerify).toBe(true);
     expect(config.forceCodeSigning).toBe(true);
-    expect(config.afterSign).toBe("./scripts/sign-mac-preview.mjs");
+    expect(config.afterSign).toBe("./scripts/verify-mac-pty-signatures.mjs");
     expect(config.extraResources).toContainEqual(
       expect.objectContaining({ to: "host-service/host-service.cjs" }),
     );
@@ -80,6 +80,16 @@ describe("optional macOS release signing", () => {
       "disable-library-validation",
     ])
       expect(plist).toContain(`<key>com.apple.security.cs.${entitlement}</key>`);
+  });
+
+  it("runs native terminal conformance only on macOS packaging runners", () => {
+    const check = release.jobs.build.steps.find(
+      (step: { name?: string }) => step.name === "Check real macOS host terminals",
+    );
+    expect(check.if).toBe("matrix.platform == 'mac'");
+    expect(check.run).toBe(
+      "TESTKIT_SKIP_ROOT_ENV=1 ./node_modules/.bin/vitest run apps/host-service/src/host-terminal-pty.darwin.test.ts",
+    );
   });
 
   it("confines credentials and temporary keychain operations to the signed macOS steps", () => {

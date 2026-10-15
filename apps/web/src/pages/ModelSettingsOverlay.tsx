@@ -4,6 +4,7 @@ import {
   DEFAULT_MODEL_MAX_TOKENS,
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
+  MODEL_ID_MAX_LENGTH,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   openAiCompatibleConnectReady,
   openAiCompatibleProbeSuccessMessage,
@@ -11,6 +12,7 @@ import {
   parseModelMaxImagesPerPrompt,
   parseModelMaxTokens,
 } from "@ardurbot/contracts";
+import type { ModelConnectionChoice } from "@ardurbot/core";
 import {
   createModelProbe,
   initialModelProbeState,
@@ -29,20 +31,19 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@ardurbot/ui-web";
-import { selectableRowClasses } from "@ardurbot/ui-web/lib/state-classes";
-import { Plural, Trans, useLingui } from "@lingui/react/macro";
-import { CheckIcon, ChevronDown, X } from "lucide-react";
-import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import CatalogModelPicker from "../components/CatalogModelPicker";
 import { OllamaSettings } from "../components/OllamaSettings";
-import { ShowAllModels } from "../components/ShowAllModels";
-import { localizedProviderHint } from "../lib/localized-provider-hint";
 import type { ModelCatalogEntry, ModelCredential } from "../lib/model-auth";
 import { modelContextLabel } from "../lib/model-context-label";
-import { availableProviderModels, unavailableSubscriptionModel } from "../lib/model-options";
+import { availableProviderModels } from "../lib/model-options";
+import { modelSelectionErrorMessage } from "../lib/model-selection-error";
 import { rpc } from "../lib/rpc";
 import { thinkingLevelOptions } from "../lib/thinking-level-options";
 import { useModelOAuthSignIn } from "../lib/use-model-oauth-signin";
+import { NativeRuntimeSettings } from "./settings/NativeRuntimeSettings";
 
 export function ModelSettingsOverlay({
   onClose,
@@ -65,9 +66,10 @@ export function ModelSettingsOverlay({
   const [credentials, setCredentials] = useState<ModelCredential[]>([]);
   const [me, setMe] = useState<Me | null>(null);
   const [provider, setProvider] = useState(initialProvider ?? "");
-  const [providerQuery, setProviderQuery] = useState("");
+  const [credentialId, setCredentialId] = useState<string | undefined>();
+  const [editingConnection, setEditingConnection] = useState(false);
+  const [pickedEntry, setPickedEntry] = useState<ModelCatalogEntry | null>(null);
   const [modelId, setModelId] = useState("");
-  const [showAllModels, setShowAllModels] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [reasoning, setReasoning] = useState(false);
@@ -129,8 +131,15 @@ export function ModelSettingsOverlay({
       provider && nextCatalog.some((entry) => entry.provider === provider)
         ? provider
         : (nextMe.defaultProvider ?? nextCatalog[0]?.provider ?? "");
-    const nextCredential = nextCredentials.find((entry) => entry.provider === nextProvider);
-    const nextModels = availableProviderModels(nextCatalog, nextProvider, showAllModels);
+    const nextCredential =
+      nextCredentials.find(
+        (entry) => entry.provider === nextProvider && entry.id === credentialId,
+      ) ??
+      nextCredentials.find((entry) => entry.provider === nextProvider && entry.isDefault) ??
+      (nextCredentials.filter((entry) => entry.provider === nextProvider).length === 1
+        ? nextCredentials.find((entry) => entry.provider === nextProvider)
+        : undefined);
+    const nextModels = availableProviderModels(nextCatalog, nextProvider);
     const nextModel =
       nextProvider === OPENAI_COMPATIBLE_PROVIDER_ID
         ? (nextCredential?.modelId ??
@@ -150,6 +159,7 @@ export function ModelSettingsOverlay({
     if (selectionRevision === selectionRevisionRef.current) {
       resetOpenAiCompatibleProbe();
       setProvider(nextProvider);
+      setCredentialId(nextCredential?.id);
       setModelId(nextModel);
       if (nextProvider === OPENAI_COMPATIBLE_PROVIDER_ID) {
         setBaseUrl(nextCredential?.baseUrl ?? "");
@@ -182,52 +192,27 @@ export function ModelSettingsOverlay({
     };
   }, []);
 
-  const groups = useMemo(() => {
-    const grouped = new Map<string, ModelCatalogEntry[]>();
-    for (const entry of catalog) {
-      const entries = grouped.get(entry.provider) ?? [];
-      entries.push(entry);
-      grouped.set(entry.provider, entries);
-    }
-    return [...grouped].map(([id, entries]) => ({
-      id,
-      name: entries[0]?.providerName ?? id,
-      source: entries[0]!,
-      entries: availableProviderModels(entries, id, id === provider && showAllModels).filter(
-        (entry) => id !== "ollama" || !entry.placeholder,
-      ),
-    }));
-  }, [catalog, provider, showAllModels]);
-  const filteredGroups = useMemo(() => {
-    const query = providerQuery.trim().toLowerCase();
-    if (!query) return groups;
-    return groups.filter((group) =>
-      [group.id, group.name, ...group.entries.flatMap((entry) => [entry.id, entry.label])]
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
-    );
-  }, [groups, providerQuery]);
-  const hasHiddenModels = catalog.some(
-    (entry) =>
-      entry.provider === provider && unavailableSubscriptionModel(catalog, provider, entry.id),
-  );
-  const modelsForProvider = availableProviderModels(catalog, provider, showAllModels);
+  const modelsForProvider = availableProviderModels(catalog, provider);
   const recommendedId = recommendedDefaultModelId(
     provider,
     modelsForProvider.map((entry) => entry.id),
   );
   const selected =
+    (pickedEntry?.provider === provider ? pickedEntry : undefined) ??
     catalog.find((entry) => entry.provider === provider && entry.id === modelId) ??
     modelsForProvider.find((entry) => entry.id === recommendedId);
   selectedLabelRef.current = selected?.label;
   const isOpenAiCompatible = provider === OPENAI_COMPATIBLE_PROVIDER_ID;
-  const credential = credentials.find((entry) => entry.provider === provider);
+  const credential = credentials.find((entry) => entry.id === credentialId);
+  const connectionReady = Boolean(
+    credential?.hasKey && !credential.connectionIssue && !selected?.placeholder,
+  );
   const currentEntry = catalog.find(
     (entry) => entry.provider === me?.defaultProvider && entry.id === me?.defaultModel,
   );
   const isActive =
-    credential?.connectionIssue === undefined &&
+    credential?.isDefault === true &&
+    credential.connectionIssue === undefined &&
     me?.defaultProvider === selected?.provider &&
     me?.defaultModel === (isOpenAiCompatible ? modelId.trim() : selected?.id);
   const acceptsKey = selected?.auth !== "oauth";
@@ -251,12 +236,11 @@ export function ModelSettingsOverlay({
     resetOpenAiCompatibleProbe();
   }
 
-  function chooseProvider(nextProvider: string) {
+  function chooseProvider(nextProvider: string, nextCredential?: ModelCredential) {
     cancelOAuthAttempt();
     selectionRevisionRef.current += 1;
-    const nextCredential = credentials.find((entry) => entry.provider === nextProvider);
     setProvider(nextProvider);
-    setShowAllModels(false);
+    setCredentialId(nextCredential?.id);
     setReasoning(nextCredential?.reasoning ?? false);
     setThinkingLevel(nextCredential?.thinkingLevel ?? null);
     setMaxTokens(String(nextCredential?.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS));
@@ -286,6 +270,16 @@ export function ModelSettingsOverlay({
     setNotice(null);
   }
 
+  function chooseModel(choice: ModelConnectionChoice | null) {
+    chooseProvider(choice?.entry.provider ?? "", choice?.credential);
+    setPickedEntry(choice?.entry ?? null);
+    setEditingConnection(Boolean(choice?.entry.placeholder));
+    if (!choice) return;
+    setModelId(choice.entry.placeholder ? "" : choice.entry.id);
+    setCredentialId(choice.credential?.id);
+    setBaseUrl(choice.credential?.baseUrl ?? "");
+  }
+
   async function probeServerModels() {
     if (!baseUrl.trim()) return;
     setError(null);
@@ -311,11 +305,15 @@ export function ModelSettingsOverlay({
     setNotice(null);
     setPending("default");
     try {
-      await rpc.models.setDefault({ provider: selected.provider, modelId: activeModelId });
+      await rpc.models.setDefault({
+        provider: selected.provider,
+        modelId: activeModelId,
+        credentialId: credential.id,
+      });
       await refresh();
       setNotice(isOpenAiCompatible ? t`Model updated.` : t`Now using ${selected.label}.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t`Could not change the default model`);
+      setError(modelSelectionErrorMessage(err, t`Could not change the default model`));
     } finally {
       setPending(null);
     }
@@ -361,6 +359,7 @@ export function ModelSettingsOverlay({
         isOpenAiCompatible
           ? {
               provider: selected.provider,
+              credentialId,
               baseUrl: effectiveBaseUrl,
               modelId: modelId.trim(),
               reasoning,
@@ -370,13 +369,14 @@ export function ModelSettingsOverlay({
               supportsImages,
               maxImagesPerPrompt: maxImagesPerPromptInput,
               apiKey: apiKey.trim() || undefined,
-              label: selected.providerName ?? selected.provider,
+              label: credential?.label ?? selected.providerName ?? selected.provider,
             }
           : {
               provider: selected.provider,
+              credentialId,
               apiKey: apiKey.trim(),
               modelId: selected.id,
-              label: selected.providerName ?? selected.provider,
+              label: credential?.label ?? selected.providerName ?? selected.provider,
             },
       );
       setApiKey("");
@@ -384,7 +384,7 @@ export function ModelSettingsOverlay({
       detailScrollRef.current?.scrollTo({ top: 0 });
       setNotice(isOpenAiCompatible ? t`Saved.` : t`Connected and using ${selected.label}.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t`Could not connect this provider`);
+      setError(modelSelectionErrorMessage(err, t`Could not connect this provider`));
     } finally {
       setPending(null);
     }
@@ -451,77 +451,46 @@ export function ModelSettingsOverlay({
         </div>
       </div>
 
+      {me ? <NativeRuntimeSettings canConnect={me.isDeploymentOwner === true} /> : null}
+
       <div className="flex min-w-0 flex-col gap-6 px-6 py-6 sm:px-8 @min-[44rem]:flex-row">
-        <div className="flex min-w-0 shrink-0 flex-col @min-[44rem]:w-60">
-          <div className="mb-3 text-[13.5px] text-muted-foreground">
-            <Trans>Providers</Trans>
-          </div>
-          <label className="sr-only" htmlFor="model-provider-search">
-            <Trans>Search providers</Trans>
-          </label>
-          <Input
-            id="model-provider-search"
-            value={providerQuery}
-            onChange={(event) => setProviderQuery(event.target.value)}
-            placeholder={t`Search providers`}
-            className="h-10 rounded-xl px-3.5"
+        <div className="min-w-0 flex-1">
+          <CatalogModelPicker
+            catalog={catalog}
+            credentials={credentials}
+            provider={provider}
+            modelId={modelId}
+            credentialId={credentialId}
+            onChange={chooseModel}
+            disabled={loading || pending !== null || oauthSaving || ollamaSaving}
           />
-          <div className="rk-scroll mt-3 max-h-[240px] overflow-y-auto rounded-xl border border-border @min-[44rem]:max-h-96">
-            {filteredGroups.length ? (
-              filteredGroups.map((group) => {
-                const connected = credentials.some(
-                  (entry) => entry.provider === group.id && entry.hasKey,
-                );
-                const selected = group.id === provider;
-                return (
-                  <button
-                    key={group.id}
-                    type="button"
-                    aria-current={selected ? "true" : undefined}
-                    onClick={() => chooseProvider(group.id)}
-                    className={selectableRowClasses(
-                      selected,
-                      "flex w-full items-center gap-3 border-b border-border px-3.5 py-3 text-start last:border-0",
-                    )}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] text-foreground">
-                        {group.name}
-                      </span>
-                      <span className="mt-0.5 block text-[12px] text-muted-foreground/80 font-normal">
-                        <Plural value={group.entries.length} one="# model" other="# models" />
-                        {" · "}
-                        {localizedProviderHint(group.source)}
-                      </span>
-                    </span>
-                    {connected ? (
-                      <span className="text-[12px] text-success">
-                        <Trans>Connected</Trans>
-                      </span>
-                    ) : null}
-                    {selected ? <CheckIcon className="size-4 text-foreground" /> : null}
-                  </button>
-                );
-              })
-            ) : (
-              <p className="px-3.5 py-4 text-[13px] text-muted-foreground">
-                <Trans>No providers found.</Trans>
-              </p>
-            )}
-          </div>
         </div>
 
         <div ref={detailScrollRef} className="min-w-0 flex-1">
           {error ? <p className="mb-4 text-sm text-destructive">{error}</p> : null}
           {notice ? <p className="mb-4 text-sm text-success">{notice}</p> : null}
-          {hasHiddenModels ? (
-            <ShowAllModels checked={showAllModels} onChange={setShowAllModels} />
-          ) : null}
-          {provider === "ollama" ? (
-            <OllamaSettings onChanged={refresh} onSavePendingChange={setOllamaSaving} />
+          {connectionReady && !editingConnection ? (
+            <div className="space-y-3">
+              <Button disabled={busy || isActive} onClick={() => void setModelDefault()}>
+                <Trans>Use this model</Trans>
+              </Button>
+              {!credential?.oauth ? (
+                <Button variant="outline" onClick={() => setEditingConnection(true)}>
+                  <Trans>Connection settings</Trans>
+                </Button>
+              ) : null}
+            </div>
+          ) : provider === "ollama" ? (
+            <OllamaSettings
+              credentialId={credentialId}
+              modelId={modelId || undefined}
+              onChanged={refresh}
+              onSavePendingChange={setOllamaSaving}
+            />
           ) : selected ? (
             <>
               <div className="block text-[13.5px] text-muted-foreground">
+                <div className="mb-2">{selected.providerName ?? selected.provider}</div>
                 {isOpenAiCompatible ? (
                   <>
                     <label className="block" htmlFor="model-base-url">
@@ -584,6 +553,7 @@ export function ModelSettingsOverlay({
                       ) : (
                         <Input
                           value={modelId}
+                          maxLength={MODEL_ID_MAX_LENGTH}
                           onChange={(event) => {
                             cancelOAuthAttempt();
                             selectionRevisionRef.current += 1;
@@ -660,41 +630,16 @@ export function ModelSettingsOverlay({
                       maxImagesLabel={t`Maximum images per request`}
                     />
                   </>
-                ) : (
-                  <>
-                    {selected?.contextWindow ? (
-                      <p className="text-sm text-muted-foreground">
-                        {modelContextLabel("catalog")}: {selected.contextWindow.toLocaleString()}
-                      </p>
-                    ) : null}
-                    <span>
-                      <Trans>Model</Trans>
-                    </span>
-                    <ModelPicker
-                      options={
-                        modelsForProvider.some((entry) => entry.id === selected.id)
-                          ? modelsForProvider
-                          : [selected, ...modelsForProvider]
-                      }
-                      value={selected.id}
-                      onChange={(nextModelId) => {
-                        cancelOAuthAttempt();
-                        selectionRevisionRef.current += 1;
-                        setModelId(nextModelId);
-                        setError(null);
-                        setNotice(null);
-                      }}
-                    />
-                  </>
-                )}
+                ) : selected?.contextWindow ? (
+                  <p className="text-sm text-muted-foreground">
+                    {modelContextLabel("catalog")}: {selected.contextWindow.toLocaleString()}
+                  </p>
+                ) : null}
               </div>
               {!isOpenAiCompatible && selected.billing ? (
                 <p className="mt-2 text-[13px] leading-[1.5] text-muted-foreground">
                   {provider === "anthropic" ? (
-                    <Trans>
-                      To use your Claude subscription, choose Runs on → Claude Code in a bot's
-                      settings.
-                    </Trans>
+                    <Trans>Set up on the home device</Trans>
                   ) : (
                     selected.billing
                   )}
@@ -912,11 +857,11 @@ export function ModelSettingsOverlay({
             <p className="text-muted-foreground">
               <Trans>Loading model catalog…</Trans>
             </p>
-          ) : !hasHiddenModels ? (
+          ) : !provider ? null : (
             <p className="text-muted-foreground">
               <Trans>No model catalog is available.</Trans>
             </p>
-          ) : null}
+          )}
         </div>
       </div>
     </>
@@ -944,326 +889,5 @@ export function ModelSettingsOverlay({
         {body}
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ModelPicker({
-  options,
-  value,
-  onChange,
-}: {
-  options: ModelCatalogEntry[];
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const { t } = useLingui();
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
-  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const listboxId = useId();
-  const selectedIndex = Math.max(
-    0,
-    options.findIndex((option) => option.id === value),
-  );
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [highlightedIndex, setHighlightedIndex] = useState(selectedIndex);
-  const trimmedQuery = query.trim().toLowerCase();
-  const filteredOptions = useMemo(
-    () =>
-      trimmedQuery
-        ? options.filter(
-            (option) =>
-              option.label.toLowerCase().includes(trimmedQuery) ||
-              option.id.toLowerCase().includes(trimmedQuery) ||
-              (option.providerName ?? option.provider).toLowerCase().includes(trimmedQuery),
-          )
-        : options,
-    [options, trimmedQuery],
-  );
-  const groups = useMemo(() => {
-    const grouped = new Map<string, ModelCatalogEntry[]>();
-    for (const option of filteredOptions) {
-      const key =
-        option.provider === "ollama" || option.provider === "local"
-          ? "Local"
-          : (option.providerName ?? option.provider);
-      const list = grouped.get(key);
-      if (list) list.push(option);
-      else grouped.set(key, [option]);
-    }
-    return [...grouped].map(([name, entries]) => ({ name, entries }));
-  }, [filteredOptions]);
-  const groupRanges = useMemo(() => {
-    let index = 0;
-    return groups.map((group) => {
-      const start = index;
-      index += group.entries.length;
-      return { name: group.name, start, entries: group.entries };
-    });
-  }, [groups]);
-
-  useEffect(() => {
-    setHighlightedIndex(selectedIndex);
-    setOpen(false);
-  }, [selectedIndex, value]);
-
-  useEffect(() => {
-    if (!open) {
-      setQuery("");
-      return;
-    }
-    searchRef.current?.focus();
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    function closeOnOutsidePointer(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    }
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
-  }, [open]);
-
-  function choose(index: number) {
-    const option = filteredOptions[index];
-    if (!option) return;
-    onChange(option.id);
-    setOpen(false);
-    triggerRef.current?.focus();
-  }
-
-  function moveHighlight(index: number) {
-    const count = filteredOptions.length;
-    if (count === 0) return;
-    const next = ((index % count) + count) % count;
-    setHighlightedIndex(next);
-    const option = optionRefs.current[next];
-    option?.scrollIntoView({ block: "nearest" });
-    // Keep typing focus on the search field; only follow highlight when an option
-    // already has focus (e.g. after Tab / prior option key nav).
-    if (document.activeElement !== searchRef.current) {
-      option?.focus();
-    }
-  }
-
-  function activeOptionIndex() {
-    return highlightedIndex >= 0 && highlightedIndex < filteredOptions.length
-      ? highlightedIndex
-      : 0;
-  }
-
-  function optionDomId(index: number) {
-    return `${listboxId}-option-${index}`;
-  }
-
-  const activeDescendantId =
-    filteredOptions.length > 0 ? optionDomId(activeOptionIndex()) : undefined;
-
-  function onSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      if (filteredOptions.length === 0) return;
-      moveHighlight(activeOptionIndex() + 1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      if (filteredOptions.length === 0) return;
-      moveHighlight(activeOptionIndex() - 1);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      if (filteredOptions.length === 0) return;
-      moveHighlight(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      if (filteredOptions.length === 0) return;
-      moveHighlight(filteredOptions.length - 1);
-    } else if (event.key === "Enter") {
-      event.preventDefault();
-      if (filteredOptions.length === 0) return;
-      choose(activeOptionIndex());
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      setOpen(false);
-      triggerRef.current?.focus();
-    }
-  }
-
-  function onTriggerKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
-    if (event.key === "Escape" && open) {
-      event.preventDefault();
-      event.stopPropagation();
-      setOpen(false);
-      return;
-    }
-    if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      setOpen(true);
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setOpen(true);
-      setHighlightedIndex(Math.max(0, filteredOptions.length - 1));
-    }
-  }
-
-  function onOptionKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>, index: number) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      moveHighlight(index + 1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      moveHighlight(index - 1);
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      moveHighlight(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      moveHighlight(filteredOptions.length - 1);
-    } else if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      choose(index);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      setOpen(false);
-      triggerRef.current?.focus();
-    }
-  }
-
-  return (
-    <div ref={rootRef} className="relative mt-2">
-      <button
-        ref={triggerRef}
-        type="button"
-        role="combobox"
-        aria-label={t`Model`}
-        aria-controls={listboxId}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        className="flex h-10 w-full items-center justify-between rounded-lg border border-input bg-transparent px-3 text-start text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-        onClick={() => setOpen((current) => !current)}
-        onKeyDown={onTriggerKeyDown}
-      >
-        <span className="min-w-0 truncate">{options[selectedIndex]?.label}</span>
-        <span className="ml-3 shrink-0 text-muted-foreground" aria-hidden="true">
-          <ChevronDown size={16} strokeWidth={1.8} />
-        </span>
-      </button>
-      {open ? (
-        <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10">
-          <input
-            ref={searchRef}
-            type="text"
-            value={query}
-            role="combobox"
-            aria-label={t`Search models`}
-            aria-controls={listboxId}
-            aria-expanded={open}
-            aria-autocomplete="list"
-            aria-activedescendant={activeDescendantId}
-            placeholder={t`Search`}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setHighlightedIndex(0);
-            }}
-            onKeyDown={onSearchKeyDown}
-            className="w-full border-b border-border bg-transparent px-3 py-2.5 text-[13.5px] text-foreground outline-none placeholder:text-muted-foreground/80"
-          />
-          <div
-            id={listboxId}
-            role="listbox"
-            aria-label={t`Model options`}
-            className="rk-scroll max-h-64 overflow-y-auto py-1"
-          >
-            {groupRanges.map((group) => (
-              <div key={group.name}>
-                <p className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/80">
-                  {group.name}
-                </p>
-                {group.entries.map((option, groupIndex) => {
-                  const index = group.start + groupIndex;
-                  return (
-                    <ModelOption
-                      key={`${option.provider}:${option.id}`}
-                      option={option}
-                      optionDomId={optionDomId(index)}
-                      index={index}
-                      value={value}
-                      highlighted={highlightedIndex === index}
-                      optionRefs={optionRefs}
-                      choose={choose}
-                      onOptionKeyDown={onOptionKeyDown}
-                    />
-                  );
-                })}
-              </div>
-            ))}
-            {filteredOptions.length === 0 ? (
-              <p className="px-3 py-2 text-[13px] text-muted-foreground">
-                <Trans>No matching models</Trans>
-              </p>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ModelOption({
-  option,
-  optionDomId,
-  index,
-  value,
-  highlighted,
-  optionRefs,
-  choose,
-  onOptionKeyDown,
-}: {
-  option: ModelCatalogEntry;
-  optionDomId: string;
-  index: number;
-  value: string;
-  highlighted: boolean;
-  optionRefs: RefObject<Array<HTMLButtonElement | null>>;
-  choose: (index: number) => void;
-  onOptionKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => void;
-}) {
-  const { t } = useLingui();
-  return (
-    <button
-      id={optionDomId}
-      ref={(element) => {
-        optionRefs.current[index] = element;
-      }}
-      type="button"
-      role="option"
-      aria-selected={option.id === value}
-      tabIndex={highlighted ? 0 : -1}
-      className={selectableRowClasses(
-        option.id === value,
-        `flex w-full items-center justify-between gap-3 px-3 py-2 text-start text-[13.5px] ${highlighted ? "bg-accent/50" : ""}`,
-      )}
-      onClick={() => choose(index)}
-      onKeyDown={(event) => onOptionKeyDown(event, index)}
-    >
-      <span className="min-w-0 truncate">
-        {option.label}
-        {unavailableSubscriptionModel([option], option.provider, option.id) ? (
-          <span className="block text-[12px] text-muted-foreground">
-            <Trans>May not be available on your plan</Trans>
-          </span>
-        ) : null}
-      </span>
-      <div className="flex shrink-0 items-center gap-2">
-        {option.billing.toLowerCase().includes("free") ? (
-          <span className="text-[12px] text-muted-foreground">{t`Free`}</span>
-        ) : null}
-        {option.id === value ? <CheckIcon className="size-4 shrink-0" /> : null}
-      </div>
-    </button>
   );
 }

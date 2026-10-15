@@ -71,9 +71,11 @@ function setup(fleet?: TerminalProvider) {
     },
   } as TerminalGrant;
   const authorize = vi.fn(async (_grant: TerminalGrant) => {});
+  const disconnected = vi.fn(async (_grant: TerminalGrant) => {});
   const gateway = new TerminalGateway({
     provider: fleet ?? provider,
     authorize,
+    disconnected,
     now: () => now,
     audit: async (type) => {
       audit.push(type);
@@ -95,6 +97,7 @@ function setup(fleet?: TerminalProvider) {
     order,
     authorize,
     sent,
+    disconnected,
     socket,
     setNow: (time: number) => {
       now = time;
@@ -112,6 +115,238 @@ const tick = async () => {
 afterEach(() => vi.useRealTimers());
 
 describe("human terminal gateway", () => {
+  it("retains acknowledged renderer progress across an interrupted replay transport", async () => {
+    const f = setup();
+    let unblock: (() => void) | undefined;
+    const blocked = new Promise<void>((resolve) => {
+      unblock = resolve;
+    });
+    try {
+      const issued = await f.gateway.request(f.grant, "https://app.example");
+      const first = await f.gateway.attach(issued.ticket, "https://app.example", 0, f.socket);
+      for (const seq of [1, 2, 3]) {
+        f.push(Uint8Array.of(seq));
+        await tick();
+      }
+      await first.receive('{"type":"ack","seq":1}');
+      first.detach();
+      const replaySocket: TerminalSocket = {
+        close: vi.fn(),
+        send: async (value) => {
+          if (typeof value !== "string" && decodeTerminalFrame(value).seq === 2) await blocked;
+        },
+      };
+      const ticket = await f.gateway.request(f.grant, "https://app.example", issued.sessionId);
+      const second = await f.gateway.attach(ticket.ticket, "https://app.example", 1, replaySocket);
+      await tick();
+      expect(f.gateway.sessions.get(issued.sessionId)!.sent).toBe(2);
+      second.detach();
+      const finalTicket = await f.gateway.request(f.grant, "https://app.example", issued.sessionId);
+      await f.gateway.attach(finalTicket.ticket, "https://app.example", 3, f.socket);
+      expect(f.provider.open).toHaveBeenCalledOnce();
+      expect(f.provider.close).not.toHaveBeenCalled();
+    } finally {
+      unblock?.();
+      await f.gateway.stop();
+    }
+  });
+  it("does not publish replay before its starting-dimension header is delivered", async () => {
+    const f = setup();
+    let header!: () => void;
+    vi.mocked(f.socket.send).mockImplementationOnce(async (data) => {
+      f.sent.push(data);
+      await new Promise<void>((resolve) => {
+        header = resolve;
+      });
+    });
+    try {
+      const issued = await f.gateway.request(f.grant, "https://app.example");
+      const connecting = f.gateway.attach(issued.ticket, "https://app.example", 0, f.socket, {
+        version: 2,
+        reset: true,
+      });
+      await tick();
+      f.push(new TextEncoder().encode("first output"));
+      await tick();
+      expect(f.sent).toHaveLength(1);
+      header();
+      await connecting;
+      await tick();
+      expect(f.sent.some((value) => typeof value !== "string")).toBe(true);
+    } finally {
+      await f.gateway.stop();
+    }
+  });
+  it("rejoins one process and replays each segment at its recorded dimensions", async () => {
+    vi.useFakeTimers();
+    const f = setup();
+    try {
+      const issued = await f.gateway.request(f.grant, "https://app.example");
+      const first = await f.gateway.attach(issued.ticket, "https://app.example", 0, f.socket, {
+        version: 2,
+        reset: true,
+      });
+      f.push(new TextEncoder().encode("before resize\r\n"));
+      await tick();
+      await first.receive('{"type":"ack","seq":1}');
+      await first.receive('{"type":"resize","cols":40,"rows":12}');
+      await vi.advanceTimersByTimeAsync(50);
+      expect(f.provider.resize).toHaveBeenCalledExactlyOnceWith(issued.sessionId, 40, 12);
+      f.push(new TextEncoder().encode("after resize\r\n"));
+      await tick();
+      first.detach();
+      const ticket = await f.gateway.request(f.grant, "https://app.example", issued.sessionId);
+      f.sent.length = 0;
+      await f.gateway.attach(ticket.ticket, "https://app.example", 0, f.socket, {
+        version: 2,
+        reset: true,
+      });
+      await tick();
+      expect(f.provider.open).toHaveBeenCalledOnce();
+      expect(f.provider.close).not.toHaveBeenCalled();
+      expect(JSON.parse(f.sent[0] as string)).toMatchObject({
+        type: "ready",
+        version: 2,
+        reset: true,
+        from: 1,
+        cols: 80,
+        rows: 24,
+        truncated: false,
+      });
+      expect(
+        f.sent
+          .filter((value): value is string => typeof value === "string")
+          .map((value) => JSON.parse(value))
+          .filter((value) => value.type === "replay-size"),
+      ).toEqual([
+        { type: "replay-size", version: 2, seq: 1, cols: 80, rows: 24 },
+        { type: "replay-size", version: 2, seq: 2, cols: 40, rows: 12 },
+      ]);
+      expect(
+        f.sent
+          .filter((value): value is Uint8Array => typeof value !== "string")
+          .map(decodeTerminalFrame)
+          .map((frame) => new TextDecoder().decode(frame.bytes)),
+      ).toEqual(["before resize\r\n", "after resize\r\n"]);
+      expect(JSON.parse(f.sent.at(-1) as string)).toEqual({
+        type: "replay-end",
+        version: 2,
+        seq: 2,
+      });
+    } finally {
+      await f.gateway.stop();
+    }
+  });
+  it("identifies a bounded replay suffix rather than silently joining missing output", async () => {
+    const f = setup();
+    try {
+      const issued = await f.gateway.request(f.grant, "https://app.example");
+      const first = await f.gateway.attach(issued.ticket, "https://app.example", 0, f.socket);
+      const count = Math.ceil(TERMINAL_REPLAY_BYTES / TERMINAL_FRAME_BYTES) + 1;
+      for (let seq = 1; seq <= count; seq++) {
+        f.push(new Uint8Array(TERMINAL_FRAME_BYTES));
+        await tick();
+        await first.receive(JSON.stringify({ type: "ack", seq }));
+      }
+      first.detach();
+      const ticket = await f.gateway.request(f.grant, "https://app.example", issued.sessionId);
+      f.sent.length = 0;
+      await f.gateway.attach(ticket.ticket, "https://app.example", 0, f.socket, {
+        version: 2,
+        reset: true,
+      });
+      expect(JSON.parse(f.sent[0] as string)).toMatchObject({
+        type: "ready",
+        version: 2,
+        truncated: true,
+        from: 2,
+      });
+      expect(f.gateway.sessions.get(issued.sessionId)!.retained).toBeLessThanOrEqual(
+        TERMINAL_REPLAY_BYTES,
+      );
+    } finally {
+      await f.gateway.stop();
+    }
+  });
+  it("expires reload grace and releases only control acquired by the collection", async () => {
+    vi.useFakeTimers();
+    const f = setup();
+    f.grant.releaseOnDisconnect = true;
+    const issued = await f.gateway.request(f.grant, "https://app.example");
+    const first = await f.gateway.attach(issued.ticket, "https://app.example", 0, f.socket);
+    first.detach();
+    const ticket = await f.gateway.request(
+      { ...f.grant, releaseOnDisconnect: false },
+      "https://app.example",
+      issued.sessionId,
+    );
+    const rejoined = await f.gateway.attach(ticket.ticket, "https://app.example", 0, f.socket, {
+      version: 2,
+      reset: true,
+    });
+    rejoined.detach();
+    await vi.advanceTimersByTimeAsync(30_001);
+    expect(f.provider.close).toHaveBeenCalledExactlyOnceWith(issued.sessionId, "disconnected");
+    expect(f.disconnected).toHaveBeenCalledOnce();
+    expect(f.gateway.sessions.size).toBe(0);
+    await expect(
+      f.gateway.request(f.grant, "https://app.example", issued.sessionId),
+    ).rejects.toThrow("Session ended");
+    expect(f.provider.open).toHaveBeenCalledOnce();
+    await f.gateway.stop();
+  });
+  it("closes a process whose grant was revoked while admission was pending", async () => {
+    const f = setup();
+    f.authorize.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("Revoked"));
+    await expect(f.gateway.request(f.grant, "https://app.example")).rejects.toThrow(
+      "Session ended",
+    );
+    expect(f.provider.close).toHaveBeenCalledExactlyOnceWith(
+      "terminal-test",
+      "revoked-during-open",
+    );
+    expect(f.gateway.sessions.size).toBe(0);
+  });
+  it("serializes the four-session cap and preserves siblings when one closes", async () => {
+    const f = setup();
+    const streams = new Map<string, PassThrough>();
+    vi.mocked(f.provider.open).mockImplementation(async () => {
+      const id = `terminal-${streams.size}`;
+      streams.set(id, new PassThrough());
+      return { id, generation: f.grant.context.generation };
+    });
+    vi.mocked(f.provider.close).mockImplementation(async (id) => {
+      streams.get(id)?.destroy();
+    });
+    f.provider.output = async function* (id) {
+      for await (const bytes of streams.get(id)!) yield { seq: 1, bytes };
+    };
+    try {
+      const results = await Promise.allSettled(
+        Array.from({ length: 5 }, () => f.gateway.request(f.grant, "https://app.example")),
+      );
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(4);
+      expect(f.gateway.sessions.size).toBe(4);
+      await f.gateway.closeOwned(f.grant.actor, f.grant.botId, f.grant.computerId, "terminal-1");
+      expect(f.gateway.sessions.size).toBe(3);
+      expect(f.gateway.sessions.has("terminal-0")).toBe(true);
+      expect(f.provider.close).toHaveBeenCalledExactlyOnceWith("terminal-1", "human-closed");
+      await expect(
+        f.gateway.request({ ...f.grant, authSessionId: "another" }, "https://app.example"),
+      ).rejects.toThrow();
+      await expect(
+        f.gateway.request({ ...f.grant, computerGeneration: 3 }, "https://app.example"),
+      ).rejects.toThrow();
+      await expect(
+        f.gateway.request(
+          { ...f.grant, context: { ...f.grant.context, leaseId: "another" } },
+          "https://app.example",
+        ),
+      ).rejects.toThrow();
+    } finally {
+      await f.gateway.stop();
+    }
+  });
   it("delivers real Fleet output from the first prompt and reconnects without replaying input", async () => {
     const child = Object.assign(new EventEmitter(), {
       stdin: new PassThrough(),

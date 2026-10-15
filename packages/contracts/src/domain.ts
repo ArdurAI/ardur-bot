@@ -1,6 +1,7 @@
 import * as z from "zod";
 import { BotAvatarValueSchema } from "./bot-avatar.js";
 import { ToolResumedPayloadSchema } from "./command-blocks.js";
+import { ComputerLimitsObservationSchema } from "./computer-limits.js";
 import { ComputerProfileSchema } from "./computer-profiles.js";
 import { ConcurrentRunsSchema, ContextSnapshotSchema, RoutingRuleSchema } from "./context.js";
 import { LocalityPolicySchema } from "./delegation.js";
@@ -50,6 +51,12 @@ export const ThinkingLevelSchema = z.enum([
   "max",
 ]);
 export type ThinkingLevel = z.infer<typeof ThinkingLevelSchema>;
+
+export const MODEL_ID_MAX_LENGTH = 200;
+export const ModelIdSchema = z
+  .string()
+  .max(MODEL_ID_MAX_LENGTH, "Choose a model.")
+  .regex(/^\P{Cc}*$/u, "Choose a model.");
 
 export const AGENT_SECRET_NAME_PATTERN = /^[A-Z_][A-Z0-9_]{0,63}$/;
 
@@ -199,7 +206,7 @@ export const SetGroupMemberModelPinInput = GroupMemberModelPinTarget.extend({
     .object({
       runtimeKind: RuntimeKindSchema,
       provider: z.string().min(1),
-      modelId: z.string().min(1),
+      modelId: ModelIdSchema.min(1),
       effort: z.string().nullable(),
       credentialId: z.string().min(1),
     })
@@ -401,7 +408,7 @@ export const UpdateBotInput = z
     voiceId: z.string().max(120).nullable().optional(),
     autoSpeak: z.boolean().optional(),
     modelProvider: z.string().trim().min(1).max(80).nullable().optional(),
-    modelId: z.string().trim().min(1).max(200).nullable().optional(),
+    modelId: ModelIdSchema.trim().min(1).nullable().optional(),
     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
     modelCredentialId: z.string().min(1).nullable().optional(),
     runtimeKind: RuntimeKindSchema.optional(),
@@ -913,6 +920,9 @@ export const ComputerUpdateSchema = z.object({
 export type ComputerUpdate = z.infer<typeof ComputerUpdateSchema>;
 
 export const ComputerStatusSchema = z.object({
+  computerGeneration: z.number().int().nonnegative().optional(),
+  appliedLimits: ComputerLimitsObservationSchema.nullable().optional(),
+  executionBoundary: z.enum(["host-account", "container", "unknown"]).optional(),
   runsOnHost: z.boolean().optional(),
   imageProfile: ComputerProfileSchema.optional(),
   connectionId: Id.nullable().optional(),
@@ -985,6 +995,7 @@ export const MessagingAgentConnectionSchema = z.object({
 export type MessagingAgentConnection = z.infer<typeof MessagingAgentConnectionSchema>;
 
 export const RunSchema = z.object({
+  restarting: z.boolean().optional(),
   contextSnapshot: ContextSnapshotSchema.nullable().optional(),
   routingRule: RoutingRuleSchema.nullable().optional(),
   id: Id,
@@ -1026,6 +1037,13 @@ export const ThreadSnapshotSchema = z.object({
   botId: Id.optional(),
   groupId: Id.optional(),
   groupName: z.string().optional(),
+  /** Authorized default recipients as of this snapshot; send rechecks current room state. */
+  groupRouting: z
+    .object({
+      coordinatorBotId: Id.nullable(),
+      defaultBotId: Id.nullable(),
+    })
+    .optional(),
   members: z.array(GroupMemberSchema).optional(),
   run: RunSchema.nullable(),
   contextRun: RunSchema.nullable().optional(),
@@ -1193,10 +1211,11 @@ export const OPENAI_COMPATIBLE_PROVIDER_ID = "openai-compatible";
 export const ModelConnectInputSchema = z
   .object({
     provider: z.string(),
+    credentialId: Id.optional(),
     apiKey: z.string().optional(),
     baseUrl: z.string().optional(),
     label: z.string().optional(),
-    modelId: z.string().optional(),
+    modelId: ModelIdSchema.optional(),
     reasoning: z.boolean().optional(),
     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
     maxTokens: z.number().int().min(1).max(MAX_MODEL_MAX_TOKENS).optional(),
@@ -1282,6 +1301,8 @@ export const SpaceMemoryConfigSchema = z.object({
 export type SpaceMemoryConfig = z.infer<typeof SpaceMemoryConfigSchema>;
 
 export const ModelCatalogEntrySchema = z.object({
+  /** Shared catalog identity for known aliases; connection ids remain exact. */
+  catalogId: z.string().optional(),
   provider: z.string(),
   providerName: z.string().optional(),
   id: z.string(),

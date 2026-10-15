@@ -23,6 +23,7 @@ function fixture(
   return {
     env: { webOrigin: "http://localhost" },
     prisma: {
+      space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: { mode: "any" } })) },
       userModelCredential: { findFirst: vi.fn(async () => credential) },
       spaceModelPreference: {
         findFirst: vi.fn(async () => ({ modelId: "fixture-model", isDefault: false })),
@@ -81,7 +82,9 @@ async function checkPin(
     new Request("http://localhost/rpc/models/validatePin", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ json: pin }),
+      body: JSON.stringify({
+        json: { ...pin, computerLocation: "host", runtimeExperimental: true },
+      }),
     }),
     { prefix: "/rpc", context: { actor: caller } },
   );

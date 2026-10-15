@@ -1,7 +1,10 @@
 import type { AgentRunRequest } from "@ardurbot/adapter-kit";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const provider = vi.hoisted(() => ({ options: [] as Array<Record<string, unknown>> }));
+const provider = vi.hoisted(() => ({
+  options: [] as Array<Record<string, unknown>>,
+  contexts: [] as Array<{ systemPrompt: string }>,
+}));
 
 // The fake agent makes the one provider request a turn starts with.
 vi.mock("@earendil-works/pi-agent-core", () => ({
@@ -39,8 +42,13 @@ vi.mock("@earendil-works/pi-ai/providers/all", () => ({
       maxTokens: 4_096,
       contextWindow: 200_000,
     }),
-    streamSimple: (_model: unknown, _context: unknown, options: Record<string, unknown>) => {
+    streamSimple: (
+      _model: unknown,
+      context: { systemPrompt: string },
+      options: Record<string, unknown>,
+    ) => {
       provider.options.push(options);
+      provider.contexts.push(context);
       return { async *[Symbol.asyncIterator]() {}, result: async () => ({}) };
     },
   }),
@@ -56,6 +64,7 @@ vi.mock("./pi-openai-compatible-provider.js", () => ({
   registerOpenAiCompatibleRuntime: (models: unknown) => models,
 }));
 
+import { assembleTurnContext } from "./context/assemble.js";
 import { PiAgentRuntime, promptCacheOptions, stableHistoryEnd } from "./pi-runtime.js";
 
 const turn: AgentRunRequest = {
@@ -94,6 +103,38 @@ async function providerOptions(request: AgentRunRequest) {
 describe("pi prompt cache options", () => {
   beforeEach(() => {
     provider.options.length = 0;
+    provider.contexts.length = 0;
+  });
+
+  it("sends the captured identity in the provider system prompt", async () => {
+    const pin = {
+      runtimeKind: "pi" as const,
+      provider: "anthropic",
+      modelId: "fixture-model",
+      effort: "off",
+      credentialId: "private-credential-canary",
+      revision: 1,
+    };
+    const context = await assembleTurnContext({
+      identity: { name: "Research", pin },
+      instructions: turn.instructions,
+      history: [],
+      message: "Which model are you?",
+    });
+    const options = await providerOptions({
+      ...turn,
+      ...context,
+      model: { ...turn.model, thinkingLevel: "off", runtimePin: pin },
+    });
+    expect(provider.contexts[0]?.systemPrompt).toBe(context.instructions);
+    expect(provider.contexts[0]?.systemPrompt).toContain(
+      'You are "Research". Run pin: runtime Ardur, provider "anthropic", model "fixture-model", thinking "off".',
+    );
+    expect(provider.contexts[0]?.systemPrompt).not.toContain(pin.credentialId);
+    const onPayload = options.onPayload as (payload: unknown, model: unknown) => Promise<unknown>;
+    expect(await onPayload({ system: context.instructions, messages: [] }, {})).toMatchObject({
+      system: [{ type: "text", text: context.stablePrefix, cache_control: { type: "ephemeral" } }],
+    });
   });
 
   it("sends one-shot requests without a prompt-cache write on every provider", async () => {

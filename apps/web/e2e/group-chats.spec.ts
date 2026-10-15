@@ -1,3 +1,4 @@
+import type { ThreadSnapshot } from "@ardurbot/contracts";
 import { modelPinOptionKey } from "@ardurbot/core";
 import { expect, type Page, test } from "@playwright/test";
 import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
@@ -13,6 +14,61 @@ import {
 async function createBot(page: Page, name: string) {
   return createNamedBot(page, name);
 }
+
+test("goal budget details separate measured usage and outstanding reservations", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `goal-budget-${Date.now()}@example.test`, "password12", "Goal fixture");
+  await completeOnboarding(page);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
+  const first = await createBot(page, "Budget coordinator");
+  const second = await createBot(page, "Budget worker");
+  const group = await rpc<{ id: string }>(page, "groups/create", {
+    name: "Budget room",
+    botIds: [first, second],
+  });
+  await page.route("**/rpc/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { json: { ...body.json, me: { ...body.json.me, isDeploymentOwner: true } } },
+    });
+  });
+  await page.route("**/rpc/goals/get", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: {
+          id: "goal-budget",
+          groupId: group.id,
+          status: "stopped",
+          tokenLimit: 100,
+          usedTokens: 10,
+          reservedTokens: 20,
+          availableTokens: 70,
+          usageComplete: false,
+          untilAt: "2030-01-01T00:00:00Z",
+        },
+      }),
+    }),
+  );
+  const goalResponse = page.waitForResponse("**/rpc/goals/get");
+  await page.goto(`/app/g/${group.id}`);
+  expect((await goalResponse).ok()).toBe(true);
+  const details = page
+    .locator("details")
+    .filter({ has: page.locator("summary", { hasText: "Goal:" }) });
+  await expect(details.locator("summary")).toBeVisible();
+  await expect(details.locator("dt", { hasText: "Reserved" })).not.toBeVisible();
+  await details.locator("summary").click();
+  await expect(details).toContainText("Used");
+  await expect(details).toContainText("Reserved");
+  await expect(details).toContainText("Available");
+  await expect(details.locator("dd")).toHaveText(["10", "20", "70"]);
+  await expect(details).toContainText("Usage incomplete");
+  await captureScreenshot(page, testInfo, "group-goal-budget");
+});
 
 test("a group member choice appears in the room and on its captured run", async ({
   page,
@@ -39,12 +95,16 @@ test("a group member choice appears in the room and on its captured run", async 
   await panel.getByRole("button", { name: "Create group", exact: true }).click();
   await page.waitForURL(/\/app\/g\/[^/]+$/);
   const groupId = page.url().split("/").at(-1)!;
-  const groupSettingsButton = page
-    .locator("main")
-    .getByRole("button", { name: "Group settings", exact: true });
+  await page.getByRole("button", { name: "Views", exact: true }).click();
+  const groupSettingsButton = page.getByRole("menuitemcheckbox", {
+    name: "Group settings",
+    exact: true,
+  });
   await groupSettingsButton.click();
   await expect(panel).toHaveAttribute("data-panel", "group-settings");
-  await expect(groupSettingsButton).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Views", exact: true }).click();
+  await expect(groupSettingsButton).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("Escape");
   const control = panel.getByTestId(`group-model-${first}`);
   const select = control.locator("select").first();
   await expect
@@ -339,4 +399,58 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
   await page.goto(`/app/g/${reviewGroup.id}`);
   await page.waitForURL(/\/app\/(?!g\/)[^/]+$/);
   await expect(page.getByRole("combobox", { name: /Message/ })).toBeVisible();
+});
+
+test("room drafts show actual recipients without transmitting unsent text", async ({
+  page,
+}, testInfo) => {
+  await signup(
+    page,
+    `recipient-preview-${Date.now()}@example.test`,
+    "password12",
+    "Preview fixture",
+  );
+  await completeOnboarding(page);
+  const first = await createBot(page, "Preview Alpha");
+  const second = await createBot(page, "Preview Beta");
+  const group = await rpc<{ id: string }>(page, "groups/create", {
+    name: "Preview room",
+    botIds: [first, second],
+  });
+  const snapshot = page.waitForResponse(
+    (response) =>
+      response.url().includes("/rpc/threads/get") &&
+      response.request().postData()?.includes(group.id) === true,
+  );
+  await page.goto(`/app/g/${group.id}`);
+  expect((await snapshot).ok()).toBe(true);
+  const input = page.locator("textarea");
+  const recipients = page.getByTestId("composer-recipients");
+  await expect(recipients).toHaveCount(0);
+  let sends = 0;
+  page.on("request", (request) => {
+    if (request.url().includes("/rpc/threads/send")) sends++;
+  });
+  await input.fill("Each member, reply with your model.");
+  await expect(recipients).toHaveText("To Preview Alpha");
+  expect(sends).toBe(0);
+  await captureScreenshot(page, testInfo, "group-recipient-preview");
+  for (const [text, expected] of [
+    ["@Preview Beta reply", "To Preview Beta"],
+    ["@Preview Alpha @Preview Beta reply", "To Preview Alpha, Preview Beta"],
+    ["@everyone reply", "To Preview Alpha, Preview Beta"],
+  ]) {
+    await input.fill(text!);
+    await expect(recipients).toHaveText(expected!);
+  }
+  expect(sends).toBe(0);
+  await input.fill("Each member, reply with your model.");
+  const sent = page.waitForResponse("**/rpc/threads/send");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  const response = await sent;
+  expect(response.ok()).toBe(true);
+  const receipt = (await response.json()).json as { runIds: string[] };
+  expect(receipt.runIds).toHaveLength(1);
+  const thread = await rpc<ThreadSnapshot>(page, "threads/get", { groupId: group.id });
+  expect(thread.contextRun).toMatchObject({ id: receipt.runIds[0], botId: first });
 });

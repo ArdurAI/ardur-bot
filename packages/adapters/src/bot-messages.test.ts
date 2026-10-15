@@ -116,6 +116,28 @@ function deps(
 }
 
 describe("messaging another bot", () => {
+  it("resolves the recipient pin once before the admission transaction starts", async () => {
+    const h = deps();
+    Object.assign(h.deps.prisma, {
+      spaceModelPreference: { findFirst: vi.fn(async () => null) },
+      userModelCredential: { findFirst: vi.fn(async () => null) },
+    });
+    Object.assign(h.deps.prisma.bot, {
+      findFirstOrThrow: vi.fn(async () => ({ id: "bot-target", computerId: null, computer: null })),
+    });
+    const resolve = vi.fn(async () => ({ kind: "problem" as const }));
+    await messageBot({ ...h.deps, resolveDelegationPin: resolve } as never, run, sender, {
+      bot_id: "bot-target",
+      message: "Review",
+    });
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(resolve.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(h.deps.prisma.$transaction).mock.invocationCallOrder[0]!,
+    );
+    expect(vi.mocked(prepareDelegation).mock.lastCall?.[2]).toMatchObject({
+      selected: { kind: "problem" },
+    });
+  });
   it("delivers into the target's own chat and wakes it", async () => {
     const harness = deps();
     const sent = await messageBot(harness.deps, run, sender, {
@@ -152,6 +174,59 @@ describe("messaging another bot", () => {
       ),
     ).toHaveLength(0);
     expect(harness.enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns a delegation refusal when the recipient is archived before preflight", async () => {
+    const h = deps();
+    const lookup = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error("Recipient unavailable"), { code: "P2025" }));
+    Object.assign(h.deps.prisma.bot, { findFirstOrThrow: lookup });
+    const resolve = vi.fn();
+    const problem = delegationProblem("authority-exceeded");
+
+    await expect(
+      messageBot({ ...h.deps, resolveDelegationPin: resolve }, run, sender, {
+        bot_id: "bot-target",
+        message: "Review",
+      }),
+    ).resolves.toEqual({ ok: false, error: problem.message, problem });
+
+    expect(h.deps.prisma.bot.findMany).toHaveBeenCalledOnce();
+    expect(lookup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: "bot-target",
+          spaceId: run.spaceId,
+          userId: run.userId,
+          archivedAt: null,
+        },
+      }),
+    );
+    expect(resolve).not.toHaveBeenCalled();
+    expect(h.deps.prisma.$transaction).not.toHaveBeenCalled();
+    expect(h.tx.message.create).not.toHaveBeenCalled();
+    expect(h.tx.task.create).not.toHaveBeenCalled();
+    expect(h.tx.run.create).not.toHaveBeenCalled();
+    expect(h.enqueue).not.toHaveBeenCalled();
+    expect(h.notify).not.toHaveBeenCalled();
+  });
+
+  it("keeps unexpected preflight lookup failures visible", async () => {
+    const h = deps();
+    const error = Object.assign(new Error("Lookup failed"), { code: "P1001" });
+    Object.assign(h.deps.prisma.bot, {
+      findFirstOrThrow: vi.fn().mockRejectedValue(error),
+    });
+
+    await expect(
+      messageBot({ ...h.deps, resolveDelegationPin: vi.fn() }, run, sender, {
+        bot_id: "bot-target",
+        message: "Review",
+      }),
+    ).rejects.toBe(error);
+    expect(h.deps.prisma.$transaction).not.toHaveBeenCalled();
+    expect(h.enqueue).not.toHaveBeenCalled();
   });
 
   it("tells the sender to continue independent work", async () => {

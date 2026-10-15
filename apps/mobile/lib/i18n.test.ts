@@ -4,6 +4,13 @@ import { fileURLToPath } from "node:url";
 import { runtimeLabels } from "@ardurbot/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("./dispatch", () => ({ dispatchClient: {}, deviceRpc: vi.fn() }));
+vi.mock("./ai-consent", () => ({ promptAiConsent: vi.fn() }));
+vi.mock("./live-notifications", () => ({
+  resumeLiveNotifications: vi.fn(),
+  stopLiveNotifications: vi.fn(),
+}));
+
 vi.mock("expo-localization", () => ({
   getLocales: vi.fn(() => [{ languageTag: "en-US" }]),
 }));
@@ -31,11 +38,70 @@ function collectSourceFiles(dir: string): string[] {
 }
 
 describe("mobile i18n", () => {
+  it.each(["ru", "zh-CN"] as const)("translates signing-key confirmations (%s)", async (locale) => {
+    const { resetI18nForTests, t } = await import("./i18n");
+    resetI18nForTests(locale);
+    try {
+      for (const message of [
+        "Replace key?",
+        "Runs already admitted keep their key; new runs sign with the new key.",
+        "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted.",
+      ]) {
+        expect(t(message).trim()).toBeTruthy();
+        expect(t(message)).not.toBe(message);
+      }
+    } finally {
+      resetI18nForTests("en");
+    }
+  });
+  it.each(["ru", "zh-CN"] as const)(
+    "translates freeze cancellation in chat and copy text (%s)",
+    async (locale) => {
+      const { resetI18nForTests, t } = await import("./i18n");
+      const { blockText, copyableMobileMessageText } = await import("./api");
+      resetI18nForTests(locale);
+      const message = {
+        id: "summary",
+        threadId: "thread",
+        role: "bot",
+        blocks: [{ kind: "text", text: "Coordinator → Worker: cancelled.\ngoal.freeze-cancelled" }],
+      } as Parameters<typeof blockText>[0];
+      try {
+        for (const rendered of [blockText(message), copyableMobileMessageText(message)]) {
+          expect(rendered).toContain("Coordinator → Worker: cancelled.");
+          expect(rendered).toContain(t("The goal reached owner review before this work started."));
+          expect(rendered).not.toContain("goal.freeze-cancelled");
+          expect(rendered).not.toContain("The goal reached owner review before this work started.");
+        }
+      } finally {
+        resetI18nForTests("en");
+      }
+    },
+  );
+
+  it("translates restart progress and fresh-session notices", async () => {
+    const { resetI18nForTests, t } = await import("./i18n");
+    for (const locale of ["ru", "zh-CN"] as const) {
+      resetI18nForTests(locale);
+      for (const message of [
+        "Updating — your bots will continue after the update",
+        "This run continued in a new session after a restart.",
+        "Update paused because a bot is still working. Try again.",
+        "This action may already have happened. Check its outcome before trying again.",
+        "Bot work is still paused after the update. Try again.",
+      ]) {
+        expect(t(message).trim()).toBeTruthy();
+        expect(t(message)).not.toBe(message);
+      }
+    }
+  });
   it("translates every workspace save failure in Russian and Chinese", async () => {
     const { resetI18nForTests, t } = await import("./i18n");
     for (const locale of ["ru", "zh-CN"] as const) {
       resetI18nForTests(locale);
       for (const message of [
+        "Run commands inside this bot's folder or a registered folder.",
+        "This command was not run because its request is invalid. Check the command and folder.",
         "The computer stopped before its workspace could be saved.",
         "The computer or its workspace could not be found.",
         "The computer's engine could not be reached to save its workspace.",
@@ -79,6 +145,8 @@ describe("mobile i18n", () => {
       "Resume at home",
       "Could not load team message controls",
       "Could not update team messages",
+      "Connect Linear or grant a team member permission to read and write.",
+      "Connect GitHub or grant a team member permission to read and write.",
     ];
     for (const locale of ["ru", "zh-CN"] as const) {
       resetI18nForTests(locale);

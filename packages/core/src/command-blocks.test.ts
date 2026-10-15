@@ -3,10 +3,20 @@ import type {
   ProductEvent as FixtureProductEvent,
   ThreadMessage,
 } from "@ardurbot/contracts";
-import { COMMAND_OUTPUT_LIMIT, COMMAND_TRUNCATED, ProductEventSchema } from "@ardurbot/contracts";
-import { describe, expect, it } from "vitest";
+import {
+  COMMAND_OUTPUT_LIMIT,
+  COMMAND_REFUSALS,
+  COMMAND_TRUNCATED,
+  CommandBlockSchema,
+  ProductEventSchema,
+  ThreadMessageSchema,
+} from "@ardurbot/contracts";
+import { describe, expect, it, vi } from "vitest";
 import type { CommandMessagesState } from "./command-blocks.js";
 import {
+  commandDisplayError,
+  commandDisplayOutput,
+  commandOutput,
   commandSummary,
   commandSummaryDisplay,
   createBoundedCommandOutput,
@@ -458,3 +468,49 @@ function commandEvent(
     payload: { block: commandBlock(overrides) },
   };
 }
+
+describe("command refusal display boundary", () => {
+  it.each(["command-size", "file-location"] as const)(
+    "preserves %s through live and history schemas and leaves evidence original",
+    (refusalId) => {
+      const error = COMMAND_REFUSALS[refusalId];
+      const event = commandEvent("command.finished", {
+        refusalId,
+        error,
+        stdout: error,
+        stderr: error,
+      });
+      const [block] = projectCommandBlocks([event]);
+      expect(block?.refusalId).toBe(refusalId);
+      expect(ProductEventSchema.parse(event).payload).toEqual(event.payload);
+      const state = reduceCommandMessages({ messages: [], links: [] }, event);
+      const message = ThreadMessageSchema.parse(state.messages[0]);
+      expect(message.blocks[0]).toMatchObject({ kind: "command", command: { refusalId, error } });
+      const translate = () => "translated refusal";
+      expect(commandDisplayError(block!, translate)).toBe("translated refusal");
+      expect(
+        commandDisplayError(commandBlock({ refusalId, error: "original detail" }), translate),
+      ).toBe("translated refusal");
+      expect(commandDisplayError(commandBlock({ error }), translate)).toBe("translated refusal");
+      expect(commandDisplayOutput(block!, "translated refusal")).toBe(
+        `stdout:\n${error}\nstderr:\n${error}\nerror:\ntranslated refusal`,
+      );
+      expect(commandOutput(block!)).toContain(`error:\n${error}`);
+      expect(exportCommandLog("run-1", [block!])).toContain(`error:\n${error}`);
+      expect(searchCommandBlocks([block!], error)).toEqual([block]);
+      expect(searchCommandBlocks([block!], "translated refusal")).toEqual([]);
+      expect(CommandBlockSchema.parse(commandBlock()).refusalId).toBeUndefined();
+    },
+  );
+  it.each([
+    { refusalId: "future", error: COMMAND_REFUSALS["file-location"] },
+    { error: `prefix ${COMMAND_REFUSALS["file-location"]}` },
+    { error: "ordinary error" },
+    { error: null, stdout: COMMAND_REFUSALS["file-location"] },
+  ])("keeps unknown and substring errors original: %j", (fields) => {
+    const block = commandBlock(fields);
+    const translate = vi.fn(() => "translated");
+    expect(commandDisplayError(block, translate)).toBe(block.error);
+    expect(translate).not.toHaveBeenCalled();
+  });
+});

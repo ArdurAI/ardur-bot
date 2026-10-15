@@ -25,6 +25,10 @@ it.each([undefined, "computer"] as const)(
         ),
       );
       const props = fake.terminal.mock.calls[0]![0];
+      const open = vi.spyOn(window, "open").mockReturnValue(null);
+      props.openLink("https://example.test");
+      expect(open).toHaveBeenCalledWith("https://example.test", "_blank", "noopener,noreferrer");
+      expect(props.labels.openLink).toBe("Open link");
       await props.ticket("session");
       await props.close("session");
       expect(fake.ticket).toHaveBeenCalledWith({
@@ -32,6 +36,7 @@ it.each([undefined, "computer"] as const)(
         computerId: "computer",
         workspace,
         sessionId: "session",
+        releaseOnDisconnect: undefined,
       });
       expect(fake.close).toHaveBeenCalledWith({
         botId: "bot",
@@ -41,6 +46,7 @@ it.each([undefined, "computer"] as const)(
     } finally {
       await act(async () => root.unmount());
       vi.unstubAllGlobals();
+      vi.restoreAllMocks();
     }
   },
 );

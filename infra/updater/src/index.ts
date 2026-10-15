@@ -25,6 +25,7 @@ import {
   parseGitNameOnly,
   parseGitStatusPorcelain,
   parseLsRemoteReleases,
+  RESTART_PAUSED_MESSAGE,
   repoIdentity,
   resolveTrackedDirtyPaths,
   rollbackTarget,
@@ -37,6 +38,8 @@ import { createRootLogger } from "@ardurbot/logging/axiom";
 import { requestLogging } from "@ardurbot/logging/hono";
 import { serve } from "@hono/node-server";
 import { type Context, Hono } from "hono";
+import type { UpdateDrain } from "./restart-drain.js";
+import { UPDATE_PAUSED, updateDrain } from "./restart-drain.js";
 import {
   readTagState,
   resolveUpdaterConfig,
@@ -164,7 +167,7 @@ const runCommand: UpdaterCommandRunner = (
 
 export function createUpdaterApp(
   config: UpdaterConfig,
-  options: { run?: UpdaterCommandRunner; logger?: Logger } = {},
+  options: { run?: UpdaterCommandRunner; logger?: Logger; drain?: UpdateDrain } = {},
 ) {
   const app = new Hono();
   app.use("*", requestLogging(options.logger));
@@ -611,6 +614,7 @@ export function createUpdaterApp(
     };
     // A failed Git command can still change files. Restore once before Compose recovery, or in
     // finally for failures that never reached Compose.
+    const drain = options.drain ?? updateDrain("http://api:3100", config.token);
     let checkoutNeedsRestore = false;
     async function restoreCheckout() {
       if (!checkoutNeedsRestore) return true;
@@ -669,6 +673,12 @@ export function createUpdaterApp(
       if (record.toCommit !== null) composeEnv.GIT_SHA = record.toCommit;
 
       for (const step of composeSteps) {
+        if (step.id === "recreate" && !(await drain.begin().catch(() => false))) {
+          record.error = UPDATE_PAUSED;
+          record.restartAdvice = UPDATE_PAUSED;
+          await writeEnvAssignments(revertAssignments);
+          return record;
+        }
         if (!(await runStep(record, step, composeEnv))) {
           const primaryError = record.error ?? `${step.label} failed.`;
           // The failed revision may have changed Compose or files it references. The old image
@@ -708,6 +718,10 @@ export function createUpdaterApp(
       record.restart = "recreated";
       return record;
     } finally {
+      await drain.clear().catch(() => {
+        record.ok = false;
+        record.error = RESTART_PAUSED_MESSAGE;
+      });
       if (!record.ok && checkoutNeedsRestore && !(await restoreCheckout())) {
         record.restartAdvice = `${record.restartAdvice} The previous checkout also could not be restored; fix it before retrying.`;
       }

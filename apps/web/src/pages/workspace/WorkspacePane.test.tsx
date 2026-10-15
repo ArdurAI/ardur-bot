@@ -131,6 +131,8 @@ describe("WorkspacePane tab selection and content rendering", () => {
   it.each([
     { connectionId: "saved-docker", files: "live" as const, selected: "Files" },
     { connectionId: "saved-podman", files: "saved" as const, selected: "Files" },
+    { connectionId: null, files: "live" as const, selected: "Files" },
+    { connectionId: null, files: "saved" as const, selected: "Files" },
     { connectionId: null, files: "unavailable" as const, selected: "Files" },
   ])(
     "uses supplied API file policy for a desktop row on $connectionId",
@@ -307,7 +309,7 @@ describe("WorkspacePane tab selection and content rendering", () => {
       ),
     );
     const activeTab = container.querySelector('[role="tab"][data-active]');
-    expect(activeTab?.textContent).toBe("Computer");
+    expect(activeTab?.textContent).toBe("Computer screen");
   });
 
   it("activates Files tab when files are available and tab is files", async () => {

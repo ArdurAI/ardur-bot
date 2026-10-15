@@ -19,11 +19,18 @@ export interface VerificationFailure {
   code: VerificationCode;
   message: string;
 }
+export type EvidenceSignerMatch = "expected_key" | "different_key" | "no_expected_key";
+
 export interface VerificationResult {
+  signerMatch: EvidenceSignerMatch | null;
   ok: boolean;
   recordCount: number;
   headReceiptId: string | null;
   failures: VerificationFailure[];
+}
+export interface VerificationOptions {
+  /** When the signing key was revoked: records and seals dated after it are untrusted. */
+  revokedAt?: Date;
 }
 export interface SealClaims {
   schema_version: "ardur.behavioral_attestation.v0.2";
@@ -145,12 +152,24 @@ function verificationKey(publicKey: KeyObject | string): KeyObject {
   return key;
 }
 
-export function verifyChain(
+/**
+ * Receipts and seals carry whole-second timestamps while a revocation keeps
+ * milliseconds. Anything signed in the second the revocation happened in
+ * could postdate it, so that whole second is untrusted.
+ */
+function signedAtOrAfterRevocation(iatSeconds: number, revokedAt: Date): boolean {
+  const revocationSecond = revokedAt.getTime() - (revokedAt.getTime() % 1000);
+  return iatSeconds * 1000 >= revocationSecond;
+}
+
+function verifyChainContents(
   jwsList: readonly string[],
   publicKey: KeyObject | string,
+  options?: VerificationOptions,
 ): VerificationResult {
   const failures: VerificationFailure[] = [];
   const result: VerificationResult = {
+    signerMatch: null,
     ok: false,
     recordCount: Array.isArray(jwsList) ? jwsList.length : 0,
     headReceiptId: null,
@@ -229,18 +248,30 @@ export function verifyChain(
         message: "Receipt identity or step does not match the first record's run",
       });
     }
+    if (
+      options?.revokedAt &&
+      typeof claims.iat === "number" &&
+      signedAtOrAfterRevocation(claims.iat, options.revokedAt)
+    ) {
+      failures.push({
+        index,
+        code: "signed_after_revocation",
+        message: "Record is dated after the signing key was revoked",
+      });
+    }
     if (index === jwsList.length - 1) result.headReceiptId = claims.receipt_id;
   }
   result.ok = failures.length === 0;
   return result;
 }
 
-export function verifySeal(
+function verifySealContents(
   sealJwt: string,
   jwsList: readonly string[],
   publicKey: KeyObject | string,
+  options?: VerificationOptions,
 ): VerificationResult {
-  const result = verifyChain(jwsList, publicKey);
+  const result = verifyChainContents(jwsList, publicKey, options);
   const index = result.recordCount;
   const fail = (code: VerificationCode, message: string) => {
     result.failures.push({ index, code, message });
@@ -272,6 +303,13 @@ export function verifySeal(
     return result;
   }
   const seal = decoded.payload;
+  if (
+    options?.revokedAt &&
+    typeof seal.iat === "number" &&
+    signedAtOrAfterRevocation(seal.iat, options.revokedAt)
+  ) {
+    fail("signed_after_revocation", "Seal is dated after the signing key was revoked");
+  }
   if (!Array.isArray(jwsList) || jwsList.length === 0) {
     fail("receipt_chain_head_mismatch", "A seal requires at least one record");
     return result;
@@ -303,4 +341,46 @@ export function verifySeal(
   }
   result.ok = result.failures.length === 0;
   return result;
+}
+
+function withSignerMatch(
+  result: VerificationResult,
+  publicKey: KeyObject | string,
+  expectedFingerprint?: string,
+): VerificationResult {
+  if (result.ok) {
+    result.signerMatch = !expectedFingerprint?.trim()
+      ? "no_expected_key"
+      : evidenceKeyId(publicKey) === expectedFingerprint.trim()
+        ? "expected_key"
+        : "different_key";
+  }
+  return result;
+}
+
+export function verifyChain(
+  jwsList: readonly string[],
+  publicKey: KeyObject | string,
+  expectedFingerprint?: string,
+  options?: VerificationOptions,
+): VerificationResult {
+  return withSignerMatch(
+    verifyChainContents(jwsList, publicKey, options),
+    publicKey,
+    expectedFingerprint,
+  );
+}
+
+export function verifySeal(
+  sealJwt: string,
+  jwsList: readonly string[],
+  publicKey: KeyObject | string,
+  expectedFingerprint?: string,
+  options?: VerificationOptions,
+): VerificationResult {
+  return withSignerMatch(
+    verifySealContents(sealJwt, jwsList, publicKey, options),
+    publicKey,
+    expectedFingerprint,
+  );
 }

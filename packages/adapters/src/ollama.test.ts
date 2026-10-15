@@ -4,8 +4,11 @@ import { buildModelConnectPlaintext, modelCredentialDto } from "./model-connect.
 import { modelAcceptsImageInput } from "./model-vision.js";
 import {
   discoverOllama,
+  listOllamaModels,
   normalizeOllamaUrl,
+  OllamaUnavailableError,
   ollamaCatalog,
+  ollamaCheckUnavailable,
   pullOllamaModel,
   showOllamaModel,
 } from "./ollama.js";
@@ -187,5 +190,51 @@ describe("Ollama pull stream", () => {
         })(),
       ).rejects.toThrow(/Try again|try again/);
     },
+  );
+});
+
+it.each([
+  {
+    name: "refused",
+    fetch: async () => {
+      throw new TypeError("fetch failed", { cause: { code: "ECONNREFUSED" } });
+    },
+    unavailable: true,
+  },
+  {
+    name: "unreachable",
+    fetch: async () => {
+      throw new TypeError("fetch failed");
+    },
+    unavailable: true,
+  },
+  {
+    name: "timeout",
+    fetch: async () => {
+      throw Object.assign(new Error("timeout"), { name: "TimeoutError" });
+    },
+    unavailable: true,
+  },
+  { name: "server error", fetch: async () => new Response("", { status: 503 }), unavailable: true },
+  {
+    name: "missing model",
+    fetch: async () => new Response("", { status: 404 }),
+    unavailable: false,
+  },
+  {
+    name: "malformed models",
+    fetch: async () => Response.json({ models: "invalid" }),
+    unavailable: false,
+  },
+])("classifies actual $name failures without matching UI wording", async (row) => {
+  const error = await listOllamaModels(baseUrl, undefined, row.fetch).catch(
+    (cause: unknown) => cause,
+  );
+  expect(ollamaCheckUnavailable(error)).toBe(row.unavailable);
+});
+it("unavailable classification survives wording changes and does not trust a copied sentence", () => {
+  expect(ollamaCheckUnavailable(new OllamaUnavailableError("different wording"))).toBe(true);
+  expect(ollamaCheckUnavailable(new Error("Ollama is not running. Start it and try again."))).toBe(
+    false,
   );
 });

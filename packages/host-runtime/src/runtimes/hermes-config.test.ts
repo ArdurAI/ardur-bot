@@ -64,6 +64,7 @@ describe("Hermes managed configuration compiler", () => {
     expect(native).toMatchObject({
       custom_providers: [],
       fallback_providers: [],
+      auxiliary: { background_review: { enabled: false }, title_generation: { enabled: false } },
       toolsets: [],
       mcp_servers: {},
     });

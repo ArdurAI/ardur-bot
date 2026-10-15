@@ -6,7 +6,12 @@ import {
   withComputerAdmission,
 } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
-import { computerCapabilities, TERMINAL_ENDED, TERMINAL_UNAVAILABLE } from "@ardurbot/contracts";
+import {
+  computerCapabilities,
+  TERMINAL_ENDED,
+  TERMINAL_SESSION_LIMIT,
+  TERMINAL_UNAVAILABLE,
+} from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { IsolationError, requireMembership } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -17,6 +22,7 @@ export function createTerminalRoutes(deps: {
   prisma: PrismaClient;
   sandbox: SandboxProvider;
   trustedOrigin(origin: string): boolean;
+  disconnected?(grant: TerminalGrant): Promise<void>;
 }) {
   async function owned(actor: Actor, botId: string, computerId: string) {
     await requireMembership(deps.prisma, actor.userId, actor.spaceId);
@@ -43,15 +49,27 @@ export function createTerminalRoutes(deps: {
     return computer;
   }
   const provider = deps.sandbox.terminal;
-  const availableOn = (computer: { kind: string; connectionId?: string | null }) =>
-    Boolean(
+  const availableOn = async (computer: Awaited<ReturnType<typeof owned>>, actor: Actor) => {
+    if (!provider) return false;
+    if (computer.kind === "desktop" && !computer.connectionId) {
+      return (
+        (await provider.available?.(toComputerRef(computer), {
+          ...actor,
+          operationId: "terminal-available",
+          traceId: "terminal.available",
+          signal: new AbortController().signal,
+        })) ?? false
+      );
+    }
+    return Boolean(
       computerCapabilities(computer.kind).interactiveTerminal &&
-        provider &&
         (computer.connectionId || deps.sandbox.describe().capabilities.interactiveTerminal),
     );
+  };
   const gateway = provider
     ? new TerminalGateway({
         provider,
+        disconnected: deps.disconnected,
         async authorize(grant) {
           const [computer, session] = await Promise.all([
             owned(grant.actor, grant.botId, grant.computerId),
@@ -67,7 +85,7 @@ export function createTerminalRoutes(deps: {
           if (
             !session ||
             computer.screenGeneration !== grant.computerGeneration ||
-            !availableOn(computer) ||
+            !(await availableOn(computer, grant.actor)) ||
             computer.state !== "running" ||
             computer.maintenanceId ||
             !hasActiveComputerControl(computer) ||
@@ -104,12 +122,18 @@ export function createTerminalRoutes(deps: {
     async available(actor: Actor, input: { botId: string; computerId: string }) {
       const computer = await owned(actor, input.botId, input.computerId);
       return {
-        available: availableOn(computer),
+        available: await availableOn(computer, actor),
       };
     },
     async ticket(
       actor: Actor,
-      input: { botId: string; computerId: string; sessionId?: string; workspace?: "computer" },
+      input: {
+        botId: string;
+        computerId: string;
+        sessionId?: string;
+        workspace?: "computer";
+        releaseOnDisconnect?: boolean;
+      },
       authSessionId: string | undefined,
       origin: string | undefined,
     ) {
@@ -117,7 +141,7 @@ export function createTerminalRoutes(deps: {
       try {
         if (!gateway) throw new Error(TERMINAL_UNAVAILABLE);
         if (!authSessionId || !origin || !deps.trustedOrigin(origin)) throw new IsolationError();
-        if (!availableOn(await owned(actor, input.botId, input.computerId)))
+        if (!(await availableOn(await owned(actor, input.botId, input.computerId), actor)))
           throw new Error(TERMINAL_UNAVAILABLE);
         return await withComputerAdmission(
           deps.prisma,
@@ -126,21 +150,17 @@ export function createTerminalRoutes(deps: {
             let computer = await owned(actor, input.botId, input.computerId);
             if (
               !computer.providerRef ||
-              !availableOn(computer) ||
+              !(await availableOn(computer, actor)) ||
               !hasActiveComputerControl(computer) ||
               computer.controlBotId !== input.botId
             )
               throw new IsolationError();
-            if (
-              !input.sessionId &&
-              [...gateway.sessions.values()].some(
-                (session) => session.grant.computerId === input.computerId,
-              )
-            )
-              throw new ComputerAdmissionError(
-                "A terminal is already open. Close it before opening another.",
-              );
-            if (!input.sessionId) {
+            const siblings = [...gateway.sessions.values()].filter(
+              (session) => session.grant.computerId === input.computerId,
+            );
+            if (!input.sessionId && siblings.length >= TERMINAL_SESSION_LIMIT)
+              throw new ComputerAdmissionError("Four terminals are already open.");
+            if (!input.sessionId && !siblings.length) {
               computer = await deps.prisma.computer.update({
                 where: { id: computer.id, controlLeaseId: computer.controlLeaseId },
                 data: { controlFence: { increment: 1 } },
@@ -152,6 +172,7 @@ export function createTerminalRoutes(deps: {
               computerId: computer.id,
               computerGeneration: computer.screenGeneration,
               authSessionId,
+              releaseOnDisconnect: input.releaseOnDisconnect === true && !input.sessionId,
               computer: toComputerRef(computer),
               context: {
                 operationId: "terminal-open",

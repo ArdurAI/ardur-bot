@@ -26,6 +26,20 @@ const showSchema = z.object({
 });
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
 
+/** A temporary transport/server failure, separate from an invalid model choice. */
+export class OllamaUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OllamaUnavailableError";
+  }
+}
+export function ollamaCheckUnavailable(error: unknown): boolean {
+  return (
+    error instanceof OllamaUnavailableError ||
+    (error instanceof Error && error.name === "TimeoutError")
+  );
+}
+
 export function ollamaErrorMessage(error: unknown): string {
   if (error instanceof z.ZodError || error instanceof SyntaxError)
     return "Ollama returned invalid model information. Try again.";
@@ -49,10 +63,10 @@ function connectionError(error: unknown): Error {
     code === "ECONNREFUSED" ||
     (error instanceof Error && "code" in error && error.code === "ECONNREFUSED")
   )
-    return new Error(OLLAMA_NOT_RUNNING);
+    return new OllamaUnavailableError(OLLAMA_NOT_RUNNING);
   if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError"))
     return error;
-  return new Error("Could not reach Ollama. Check the server URL and try again.");
+  return new OllamaUnavailableError("Could not reach Ollama. Check the server URL and try again.");
 }
 
 async function request(
@@ -77,11 +91,8 @@ async function request(
   }
   if (!response.ok) {
     await response.body?.cancel();
-    throw new Error(
-      response.status === 404
-        ? "This Ollama model is not installed. Change pin."
-        : "Ollama could not complete the request. Try again.",
-    );
+    if (response.status === 404) throw new Error("This Ollama model is not installed. Change pin.");
+    throw new OllamaUnavailableError("Ollama could not complete the request. Try again.");
   }
   return response;
 }

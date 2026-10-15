@@ -12,6 +12,7 @@ import {
   canReactToThreadMessage,
   MESSAGE_REACTIONS,
   type MessageReaction,
+  RUN_STALLED_MESSAGE,
   runtimePinMessage,
 } from "@ardurbot/contracts";
 import type { ComposerActionId, ComposerCommand, ComposerSkill } from "@ardurbot/core";
@@ -31,12 +32,17 @@ import {
   isSecretAskBlock,
   mentionChipKey,
   projectMessageReactions,
+  RESTART_ACTION_MESSAGE,
   resolveComposerSendPlan,
   selectedAskActionLabel,
   serializeComposerPrompt,
   userVisibleMessages,
   workingBotsWithoutVisibleActivity,
 } from "@ardurbot/core";
+import {
+  composerGroupRecipientNames,
+  queuedGroupRecipientNames,
+} from "@ardurbot/core/group-message-recipients";
 import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
@@ -79,6 +85,7 @@ import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
 import { BotRuntimeLabel } from "../components/bot-runtime-label";
 import { CompactWorkRecord } from "../components/compact-work-record";
+import { ComposerRecipients } from "../components/composer-recipients";
 import { MobileRunContext } from "../components/context-section";
 import {
   ChiefDispatchLine,
@@ -707,6 +714,10 @@ function Thread() {
       onPress: () => router.push({ pathname: "/ide", params: { botId: botId ?? "" } }),
     },
     {
+      text: t("Git changes"),
+      onPress: () => router.push({ pathname: "/git-changes", params: { botId: botId ?? "" } }),
+    },
+    {
       text: t("Chat settings"),
       onPress: () =>
         router.push({
@@ -988,7 +999,12 @@ function Thread() {
                 readVisibleTarget.current = null;
                 markReadIfVisible();
               }
-              if (isRunTerminalEvent(event)) {
+              if (
+                isRunTerminalEvent(event) ||
+                (groupId &&
+                  event.type === "thread.message.created" &&
+                  event.payload?.role === "user")
+              ) {
                 void refreshMentionBots();
                 if (!jumpScrollTarget.current && !expandedHistoryThread.current) {
                   void refresh().catch(() => undefined);
@@ -1476,7 +1492,9 @@ function Thread() {
       ? snap.run.runtimeProblem
         ? refusalBotName
           ? runtimeProblemText(snap.run.runtimeProblem, refusalBotName)
-          : pinRecovery?.message
+          : pinRecovery?.message &&
+              !snap.run.runtimeProblem.actions.includes("retry") &&
+              snap.run.runtimeProblem.reasonId !== "signed-out"
             ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
               ? `${antigravityProblemMessage(snap.run.runtimeProblem)} ${t(pinRecovery.message)}`
               : t(pinRecovery.message)
@@ -1486,7 +1504,9 @@ function Thread() {
                 ? antigravityProblemMessage(snap.run.runtimeProblem)
                 : runtimeProblemText(snap.run.runtimeProblem)
               : runtimePinMessage(snap.run.runtimeProblem.pin)
-        : (snap.run.error ?? null)
+        : snap.run.error === RUN_STALLED_MESSAGE
+          ? t(RUN_STALLED_MESSAGE)
+          : (snap.run.error ?? null)
       : null;
   const liveMessages = useMemo(() => [...visibleMessages].reverse(), [visibleMessages]);
   const messagesById = useMemo(
@@ -1734,79 +1754,88 @@ function Thread() {
     );
   }
 
-  const workingFooter =
-    !inGroup && currentBot && isWorkingStatus(currentBotStatus) && !hasLiveProgress ? (
-      <View
-        accessibilityLabel={
-          currentBotRetrying
-            ? t("Waiting for the model")
-            : t("{name} is working", { name: currentBot.name })
-        }
-        accessibilityRole="text"
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          minHeight: 40,
-          marginTop: 12,
-        }}
-      >
-        <BotAvatar
-          color={currentBot.color}
-          identity={currentBot.id}
-          label={currentBot.name}
-          size={28}
-          status={currentBotStatus}
-        />
+  const restarting = (snap?.activeRuns ?? (snap?.run ? [snap.run] : [])).some(
+    (run) => run.restarting,
+  );
+  const workingFooter = restarting ? (
+    <Text
+      accessibilityRole="text"
+      style={{ color: tokens.mutedForeground, fontSize: 13, paddingVertical: 12 }}
+    >
+      {t("Updating — your bots will continue after the update")}
+    </Text>
+  ) : !inGroup && currentBot && isWorkingStatus(currentBotStatus) && !hasLiveProgress ? (
+    <View
+      accessibilityLabel={
+        currentBotRetrying
+          ? t("Waiting for the model")
+          : t("{name} is working", { name: currentBot.name })
+      }
+      accessibilityRole="text"
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        minHeight: 40,
+        marginTop: 12,
+      }}
+    >
+      <BotAvatar
+        color={currentBot.color}
+        identity={currentBot.id}
+        label={currentBot.name}
+        size={28}
+        status={currentBotStatus}
+      />
+    </View>
+  ) : inGroup && workingGroupBots.length > 0 ? (
+    <View
+      accessibilityLabel={
+        workingGroupBots.every((bot) => bot.retrying)
+          ? t("Waiting for the model")
+          : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying)
+            ? t("Waiting for a free place")
+            : workingGroupBots.length === 1
+              ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
+              : t("{count} agents working", { count: workingGroupBots.length })
+      }
+      accessibilityRole="text"
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        minHeight: 40,
+        marginTop: 12,
+      }}
+    >
+      <View style={{ flexDirection: "row", paddingRight: 8 }}>
+        {workingGroupBots.map((bot, index) => (
+          <View
+            key={bot.botId}
+            style={{
+              marginLeft: index === 0 ? 0 : -8,
+              zIndex: workingGroupBots.length - index,
+            }}
+          >
+            <BotAvatar
+              color={bot.color}
+              identity={bot.botId}
+              label={bot.name}
+              size={28}
+              status={bot.status}
+            />
+          </View>
+        ))}
       </View>
-    ) : inGroup && workingGroupBots.length > 0 ? (
-      <View
-        accessibilityLabel={
-          workingGroupBots.every((bot) => bot.retrying)
-            ? t("Waiting for the model")
-            : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying)
-              ? t("Waiting for a free place")
-              : workingGroupBots.length === 1
-                ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
-                : t("{count} agents working", { count: workingGroupBots.length })
-        }
-        accessibilityRole="text"
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          minHeight: 40,
-          marginTop: 12,
-        }}
-      >
-        <View style={{ flexDirection: "row", paddingRight: 8 }}>
-          {workingGroupBots.map((bot, index) => (
-            <View
-              key={bot.botId}
-              style={{
-                marginLeft: index === 0 ? 0 : -8,
-                zIndex: workingGroupBots.length - index,
-              }}
-            >
-              <BotAvatar
-                color={bot.color}
-                identity={bot.botId}
-                label={bot.name}
-                size={28}
-                status={bot.status}
-              />
-            </View>
-          ))}
-        </View>
-        {workingGroupBots.every((bot) => bot.retrying) ? (
-          <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
-            {t("Waiting for the model")}
-          </Text>
-        ) : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying) ? (
-          <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
-            {t("Waiting for a free place")}
-          </Text>
-        ) : null}
-      </View>
-    ) : null;
+      {workingGroupBots.every((bot) => bot.retrying) ? (
+        <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
+          {t("Waiting for the model")}
+        </Text>
+      ) : workingGroupBots.every((bot) => bot.status === "queued" && !bot.retrying) ? (
+        <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
+          {t("Waiting for a free place")}
+        </Text>
+      ) : null}
+    </View>
+  ) : null;
 
   const loadEarlierControl =
     snap?.olderCursor != null ? (
@@ -1836,6 +1865,25 @@ function Thread() {
       {runError ? (
         <View style={{ marginTop: 12 }}>
           <Text style={{ color: tokens.destructive }}>{runError}</Text>
+          {snap?.run?.error === RUN_STALLED_MESSAGE ||
+          snap?.run?.runtimeProblem?.actions.includes("retry") ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("Retry")}
+              onPress={() => {
+                setDraft(
+                  (current) =>
+                    current ||
+                    t(
+                      "Continue the interrupted run from its saved results. Check any uncertain action before repeating it.",
+                    ),
+                );
+                setDismissedRefusalRunIds((current) => new Set([...current, snap.run!.id]));
+              }}
+            >
+              <Text style={{ color: tokens.destructive, marginTop: 8 }}>{t("Retry")}</Text>
+            </Pressable>
+          ) : null}
           {snap?.run?.runtimeProblem ? (
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16, marginTop: 8 }}>
               {refusalRecovery && refusalBotName
@@ -1861,8 +1909,7 @@ function Thread() {
                     ),
                   )
                 : null}
-              {snap.run.runtimeProblem.pin.runtimeKind === "pi" &&
-              snap.run.runtimeProblem.code === "pin-credential-missing" ? (
+              {snap.run.runtimeProblem.actions.includes("connect") ? (
                 <Text
                   accessibilityRole="button"
                   style={{ color: tokens.destructive }}
@@ -1871,7 +1918,8 @@ function Thread() {
                   {t("Connect")}
                 </Text>
               ) : null}
-              {!(refusalRecovery && refusalBotName) ? (
+              {!(refusalRecovery && refusalBotName) &&
+              snap.run.runtimeProblem.actions.includes("change-pin") ? (
                 <Text
                   accessibilityRole="button"
                   style={{ color: tokens.destructive }}
@@ -2143,6 +2191,26 @@ function Thread() {
               }}
             />
           </Suspense>
+        ) : null}
+        {inGroup ? (
+          <ComposerRecipients
+            names={
+              canSend
+                ? composerGroupRecipientNames({
+                    group: { members: snap?.members ?? [], groupRouting: snap?.groupRouting },
+                    draft,
+                    skill: selectedSkill,
+                    mentions: selectedMentions,
+                    replyBotId: replyTarget?.botId,
+                  })
+                : []
+            }
+            queued={queuedGroupRecipientNames({
+              members: snap?.members ?? [],
+              activeRuns: snap?.activeRuns,
+            })}
+            color={tokens.mutedForeground}
+          />
         ) : null}
         <View
           style={{
@@ -2618,6 +2686,14 @@ const MessageBubble = memo(function MessageBubble({
   const chiefReceipt = message.blocks.find((block) => block.kind === "chief_receipt");
   const chiefResult = message.blocks.find((block) => block.kind === "chief_result");
   if (chiefResult) return <ChiefResultBubble block={chiefResult} actionProps={actionProps} />;
+  if (chiefReceipt?.chiefDispatch)
+    return (
+      <ChiefDispatchLine
+        dispatch={chiefReceipt.chiefDispatch}
+        detail={chiefReceipt.text}
+        actionProps={actionProps}
+      />
+    );
   if (chiefReceipt)
     return (
       <Text style={{ color: tokens.foreground, fontSize: 15.5 }} accessibilityLiveRegion="polite">
@@ -3319,7 +3395,9 @@ function AskBlock({
         {...actionProps}
         style={{ color: tokens.foreground, fontSize: 15.5, fontWeight: "600" }}
       >
-        {ask.text}
+        {ask.text === RESTART_ACTION_MESSAGE
+          ? t("This action may already have happened. Check its outcome before trying again.")
+          : ask.text}
       </Text>
       {secretInput && ask.credential ? (
         <Text style={{ color: tokens.mutedForeground, fontSize: 13.5 }}>

@@ -3,7 +3,7 @@ import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
 import { dashboardFixture } from "./dashboard-fixture";
-import { openWorkspaceView } from "./workspace-view";
+import { openAgentComputer, openWorkspaceView } from "./workspace-view";
 
 const outputDir = process.env.SITE_VIDEO_DIR;
 test.skip(!outputDir, "Website video recording requires SITE_VIDEO_DIR.");
@@ -255,7 +255,7 @@ test("records the Routines walkthrough", async ({ browser }) => {
       await page.goto("/app/bot");
       await expect(page.getByText("Briefing").first()).toBeVisible();
       await expect(page.getByText(reply)).toHaveCount(0);
-      await page.getByTitle("Agent computer").click();
+      await openAgentComputer(page);
       await openWorkspaceView(page, "Routines");
       await expect(page.getByRole("button", { name: "Create Routine" })).toBeVisible();
     });
@@ -316,7 +316,7 @@ test("records the Routines walkthrough", async ({ browser }) => {
     await expect(page.getByText("Check the weekly draft.")).toBeVisible();
     processingCut = { startMs: processingStartMs, endMs: offset() };
     await page.waitForTimeout(2_500);
-    await page.getByTitle("Agent computer").click();
+    await openAgentComputer(page);
     await openWorkspaceView(page, "Routines");
     await page.getByRole("button", { name: /Morning checklist/ }).click();
     const panel = page.getByTestId("side-panel");

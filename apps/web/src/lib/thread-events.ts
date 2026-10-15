@@ -17,6 +17,7 @@ import {
 import {
   isActive,
   isCommandCardEvent,
+  isRestartEvent,
   isRunTerminalEvent,
   mergeCommandLinks,
   mergeThreadHistory,
@@ -24,6 +25,7 @@ import {
   progressMessageId,
   reduceCommandMessages,
   reduceLiveMessageBlocks,
+  reduceRestartState,
   reduceRunContext,
   runFailureError,
   showsReplyText,
@@ -284,6 +286,7 @@ export function isThreadSnapshotEvent(event: ProductEvent): boolean {
     event.type === "thread.message.created" ||
     event.type === "thread.message.updated" ||
     event.type === "thread.message.reaction" ||
+    isRestartEvent(event) ||
     event.type === "run.started" ||
     event.type === "run.context" ||
     event.type === "run.waiting_input" ||
@@ -302,6 +305,7 @@ export function reduceThreadSnapshot(
   event: ProductEvent,
 ): ThreadSnapshot | null {
   if (!prev) return prev;
+  if (isRestartEvent(event)) return reduceRestartState(prev, event);
   if (event.type === "run.context") return reduceRunContext(prev, event);
   if (isCommandCardEvent(event.type) && event.seq <= (prev.cursor ?? -1)) return prev;
   if (isCommandCardEvent(event.type)) {

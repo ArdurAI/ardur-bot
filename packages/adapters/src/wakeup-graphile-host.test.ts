@@ -328,3 +328,34 @@ describe("GraphileJobWorkerHost runner lifecycle", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 });
+
+it("closes Graphile admission while draining and reopens it when the restart is cancelled", async () => {
+  let finish!: () => void;
+  const job = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const handler = vi.fn(() => job);
+  let stopped!: () => void;
+  const runner = {
+    promise: new Promise<void>((resolve) => {
+      stopped = resolve;
+    }),
+    stop: vi.fn(async () => {
+      stopped();
+    }),
+  };
+  run.mockResolvedValueOnce(runner);
+  const host = new GraphileJobWorkerHost({} as Pool);
+  await host.start({ "run.continue": handler } as unknown as BackgroundJobHandlers);
+  const task = run.mock.calls.at(-1)![0].taskList["run.continue"];
+  const active = task({ runId: "active" });
+  expect(await host.drain(1)).toBe(false);
+  await expect(task({ runId: "new" })).rejects.toThrow("draining");
+  expect(handler).toHaveBeenCalledOnce();
+  host.resume();
+  finish();
+  await active;
+  await task({ runId: "new" });
+  expect(handler).toHaveBeenCalledTimes(2);
+  await host.stop();
+});

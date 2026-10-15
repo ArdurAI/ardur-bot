@@ -1,5 +1,7 @@
 import type { AgentUsage } from "@ardurbot/adapter-kit";
 import { hermesProviderFailure } from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
+import { startHermesProviderRelay } from "@ardurbot/host-runtime/runtimes/hermes-provider-relay";
+import { createLogger, createTestSink } from "@ardurbot/logging";
 import type {
   Api,
   AssistantMessageEvent,
@@ -14,6 +16,7 @@ import {
   type BrokerOptions,
   type BrokerRequest,
   HermesProviderBroker,
+  HermesRelayDispatcher,
   hermesToolName,
 } from "./hermes-provider-broker.js";
 import { piContext } from "./hermes-provider-translation.js";
@@ -279,9 +282,11 @@ function translatedFixture(
     },
     catalog,
     streamSimple,
-    record: async (usage) => {
-      records.push(usage);
-    },
+    record:
+      patch.record ??
+      (async (usage) => {
+        records.push(usage);
+      }),
   };
   const broker = new HermesProviderBroker(options);
   const body = { model: modelId, messages: [{ role: "user", content: "hello" }], stream: false };
@@ -838,37 +843,115 @@ describe("worker provider broker translated route", () => {
     });
   });
 
-  it("rejects remote image URLs with a Chat Completions 400 error without fetching", async () => {
+  it.each([
+    ["main", false],
+    ["main", true],
+    ["summary", false],
+    ["summary", true],
+  ] as const)(
+    "returns safe 400 JSON through the real relay for %s remote images (stream %s)",
+    async (purpose, stream) => {
+      const fetchSpy = vi.fn();
+      const f = translatedFixture([startEvent, doneEvent([text("unused")])], {
+        purpose,
+        fetch: fetchSpy,
+      });
+      const dispatcher = new HermesRelayDispatcher(
+        { broker: f.broker, scope: f.options.scope },
+        new AbortController().signal,
+      );
+      const sink = createTestSink();
+      const logger = createLogger({ service: "fixture", sinks: [sink], level: "info" });
+      const failed = vi.fn();
+      const relay = await startHermesProviderRelay(
+        { ...f.broker.grant, protocol: 1, hostGeneration: "fixture" },
+        async (method, args) => {
+          try {
+            return await dispatcher.dispatch(method, args);
+          } catch (error) {
+            throw new Error((error as Error).message);
+          }
+        },
+        failed,
+        logger,
+      );
+      try {
+        const response = await fetch(`${relay.url}/chat/completions`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${f.broker.grant.token}` },
+          body: JSON.stringify({
+            model: "claude-fixture",
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: "private fixture prompt" },
+                  {
+                    type: "image_url",
+                    image_url: { url: "https://example.com/private-fixture.png" },
+                  },
+                ],
+              },
+            ],
+            stream,
+          }),
+        });
+        expect(response.status).toBe(400);
+        expect(response.headers.get("content-type")).toBe("application/json");
+        expect(await response.json()).toEqual({
+          error: {
+            message: "Provider request failed.",
+            type: "invalid_request_error",
+            code: 400,
+          },
+        });
+        expect(failed).toHaveBeenCalledExactlyOnceWith({
+          kind: "provider-failed",
+          layer: "translation",
+          reason: "request-translation",
+        });
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(f.captured).toHaveLength(0);
+        expect(f.records.map((entry) => entry.request?.collection?.outcome)).toEqual([
+          "started",
+          "failed",
+        ]);
+        const logged = JSON.stringify(sink.events);
+        expect(logged).toContain("request-translation");
+        expect(logged).not.toContain("private");
+        expect(logged).not.toContain("example.com");
+        expect(logged).not.toContain(f.broker.grant.token);
+      } finally {
+        relay.close();
+      }
+    },
+  );
+
+  it("names request translation for remote image URLs without fetching", async () => {
     const fetchSpy = vi.fn();
     const f = translatedFixture([startEvent, doneEvent([text("should not reach")])], {
       fetch: fetchSpy,
     });
-    const response = await f.broker.open(
-      f.request({
-        body: {
-          model: "claude-fixture",
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: "what is this" },
-                { type: "image_url", image_url: { url: "https://example.com/remote.png" } },
-              ],
-            },
-          ],
-          stream: false,
-        },
-      }),
-    );
-    expect(response.status).toBe(400);
-    expect(response.headers.get("content-type")).toBe("application/json");
-    const body = JSON.parse(await response.text());
-    expect(body).toEqual({
-      error: {
-        message: "Only inline images are supported.",
-        type: "invalid_request_error",
-        code: 400,
-      },
+    await expect(
+      f.broker.open(
+        f.request({
+          body: {
+            model: "claude-fixture",
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: "what is this" },
+                  { type: "image_url", image_url: { url: "https://example.com/remote.png" } },
+                ],
+              },
+            ],
+            stream: false,
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      failure: { kind: "provider-failed", layer: "translation", reason: "request-translation" },
     });
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(f.captured).toHaveLength(0);
@@ -969,7 +1052,7 @@ describe("worker provider broker translated route", () => {
     expect(f.records).toHaveLength(0);
   });
 
-  it("maps provider errors to Chat Completions error JSON without secrets", async () => {
+  it("does not infer HTTP status from private stream exception text", async () => {
     const failingStream = async () => {
       const stream = createAssistantMessageEventStream();
       const message = {
@@ -988,14 +1071,18 @@ describe("worker provider broker translated route", () => {
       return stream;
     };
     const f = translatedFixture([], { streamSimple: failingStream as never });
-    const response = await f.broker.open(f.request());
-    expect(response.status).toBe(401);
-    expect(response.headers.get("content-type")).toBe("application/json");
-    const body = JSON.parse(await response.text());
-    expect(body.error.type).toBe("api_error");
-    expect(body.error.message).toBe("Provider request failed.");
-    expect(body.error.code).toBe(401);
-    expect(JSON.stringify(body)).not.toContain(SENTINEL_SECRET);
+    let caught: unknown;
+    try {
+      await f.broker.open(f.request());
+    } catch (error) {
+      caught = error;
+    }
+    expect(hermesProviderFailure(caught)).toEqual({
+      kind: "provider-failed",
+      layer: "provider-adapter",
+      reason: "provider-stream",
+    });
+    expect(String(caught)).not.toContain(SENTINEL_SECRET);
     expect(f.records.at(-1)?.request?.collection?.outcome).toBe("failed");
   });
 
@@ -1103,4 +1190,59 @@ describe("worker provider broker translated route", () => {
     expect(sent).not.toHaveProperty("reasoning_effort");
     expect(f.records.at(-1)?.request?.collection?.outcome).toBe("success");
   });
+});
+
+it("waits for translated usage writes before the final collection receipt", async () => {
+  let release!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let observed!: () => void;
+  const measurementStarted = new Promise<void>((resolve) => {
+    observed = resolve;
+  });
+  const records: AgentUsage[] = [];
+  const f = translatedFixture(
+    [startEvent, ...textDeltaEvents("Hello"), doneEvent([text("Hello")])],
+    {
+      record: async (usage) => {
+        if (usage.request?.counter.sequence === 1) {
+          observed();
+          await blocked;
+        }
+        records.push(usage);
+      },
+    },
+  );
+  const opened = f.broker.open(f.request());
+  try {
+    await measurementStarted;
+    // Let the fake stream finish while its measurement write remains blocked.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(records).toHaveLength(1);
+    expect(records[0]?.request?.collection?.outcome).toBe("started");
+    release();
+    await opened;
+    expect(records.map((usage) => usage.request?.counter.sequence)).toEqual([0, 1, 2]);
+    expect(records.at(-1)?.request?.collection?.outcome).toBe("success");
+  } finally {
+    release();
+    await opened.catch(() => undefined);
+  }
+});
+
+it("leaves final collection open if a translated usage write rejects without an error object", async () => {
+  const records: AgentUsage[] = [];
+  const f = translatedFixture(
+    [startEvent, ...textDeltaEvents("Hello"), doneEvent([text("Hello")])],
+    {
+      record: async (usage) => {
+        if (usage.request?.counter.sequence === 1) throw undefined;
+        records.push(usage);
+      },
+    },
+  );
+  await expect(f.broker.open(f.request())).rejects.toThrow();
+  expect(records).toHaveLength(1);
+  expect(records[0]?.request?.collection?.outcome).toBe("started");
 });

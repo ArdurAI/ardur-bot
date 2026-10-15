@@ -64,6 +64,7 @@ services:
       retries: 30
 
   api:
+    stop_grace_period: 90s
     image: ${TOPOLOGY_APP_IMAGE:-ardurbot/app:topology}
     command:
       - bash
@@ -139,6 +140,7 @@ services:
       retries: 30
 
   worker:
+    stop_grace_period: 90s
     image: ${TOPOLOGY_APP_IMAGE:-ardurbot/app:topology}
     command: ["pnpm", "--filter", "@ardurbot/worker", "start"]
     environment:

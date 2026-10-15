@@ -333,3 +333,25 @@ describe("InMemoryJobQueue", () => {
     });
   });
 });
+
+it("bounds an in-memory drain and keeps new work waiting until admission reopens", async () => {
+  const queue = new InMemoryJobQueue();
+  let finish!: () => void;
+  const active = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const handler = vi.fn(async ({ runId }: { runId: string }) => {
+    if (runId === "active") await active;
+  });
+  await queue.start({ "run.continue": handler } as unknown as BackgroundJobHandlers);
+  await queue.enqueue({ name: "run.continue", payload: { runId: "active" } });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  expect(await queue.drain(1)).toBe(false);
+  await queue.enqueue({ name: "run.continue", payload: { runId: "new" } });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  expect(handler).toHaveBeenCalledOnce();
+  queue.resume();
+  finish();
+  await queue.close();
+  expect(handler).toHaveBeenCalledTimes(2);
+});

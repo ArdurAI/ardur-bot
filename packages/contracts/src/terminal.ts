@@ -3,8 +3,41 @@ export const TERMINAL_HEADER_BYTES = 9;
 export const TERMINAL_REPLAY_BYTES = 2 * 1024 * 1024;
 export const TERMINAL_WINDOW_BYTES = 256 * 1024;
 export const TERMINAL_GRACE_MS = 30_000;
+export const TERMINAL_SESSION_LIMIT = 4;
+export type TerminalSessionCollection = {
+  sessions: readonly { id: string; number: number; cols?: number; rows?: number }[];
+  activeId: string;
+};
 export const TERMINAL_UNAVAILABLE = "Terminal is not available on this computer.";
 export const TERMINAL_ENDED = "Session ended — open a new terminal.";
+
+export const TERMINAL_REPLAY_VERSION = 2;
+export type TerminalReplaySize = {
+  type: "replay-size";
+  version: 2;
+  seq: number;
+  cols: number;
+  rows: number;
+};
+export function parseTerminalReplaySize(value: unknown): TerminalReplaySize {
+  const record = value as Partial<TerminalReplaySize> | null;
+  if (
+    record?.type !== "replay-size" ||
+    record.version !== 2 ||
+    !Number.isSafeInteger(record.seq) ||
+    record.seq! < 1 ||
+    record.seq! > 0xffffffff
+  )
+    throw new Error("Invalid terminal replay.");
+  validateTerminalSize(record.cols!, record.rows!);
+  return {
+    type: "replay-size",
+    version: 2,
+    seq: record.seq!,
+    cols: record.cols!,
+    rows: record.rows!,
+  };
+}
 
 export function validateTerminalSize(cols: number, rows: number): void {
   if (

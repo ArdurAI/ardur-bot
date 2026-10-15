@@ -7,6 +7,46 @@ const base = {
 };
 
 describe("loadEnv", () => {
+  it("keeps the server device listener off until explicitly enabled", () => {
+    expect(loadEnv(base).deviceListener).toBeUndefined();
+    expect(
+      loadEnv({ ...base, ARDURBOT_DEVICE_LISTENER_ENABLED: "false" }).deviceListener,
+    ).toBeUndefined();
+    expect(
+      loadEnv({
+        ...base,
+        ARDURBOT_DEVICE_LISTENER_ENABLED: "true",
+        ARDURBOT_DEVICE_LISTENER_ORIGIN: "https://home.example.test:43119",
+      }).deviceListener,
+    ).toEqual({
+      bind: "127.0.0.1",
+      port: 43119,
+      hints: ["https://home.example.test:43119"],
+    });
+  });
+  it.each([
+    { ARDURBOT_DEVICE_LISTENER_ENABLED: "yes" },
+    { ARDURBOT_DEVICE_LISTENER_ORIGIN: undefined },
+    { ARDURBOT_DEVICE_LISTENER_BIND: "example.test" },
+    { ARDURBOT_DEVICE_LISTENER_PORT: "0" },
+    { ARDURBOT_DEVICE_LISTENER_PORT: "0xA873" },
+    { ARDURBOT_DEVICE_LISTENER_PORT: "43119.0" },
+    { API_HOST: "external.example.test" },
+    { ARDURBOT_DEVICE_LISTENER_PORT: "43119oops" },
+    { ARDURBOT_DEVICE_LISTENER_ORIGIN: "http://home.example.test:43119" },
+    { ARDURBOT_DEVICE_LISTENER_ORIGIN: "https://user:fake@home.example.test:43119" },
+    { ARDURBOT_DEVICE_LISTENER_ORIGIN: "https://home.example.test:43119/path" },
+    { ARDURBOT_DEVICE_LISTENER_ORIGIN: "https://0.0.0.0:43119" },
+  ])("rejects invalid enabled device configuration %j", (override) => {
+    expect(() =>
+      loadEnv({
+        ...base,
+        ARDURBOT_DEVICE_LISTENER_ENABLED: "true",
+        ARDURBOT_DEVICE_LISTENER_ORIGIN: "https://home.example.test:43119",
+        ...override,
+      }),
+    ).toThrow(/device listener/i);
+  });
   it("defaults the product path to Pi, Docker, and Graphile Worker", () => {
     const env = loadEnv(base);
     expect(env.agentRuntime).toBe("pi");

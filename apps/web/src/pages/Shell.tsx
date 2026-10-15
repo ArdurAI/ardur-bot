@@ -61,6 +61,7 @@ import {
   reorderBotTo,
   resolveComposerSendPlan,
   resolveMentionPickerKey,
+  rpcErrorMessage,
   runThreadSubscription,
   searchHitThreadTarget,
   serializeComposerPrompt,
@@ -68,6 +69,7 @@ import {
   userVisibleMessages,
   workRecordEntries,
 } from "@ardurbot/core";
+import type { GroupRecipientContext } from "@ardurbot/core/group-message-recipients";
 import type { GroupAvatarMember } from "@ardurbot/ui-web";
 import {
   AvatarStyleProvider,
@@ -75,6 +77,7 @@ import {
   Button,
   cn,
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
@@ -163,7 +166,6 @@ import {
 } from "../components/composer/folders";
 import { useComposerCommands } from "../components/composer/use-composer-commands";
 import type { FeedbackEdit } from "../components/MessageFeedback";
-
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { PeerMessageReceipt } from "../components/PeerMessageReceipt";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
@@ -189,6 +191,7 @@ import {
 import { desktopBridge } from "../lib/desktop";
 import { countOwnerWaiting, openDockSnapshot, publishDockWaitingCount } from "../lib/dock-badge";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
+import { translatedGoalText } from "../lib/goal-display-text";
 import { INSIGHT_ACTION_EVENT, openInsightAction } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
 import {
@@ -233,6 +236,7 @@ import {
   useTranscriptFollowSnap,
 } from "../lib/transcript-scroll";
 import { whenSpeakerReady, withSpeaker } from "../lib/tts-lazy";
+import { runSettingsMessage } from "../lib/use-can-run";
 import { useModelSettings } from "../lib/use-model-settings";
 import { useNotifications } from "../lib/use-notifications";
 import { workingIndicatorLabel } from "../lib/working-indicator";
@@ -275,7 +279,7 @@ import {
   isSettingsPanel,
   PanelHeaderTitle,
   SettingsPanelToggle,
-  ThreadSettingsButton,
+  ThreadSettingsMenuItem,
 } from "./shell/settings-chrome";
 import {
   botsSidebarCollapsedForPage,
@@ -403,9 +407,13 @@ const RoutinesPanel = lazy(() => import("../components/composer/RoutinesPanel"))
 const WorkspacePane = lazy(() =>
   import("./workspace/WorkspacePane").then((module) => ({ default: module.WorkspacePane })),
 );
+const GroupRecipients = lazy(() => import("../components/composer/GroupRecipients"));
 const SlashPicker = lazy(() => import("../components/composer/SlashPicker"));
 const ViewControls = lazy(() =>
   import("./workspace/ViewControls").then((module) => ({ default: module.ViewControls })),
+);
+const GoalNamedResult = lazy(() =>
+  import("./GoalNamedResult").then((module) => ({ default: module.GoalNamedResult })),
 );
 
 const ATTACHMENT_ACCEPT = ATTACHMENT_ALLOWED_MIME_TYPES.join(",");
@@ -544,27 +552,27 @@ export function ShellPage({
   const registerTerminalCloseGuard = useCallback((guard: (() => boolean) | null) => {
     terminalCloseGuard.current = guard;
   }, []);
-  const setPanel = useCallback((next: Panel | ((current: Panel) => Panel)) => {
-    const target = typeof next === "function" ? next(panelRef.current) : next;
-    if (target === null && panelRef.current === "computer") {
-      workspaceLayoutUpdateRef.current?.((layout) => ({
-        ...layout,
-        visible: false,
-        expanded: false,
-      }));
+  const setPanel = useCallback(
+    (next: Panel | ((current: Panel) => Panel)) => {
+      const target = typeof next === "function" ? next(panelRef.current) : next;
+      if (target !== panelRef.current) {
+        if (panelRef.current === "computer") {
+          const files = workspaceFilesSnapshot();
+          if (files.saving || (files.dirty && !window.confirm(t`Unsaved changes`))) return false;
+        }
+        if (terminalCloseGuard.current && !terminalCloseGuard.current()) return false;
+      }
+      panelRef.current = target;
+      setPanelUnchecked(target);
+      workspaceLayoutUpdateRef.current?.((layout) =>
+        target === "computer"
+          ? { ...(layout.open.length ? layout : openWorkspaceView(layout, "tasks")), visible: true }
+          : { ...layout, visible: false, expanded: false },
+      );
       return true;
-    }
-    if (target !== panelRef.current && terminalCloseGuard.current && !terminalCloseGuard.current())
-      return false;
-    panelRef.current = target;
-    setPanelUnchecked(target);
-    workspaceLayoutUpdateRef.current?.((layout) =>
-      target === "computer"
-        ? { ...(layout.open.length ? layout : openWorkspaceView(layout, "tasks")), visible: true }
-        : { ...layout, visible: false, expanded: false },
-    );
-    return true;
-  }, []);
+    },
+    [t],
+  );
   const paneReturnFocus = useRef<HTMLElement | null>(null);
   const workspaceVisibleRef = useRef(false);
   const workspaceScopeRef = useRef<string | null>(null);
@@ -900,6 +908,8 @@ export function ShellPage({
     inputTokens: number;
     outputTokens: number;
     runs: number;
+    records?: number;
+    runCount?: number;
   } | null>(null);
   // Owned here so the menu survives the DashboardPage remount when bootstrap resolves its space.
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -939,6 +949,20 @@ export function ShellPage({
   const autoSpokenBotId = useRef<string | null>(null);
 
   const inGroup = Boolean(groupId);
+  // The live strip for this group; also the fallback when a result link is stale.
+  const liveGoalStrip =
+    inGroup && goal && groupId && goal.groupId === groupId ? (
+      <GroupGoalStrip
+        goal={goal}
+        members={groups.find((candidate) => candidate.id === goal.groupId)?.members}
+        onRefresh={async () => {
+          setGoal(await rpc.goals.get({ groupId: goal.groupId }));
+        }}
+        onStop={async () => {
+          setGoal(await rpc.goals.stop({ goalId: goal.id }));
+        }}
+      />
+    ) : null;
   const active =
     team || board || dashboard || inGroup
       ? undefined
@@ -977,8 +1001,9 @@ export function ShellPage({
   }
   const openWorkspace = (tab: string) => {
     if (!isWorkspaceViewId(tab) || !setPanel("computer")) return;
-    paneReturnFocus.current =
-      document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+    paneReturnFocus.current = document.activeElement?.closest('[data-slot="dropdown-menu-content"]')
+      ? document.querySelector<HTMLElement>("[data-workspace-trigger]")
+      : document.activeElement instanceof HTMLElement && document.activeElement !== document.body
         ? document.activeElement
         : null;
     setWorkspaceTab(tab);
@@ -1001,7 +1026,7 @@ export function ShellPage({
     if (!requested && !(workspaceShown && workspaceOverlay)) return;
     if (!workspaceShown || (requested && !workspaceFocusRequest?.view)) {
       if (paneReturnFocus.current?.isConnected) paneReturnFocus.current.focus();
-      else document.querySelector<HTMLElement>("[data-workspace-toggle]")?.focus();
+      else document.querySelector<HTMLElement>("[data-workspace-trigger]")?.focus();
       setWorkspaceFocusRequest(null);
       return;
     }
@@ -1812,6 +1837,7 @@ export function ShellPage({
         }
         if (
           isRunTerminalEvent(event) ||
+          (event.type === "thread.message.created" && event.payload.role === "user") ||
           event.type === "run.waiting_input" ||
           event.type === "computer.placement.requested"
         ) {
@@ -2485,9 +2511,9 @@ export function ShellPage({
             return;
           }
           if (groupTarget && activeGroupId.current === groupTarget) {
-            await refreshGroupThreadRef.current(groupTarget);
+            void refreshGroupThreadRef.current(groupTarget).catch(() => undefined);
           } else if (botTarget && activeBotId.current === botTarget) {
-            await refreshThreadRef.current(botTarget);
+            void refreshThreadRef.current(botTarget).catch(() => undefined);
           }
           return;
         }
@@ -2557,8 +2583,10 @@ export function ShellPage({
         }
         if (groupTarget && activeGroupId.current === groupTarget) setAttachmentNotice(null);
         if (botTarget && activeBotId.current === botTarget) setAttachmentNotice(null);
-        if (groupTarget) await refreshGroupThreadRef.current(groupTarget);
-        else if (botTarget) await refreshThreadRef.current(botTarget);
+        // The write is acknowledged; a display refresh must not block the next send
+        // or report a stored message as a failed submission.
+        if (groupTarget) void refreshGroupThreadRef.current(groupTarget).catch(() => undefined);
+        else if (botTarget) void refreshThreadRef.current(botTarget).catch(() => undefined);
       } catch (error) {
         if (reroutedToGroup && groupTarget) {
           setSendError(error instanceof Error ? error.message : t`Failed to send message`);
@@ -3838,7 +3866,7 @@ export function ShellPage({
           inert={mobileSidebarOpen || (workspaceShown && workspaceOverlay)}
           className={`${team || board || dashboard ? "hidden" : "flex"} min-h-0 min-w-0 flex-1 flex-col bg-background`}
         >
-          <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
+          <div className="app-drag flex flex-nowrap items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
             <div className="flex min-w-0 flex-1 items-center gap-2">
               {/* Collapsed bots sidebar: this header is the leading edge for window chrome. */}
               {botsSidebarCollapsed && desktopBridge() ? <WindowChrome /> : null}
@@ -3917,60 +3945,66 @@ export function ShellPage({
               <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              {!inGroup && active ? (
+              {(inGroup ? activeGroup : active) ? (
                 <Suspense fallback={null}>
                   <ViewControls
-                    capabilities={{ computer, context: workspaceContext }}
+                    capabilities={inGroup ? null : { computer, context: workspaceContext }}
                     layout={workspaceLayout}
                     visible={workspaceShown}
-                    onOpen={openWorkspace}
+                    onOpen={(view) => {
+                      if (workspaceShown && workspaceLayout.active === view) backToChat();
+                      else openWorkspace(view);
+                    }}
                     onPosition={(position) =>
                       updateWorkspaceLayout((layout) => ({ ...layout, position }))
                     }
-                  />
+                  >
+                    {!inGroup && active ? (
+                      <DropdownMenuCheckboxItem
+                        checked={workspaceShown}
+                        aria-checked={workspaceShown}
+                        closeOnClick
+                        data-workspace-toggle
+                        onClick={() => {
+                          const next = workspaceShown ? null : "computer";
+                          if (workspaceShown) backToChat();
+                          else openWorkspace(workspaceTab);
+                          if (next === "computer" && active) {
+                            // Refresh run/computer so Take control isn't stuck on a stale busyBotName.
+                            void refreshThread(active.id).catch(() => undefined);
+                          }
+                        }}
+                      >
+                        <Monitor size={16} strokeWidth={1.6} aria-hidden="true" />
+                        {t`Workspace pane`}
+                      </DropdownMenuCheckboxItem>
+                    ) : null}
+                    <ThreadSettingsMenuItem
+                      group={inGroup}
+                      panel={panel}
+                      onPanel={(next) => {
+                        setModelFocusRequest(0);
+                        setPanel(next);
+                      }}
+                    />
+                  </ViewControls>
                 </Suspense>
-              ) : null}
-              {(inGroup ? activeGroup : active) ? (
-                <ThreadSettingsButton
-                  group={inGroup}
-                  panel={panel}
-                  onPanel={(next) => {
-                    setModelFocusRequest(0);
-                    setPanel(next);
-                  }}
-                />
-              ) : null}
-              {!inGroup && active ? (
-                <button
-                  type="button"
-                  title={t`Agent computer`}
-                  data-workspace-toggle
-                  onClick={() => {
-                    const next = workspaceShown ? null : "computer";
-                    if (workspaceShown) backToChat();
-                    else openWorkspace(workspaceTab);
-                    if (next === "computer" && active) {
-                      // Refresh run/computer so Take control isn't stuck on a stale busyBotName.
-                      void refreshThread(active.id).catch(() => undefined);
-                    }
-                  }}
-                  data-active={workspaceShown ? "" : undefined}
-                  className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent data-active:bg-accent"
-                >
-                  <Monitor size={18} strokeWidth={1.6} className="text-foreground/75" />
-                </button>
               ) : null}
             </div>
           </div>
           <div ref={setWorkspaceControlsHost} />
-          {inGroup && goal && goal.groupId === groupId ? (
-            <GroupGoalStrip
-              goal={goal}
-              onStop={async () => {
-                setGoal(await rpc.goals.stop({ goalId: goal.id }));
-              }}
-            />
-          ) : null}
+          {inGroup && groupId && searchParams.get("goal") && searchParams.get("revision") ? (
+            <Suspense fallback={null}>
+              <GoalNamedResult
+                groupId={groupId}
+                goalId={searchParams.get("goal")!}
+                revisionId={searchParams.get("revision")!}
+                fallback={liveGoalStrip}
+              />
+            </Suspense>
+          ) : (
+            liveGoalStrip
+          )}
           {bootstrapMe?.isDeploymentOwner
             ? currentRuns.map((run) =>
                 run.status === "waiting_input" && run.placement?.status === "pending" ? (
@@ -4002,6 +4036,7 @@ export function ShellPage({
               answerableAskIds={answerableAskIds}
               running={transcriptRunning}
               workingBots={workingBots}
+              restarting={workingRuns.some((run) => run.restarting)}
               room={inGroup}
               onLoadOlder={loadOlder}
               onOpenBot={openBot}
@@ -4041,6 +4076,15 @@ export function ShellPage({
             <Composer
               key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
               comparisonBotId={!inGroup && bots.length >= 2 ? active?.id : undefined}
+              groupRecipients={
+                inGroup
+                  ? {
+                      members: transcriptMembers ?? [],
+                      groupRouting: activeSnapshot?.groupRouting,
+                      activeRuns: currentRuns,
+                    }
+                  : undefined
+              }
               activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
               refusalBotName={refusalRunBotName(activeSnapshot, bots, transcriptMembers)}
               running={composerRunning}
@@ -4222,6 +4266,14 @@ export function ShellPage({
                     bot={active}
                     computer={computer}
                     context={workspaceContext}
+                    onContextChange={(context) =>
+                      setWorkspaceState((current) =>
+                        current?.key === workspaceLocationKey &&
+                        current.context === workspaceContext
+                          ? { key: workspaceLocationKey, context }
+                          : current,
+                      )
+                    }
                     contextLoading={workspaceContextLoading}
                     tab={workspaceTab}
                     fileLocation={fileLocation}
@@ -4236,6 +4288,10 @@ export function ShellPage({
                     expanded={workspaceExpanded}
                     onExpand={() => setWorkspaceExpanded((value) => !value)}
                     onClose={closeWorkspace}
+                    onClosePanel={() => {
+                      if (!setPanel(null)) return;
+                      setWorkspaceFocusRequest({ scope: workspaceKey, view: null });
+                    }}
                     onRetry={() => {
                       setWorkspaceRevision((value) => value + 1);
                       void refreshThread(active.id).catch(() => undefined);
@@ -4263,6 +4319,7 @@ export function ShellPage({
                       computer
                         ? {
                             working: composerRunning,
+                            userId,
                             registerCloseGuard: registerTerminalCloseGuard,
                             onTakeControl: async () => {
                               await rpc.computer.takeover({ botId: active.id });
@@ -4739,10 +4796,28 @@ export function ShellPage({
               const request = contextBot
                 ? rpc.bots.duplicate({ botId: contextBot.id })
                 : rpc.groups.duplicate({ groupId: contextGroup!.id });
-              void request.then(async (chat) => {
-                await refreshBots();
-                navigate(contextBot ? `/app/${chat.id}` : `/app/g/${chat.id}`);
-              });
+              void request
+                .then(async (chat) => {
+                  await refreshBots();
+                  navigate(contextBot ? `/app/${chat.id}` : `/app/g/${chat.id}`);
+                })
+                .catch((error: unknown) => {
+                  const fallback = t`Could not save. Try again.`;
+                  const safe =
+                    error &&
+                    typeof error === "object" &&
+                    "message" in error &&
+                    typeof error.message === "string"
+                      ? {
+                          message: error.message,
+                          code:
+                            "code" in error && typeof error.code === "string"
+                              ? error.code
+                              : undefined,
+                        }
+                      : { message: fallback };
+                  setSendError(runSettingsMessage(rpcErrorMessage(safe, fallback)));
+                });
             }}
             onClear={() => {
               setClearTarget(
@@ -5376,6 +5451,7 @@ const Transcript = memo(function Transcript({
   answerableAskIds,
   running,
   workingBots,
+  restarting,
   room,
   onLoadOlder,
   onOpenBot,
@@ -5405,6 +5481,7 @@ const Transcript = memo(function Transcript({
   answerableAskIds: ReadonlySet<string>;
   running: boolean;
   workingBots: GroupAvatarMember[];
+  restarting: boolean;
   room: boolean;
   onLoadOlder: () => void | Promise<void>;
   onOpenBot: (botId: string) => void;
@@ -5767,7 +5844,11 @@ const Transcript = memo(function Transcript({
             </div>
           );
         })}
-        {running && indicatorBots.length > 0 ? (
+        {restarting ? (
+          <p role="status" className="py-3 text-sm text-muted-foreground">
+            <Trans>Updating — your bots will continue after the update</Trans>
+          </p>
+        ) : running && indicatorBots.length > 0 ? (
           <ActiveBotGlyph bots={indicatorBots} label={workingLabel} />
         ) : null}
       </div>
@@ -5875,6 +5956,7 @@ const QuoteSelectionButton = memo(function QuoteSelectionButton({
 export const Composer = memo(function Composer({
   comparisonBotId,
   activeName,
+  groupRecipients,
   running,
   disabled,
   pendingAttachments,
@@ -5918,6 +6000,7 @@ export const Composer = memo(function Composer({
 }: {
   comparisonBotId?: string;
   activeName?: string;
+  groupRecipients?: GroupRecipientContext;
   running: boolean;
   disabled?: boolean;
   pendingAttachments: PendingAttachment[];
@@ -6236,6 +6319,16 @@ export const Composer = memo(function Composer({
             runtimeProblem={runtimeProblem}
             catalog={modelCatalog}
             botName={refusalBotName}
+            onRetry={() => {
+              // Prepare a continuation, never silently replay a possibly completed action.
+              setDraft(
+                (current) =>
+                  current ||
+                  t`Continue the interrupted run from its saved results. Check any uncertain action before repeating it.`,
+              );
+              onDismissError();
+              focusComposer();
+            }}
             onConnect={onConnectPin}
             onChangeModel={onChangeModel}
             onEnableExperimental={onEnableExperimental}
@@ -6438,6 +6531,18 @@ export const Composer = memo(function Composer({
             ))}
           </div>
         </div>
+      ) : null}
+      {groupRecipients ? (
+        <Suspense fallback={null}>
+          <GroupRecipients
+            group={groupRecipients}
+            canSend={canSend}
+            draft={draft}
+            skill={selectedSkill}
+            mentions={selectedMentions}
+            replyBotId={replyTarget?.botId}
+          />
+        </Suspense>
       ) : null}
       <div
         data-testid="composer-bar"
@@ -7015,6 +7120,8 @@ const MessageView = memo(function MessageView({
           );
         }
         if (block.kind === "chief_receipt") {
+          if (block.chiefDispatch)
+            return <ChiefDispatchLine key={i} dispatch={block.chiefDispatch} detail={block.text} />;
           return (
             <div
               key={i}
@@ -7260,7 +7367,7 @@ const MessageView = memo(function MessageView({
                     ? t`${botName}'s sign-in for the group model expired. Reconnect it or change the group model.`
                     : block.notice?.id === "group-model-unavailable"
                       ? t`${botName} couldn't use the model set for this group. Change the group model or check this bot's settings.`
-                      : block.text;
+                      : translatedGoalText(block.text);
           return (
             <div key={i} className="flex w-fit max-w-full justify-start">
               <div

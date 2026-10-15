@@ -15,9 +15,14 @@ import type {
   RuntimeProblem,
   Space,
   SpaceNavigation,
+  ThreadSnapshot,
   ToolResumedPayload,
 } from "@ardurbot/contracts";
-import { HERMES_CONTEXT_LIMIT_MESSAGE, RuntimeProblemSchema } from "@ardurbot/contracts";
+import {
+  goalDisplayText,
+  HERMES_CONTEXT_LIMIT_MESSAGE,
+  RuntimeProblemSchema,
+} from "@ardurbot/contracts";
 import type { ThreadHistory } from "@ardurbot/core";
 import {
   aiConsentTarget,
@@ -27,6 +32,7 @@ import {
   isCommandCardEvent,
   isInterimNarrationAt,
   isReasoningSummaryBlock,
+  isRestartEvent,
   isRunTerminalEvent,
   mergeCommandLinks,
   mergeThreadHistory,
@@ -35,6 +41,7 @@ import {
   readBoundedJsonResponse,
   reduceCommandMessages,
   reduceLiveMessageBlocks,
+  reduceRestartState,
   reduceRunContext,
   runFailureError,
   showsReplyText,
@@ -51,7 +58,7 @@ import type { EndpointResult } from "./endpoint";
 import { defaultApiBase, normalizeApiBase } from "./endpoint";
 import { t } from "./i18n";
 import { resumeLiveNotifications } from "./live-notifications";
-import { RpcError } from "./rpc-error";
+import { RpcError, RpcServerError } from "./rpc-error";
 import {
   clearSessionToken,
   loadSessionToken,
@@ -577,7 +584,7 @@ export async function deleteAccount(password: string) {
 }
 
 /** The message came from the server's own response body, not a client-side transport failure. */
-export class RpcServerError extends RpcError {}
+export { RpcServerError } from "./rpc-error";
 
 export async function rpc<T>(
   proc: string,
@@ -845,6 +852,7 @@ export type MobileSnapshot = {
   botId?: string;
   groupId?: string;
   groupName?: string;
+  groupRouting?: ThreadSnapshot["groupRouting"];
   threadId: string;
   cursor?: number;
   messages: MobileMessage[];
@@ -852,6 +860,7 @@ export type MobileSnapshot = {
   links?: readonly ToolResumedPayload[];
   olderCursor: number | null;
   run: {
+    restarting?: boolean;
     id: string;
     botId?: string;
     status: string;
@@ -866,6 +875,7 @@ export type MobileSnapshot = {
   } | null;
   contextRun?: MobileSnapshot["run"];
   activeRuns?: Array<{
+    restarting?: boolean;
     id: string;
     botId?: string;
     status: string;
@@ -950,7 +960,10 @@ export function copyableMobileMessageText(message: MobileMessage): string {
         block.kind === "bot_message_sent" ||
         block.kind === "bot_message_received"
       )
-        return block.text;
+        return goalDisplayText(
+          block.text,
+          t("The goal reached owner review before this work started."),
+        );
       return "";
     })
     .filter(Boolean)
@@ -991,7 +1004,10 @@ export function blockText(
           .map((step) => `${step.label}${step.count > 1 ? ` ×${step.count}` : ""}`)
           .join(" · ");
       }
-      return ("text" in block ? block.text : "state" in block ? block.state : "") ?? "";
+      const text = ("text" in block ? block.text : "state" in block ? block.state : "") ?? "";
+      return typeof text === "string"
+        ? goalDisplayText(text, t("The goal reached owner review before this work started."))
+        : text;
     })
     .filter(Boolean)
     .join("\n");
@@ -1072,6 +1088,7 @@ export function isMobileThreadSnapshotEvent(event: ThreadEvent): boolean {
     event.type === "thread.subagent" ||
     event.type === "thread.cloud_agent" ||
     event.type === "thread.cleared" ||
+    isRestartEvent(event) ||
     event.type === "run.started" ||
     event.type === "run.waiting_input" ||
     event.type === "run.retry_scheduled" ||
@@ -1085,6 +1102,7 @@ export function applyMobileThreadEvent(
   event: ThreadEvent,
 ): MobileSnapshot | null {
   if (!prev) return prev;
+  if (isRestartEvent(event)) return reduceRestartState(prev, event);
   if (event.type === "run.context") return reduceRunContext(prev, event);
   if (isCommandCardEvent(event.type) && (event.seq ?? -1) <= (prev.cursor ?? -1)) return prev;
   if (isCommandCardEvent(event.type)) {

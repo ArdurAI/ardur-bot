@@ -1,30 +1,47 @@
 import {
-  hermesCompatibility,
+  canBotRun,
   isSerializedModelCredential,
   listOllamaModels,
   listPiCatalog,
   modelCredentialDto,
   nativeRuntimeAvailability,
+  ollamaCheckUnavailable,
   ollamaErrorMessage,
   parseModelSecret,
   piModelContextWindow,
+  requestedBotPin,
+  runtimeComputerLocation,
+  selectConfiguredModel,
   showOllamaModel,
   suggestedModelEffort,
 } from "@ardurbot/adapters";
-import type { Actor, RuntimeKind, RuntimePin, UpdateBotInput } from "@ardurbot/contracts";
+import type {
+  Actor,
+  ComputerMode,
+  RuntimeComputerLocation,
+  RuntimeKind,
+  RuntimePin,
+  UpdateBotInput,
+} from "@ardurbot/contracts";
 import {
   DEFAULT_CONNECTION_CONTEXT_WINDOW,
-  HERMES_CONTEXT_LIMIT_MESSAGE,
-  HERMES_MINIMUM_CONTEXT_TOKENS,
+  failureCategoryMessage,
   nativeRuntimeProviders,
   normalizedThinkingLevel,
   ollamaThink,
   RuntimePinSchema,
+  runtimeNames,
   ThinkingLevelSchema,
   validateAntigravityPin,
 } from "@ardurbot/contracts";
+import { spaceDefaultEffort } from "@ardurbot/core";
 import type { Prisma } from "@ardurbot/db";
-import { findBoundModelCredential, findModelCredential } from "@ardurbot/db";
+import {
+  findBoundModelCredential,
+  findDefaultModelCredential,
+  findModelCredential,
+  IsolationError,
+} from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
 import type { RouterDeps } from "./router.js";
 
@@ -40,6 +57,7 @@ export async function normalizeModelPinUpdate(
     runtimeKind?: string;
   },
   input: ReturnType<typeof UpdateBotInput.parse>,
+  policies?: Pick<Parameters<typeof canBotRun>[0], "botPolicy" | "spacePolicy">,
 ): Promise<Prisma.BotUpdateInput> {
   if (
     input.runtimeKind === undefined &&
@@ -50,7 +68,8 @@ export async function normalizeModelPinUpdate(
   )
     return {};
   if (
-    (input.runtimeKind ?? existing.runtimeKind ?? "pi") !== "hermes" &&
+    ((input.runtimeKind ?? existing.runtimeKind ?? "pi") !== "hermes" ||
+      (input.modelProvider ?? existing.modelProvider) === "ollama") &&
     (input.runtimeKind === undefined || input.runtimeKind === (existing.runtimeKind ?? "pi")) &&
     (input.modelProvider === undefined || input.modelProvider === existing.modelProvider) &&
     (input.modelId === undefined || input.modelId === existing.modelId) &&
@@ -122,8 +141,19 @@ export async function normalizeModelPinUpdate(
     : runtimeKind === "hermes"
       ? null
       : await findModelCredential(deps.prisma, actor, provider, modelId);
-  if (!credential)
-    throw new ORPCError("BAD_REQUEST", { message: "Connect that model provider first" });
+  const connectionProblem = canBotRun({
+    pin: {
+      runtimeKind: runtimeKind as RuntimeKind,
+      provider,
+      modelId,
+      effort: null,
+      credentialId: credentialId ?? credential?.id ?? null,
+      revision: 0,
+    },
+    connection: { credential },
+  });
+  if (connectionProblem) throw new ORPCError("BAD_REQUEST", { message: connectionProblem.reason });
+  if (!credential) throw new ORPCError("BAD_REQUEST");
   if (provider === "ollama") {
     const secret = await deps.prisma.secret.findFirst({
       where: { id: credential.secretId, userId: actor.userId, spaceId: null },
@@ -144,9 +174,9 @@ export async function normalizeModelPinUpdate(
         : null;
       ollamaThink(effort, model);
       if (runtimeKind === "hermes") {
-        requireHermesContext(model.contextWindow);
-        const problem = hermesCompatibility(
-          {
+        const problem = canBotRun({
+          ...policies,
+          pin: {
             runtimeKind,
             provider,
             modelId,
@@ -154,7 +184,7 @@ export async function normalizeModelPinUpdate(
             credentialId: credential.id,
             revision: 0,
           },
-          {
+          model: {
             provider,
             id: modelId,
             baseUrl: `${connection.baseUrl}/v1`,
@@ -162,7 +192,7 @@ export async function normalizeModelPinUpdate(
             maxTokens: Math.max(1, Math.min(4096, Math.floor(model.contextWindow / 4))),
             thinkingLevel: ThinkingLevelSchema.parse(normalizedThinkingLevel(effort)),
           },
-        );
+        });
         if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
       }
       return {
@@ -174,13 +204,19 @@ export async function normalizeModelPinUpdate(
         modelPinRevision: { increment: 1 },
       };
     } catch (error) {
-      throw new ORPCError("BAD_REQUEST", {
-        message: ollamaErrorMessage(error),
-      });
+      const message = ollamaErrorMessage(error);
+      const unavailable = ollamaCheckUnavailable(error);
+      // A temporarily unavailable server is not an impossible settings combination.
+      throw new ORPCError(unavailable ? "PRECONDITION_FAILED" : "BAD_REQUEST", { message });
     }
   }
   const entry = listPiCatalog().find((item) => item.provider === provider && item.id === modelId);
-  if (provider === "openai-compatible" ? credential.defaultModel !== modelId : !entry) {
+  if (
+    provider === "openai-compatible"
+      ? credential.defaultModel !== modelId &&
+        !(unchanged && existing.modelCredentialId === credential.id)
+      : !entry
+  ) {
     throw new ORPCError("BAD_REQUEST", { message: "Unknown model for that provider" });
   }
   let levels = entry?.thinkingLevels ?? ["off" as const];
@@ -209,11 +245,6 @@ export async function normalizeModelPinUpdate(
       message: `Thinking level must be one of: ${levels.join(", ")}`,
     });
   if (runtimeKind === "hermes") {
-    requireHermesContext(
-      compatible?.contextWindow ??
-        piModelContextWindow(provider, modelId) ??
-        DEFAULT_CONNECTION_CONTEXT_WINDOW,
-    );
     // Hermes refuses sign-in connections; detect them from the stored secret so
     // editing fails with the same reason a run would.
     const secret = await deps.prisma.secret.findFirst({
@@ -223,15 +254,20 @@ export async function normalizeModelPinUpdate(
       throw new ORPCError("BAD_REQUEST", { message: "The pinned connection secret is missing." });
     const plaintext = deps.secrets.load(secret.ciphertext, secret.id);
     const signIn =
-      parseModelSecret(plaintext).kind === "oauth" ||
-      (provider === "anthropic" && isSerializedModelCredential(plaintext));
-    const problem = hermesCompatibility(
-      { runtimeKind, provider, modelId, effort, credentialId: credential.id, revision: 0 },
-      {
+      (provider === "anthropic" && isSerializedModelCredential(plaintext)) ||
+      parseModelSecret(plaintext).kind === "oauth";
+    const problem = canBotRun({
+      ...policies,
+      pin: { runtimeKind, provider, modelId, effort, credentialId: credential.id, revision: 0 },
+      model: {
         provider,
         id: modelId,
         baseUrl: compatible?.baseUrl,
-        contextWindow: compatible?.contextWindow,
+        reasoning: compatible?.reasoning,
+        contextWindow:
+          compatible?.contextWindow ??
+          piModelContextWindow(provider, modelId) ??
+          DEFAULT_CONNECTION_CONTEXT_WINDOW,
         maxTokens: compatible?.maxTokens,
         thinkingLevel: ThinkingLevelSchema.parse(effort),
         ...(signIn
@@ -242,7 +278,7 @@ export async function normalizeModelPinUpdate(
             }
           : {}),
       },
-    );
+    });
     if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
   }
   if (
@@ -263,11 +299,6 @@ export async function normalizeModelPinUpdate(
   };
 }
 
-function requireHermesContext(contextWindow: number): void {
-  if (contextWindow < HERMES_MINIMUM_CONTEXT_TOKENS)
-    throw new ORPCError("BAD_REQUEST", { message: HERMES_CONTEXT_LIMIT_MESSAGE });
-}
-
 /** A validated choice with every required field bound: the shape setReviewer accepts. */
 export type ValidatedModelPinChoice = {
   runtimeKind: RuntimeKind;
@@ -282,6 +313,7 @@ export async function validateModelPinSelection(
   deps: RouterDeps,
   actor: Actor,
   choice: Omit<RuntimePin, "revision">,
+  policies?: Pick<Parameters<typeof canBotRun>[0], "botPolicy" | "spacePolicy">,
 ): Promise<ValidatedModelPinChoice> {
   const checked = RuntimePinSchema.omit({ revision: true }).parse(choice);
   if (
@@ -291,6 +323,21 @@ export async function validateModelPinSelection(
     (checked.effort === null && checked.provider !== "ollama" && checked.provider !== "antigravity")
   )
     throw new ORPCError("BAD_REQUEST", { message: "Choose a model, effort and connection." });
+  if (
+    checked.runtimeKind === "pi" &&
+    checked.provider === "scripted" &&
+    checked.modelId === "scripted" &&
+    checked.credentialId === "scripted" &&
+    checked.effort === "off" &&
+    deps.env.agentRuntime === "scripted"
+  )
+    return {
+      runtimeKind: "pi",
+      provider: "scripted",
+      modelId: "scripted",
+      credentialId: "scripted",
+      effort: "off",
+    };
   const update = await normalizeModelPinUpdate(
     deps,
     actor,
@@ -309,6 +356,7 @@ export async function validateModelPinSelection(
       thinkingLevel: checked.effort === null ? null : ThinkingLevelSchema.parse(checked.effort),
       modelCredentialId: checked.credentialId,
     },
+    policies,
   );
   return {
     runtimeKind: checked.runtimeKind,
@@ -317,4 +365,197 @@ export async function validateModelPinSelection(
     effort: update.thinkingLevel as string | null,
     credentialId: update.modelCredentialId as string,
   };
+}
+
+export type BotRunSettingsContext = {
+  botId?: string;
+  runtimeExperimental?: boolean;
+  computerLocation?: "host" | "sandbox";
+  computerMode?: ComputerMode;
+  inheritBotPin?: boolean;
+  /** Server-only: normalizeModelPinUpdate already checked this changed Ollama selection. */
+  ollamaSelectionValidated?: boolean;
+};
+
+/** Read the actual destination of a sharing change without creating or moving a computer. */
+export async function botRunComputerLocation(
+  deps: RouterDeps,
+  actor: Actor,
+  computer: { kind: string; connectionId?: string | null; spaceId: string; scope?: string } | null,
+  botId: string,
+  mode?: ComputerMode,
+): Promise<RuntimeComputerLocation> {
+  const currentMode = computer?.scope === "dedicated" ? "dedicated" : "team";
+  const destination =
+    mode && mode !== currentMode
+      ? mode === "team"
+        ? await deps.prisma.computer.findFirst({
+            where: { spaceId: actor.spaceId, scope: "team" },
+            orderBy: [{ bots: { _count: "desc" } }, { createdAt: "asc" }, { id: "asc" }],
+          })
+        : await deps.prisma.computer.findUnique({ where: { scopeKey: `bot:${botId}` } })
+      : null;
+  return runtimeComputerLocation(deps.prisma, destination ?? computer);
+}
+
+/** Resolve trusted facts once; forms and save endpoints use the same run admission predicates. */
+export async function validateBotCanRun(
+  deps: RouterDeps,
+  actor: Actor,
+  choice: Omit<RuntimePin, "revision">,
+  context: BotRunSettingsContext,
+): Promise<ValidatedModelPinChoice> {
+  const bot = context.botId
+    ? await deps.prisma.bot.findFirst({
+        where: {
+          id: context.botId,
+          userId: actor.userId,
+          spaceId: actor.spaceId,
+          archivedAt: null,
+        },
+        include: { computer: true },
+      })
+    : null;
+  if (context.botId && !bot) throw new IsolationError();
+  // An existing bot's computer is never supplied by the client.
+  const computer: RuntimeComputerLocation = bot
+    ? await botRunComputerLocation(deps, actor, bot.computer, bot.id, context.computerMode)
+    : { kind: context.computerLocation === "host" ? "desktop" : "docker" };
+  if (context.inheritBotPin && !bot) throw new IsolationError();
+  let pin: RuntimePin =
+    context.inheritBotPin && bot ? requestedBotPin(bot) : { ...choice, revision: 0 };
+  const placement = {
+    computer,
+    experimental: context.runtimeExperimental ?? bot?.runtimeExperimental ?? false,
+  };
+  const inheritedNewBotDefault =
+    !bot && pin.runtimeKind === "pi" && pin.provider === null && pin.modelId === null;
+  const unchangedChoice =
+    inheritedNewBotDefault ||
+    (bot &&
+      (context.inheritBotPin ||
+        (pin.runtimeKind === bot.runtimeKind &&
+          pin.provider === bot.modelProvider &&
+          pin.modelId === bot.modelId &&
+          pin.credentialId === bot.modelCredentialId &&
+          normalizedThinkingLevel(pin.effort) === normalizedThinkingLevel(bot.thinkingLevel))));
+  let credential = null;
+  if (pin.runtimeKind === "pi" && pin.provider === null && pin.modelId === null) {
+    credential = await findDefaultModelCredential(deps.prisma, actor);
+    if (!credential?.defaultModel) {
+      if (deps.env.agentRuntime === "scripted")
+        pin = {
+          ...pin,
+          provider: "scripted",
+          modelId: "scripted",
+          credentialId: "scripted",
+          effort: "off",
+        };
+      else
+        throw new ORPCError("BAD_REQUEST", {
+          message: failureCategoryMessage("connection-missing", {
+            runtime: runtimeNames[pin.runtimeKind],
+            bot: "this bot",
+          }),
+        });
+    } else {
+      const entry = listPiCatalog().find(
+        (item) => item.provider === credential!.provider && item.id === credential!.defaultModel,
+      );
+      let defaultEffort = spaceDefaultEffort(entry?.reasoning, entry?.thinkingLevels);
+      if (credential.provider === "openai-compatible" || credential.provider === "ollama") {
+        const secret = await deps.prisma.secret.findFirst({
+          where: { id: credential.secretId, userId: actor.userId, spaceId: null },
+        });
+        if (secret) {
+          const metadata = modelCredentialDto(
+            credential,
+            deps.secrets.load(secret.ciphertext, secret.id),
+          );
+          defaultEffort =
+            metadata.thinkingLevel ??
+            spaceDefaultEffort(metadata.reasoning, metadata.thinkingLevels);
+        }
+      }
+      pin = {
+        ...pin,
+        provider: credential.provider,
+        modelId: credential.defaultModel,
+        credentialId: credential.id,
+        effort: pin.effort ?? defaultEffort,
+      };
+    }
+  }
+  if (pin.runtimeKind === "pi" || pin.runtimeKind === "hermes") {
+    credential ??=
+      pin.provider && pin.credentialId
+        ? await findBoundModelCredential(deps.prisma, actor, pin.provider, pin.credentialId)
+        : null;
+    const problem = canBotRun({ pin, connection: { credential } });
+    if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
+  }
+  const unchangedOllamaPin =
+    pin.provider === "ollama" && (unchangedChoice || context.ollamaSelectionValidated);
+  const space = await deps.prisma.space.findUnique({ where: { id: actor.spaceId } });
+  const policies = {
+    botPolicy: bot?.allowedModelDestinations,
+    spacePolicy: space?.allowedModelDestinations,
+  };
+  let checked: ValidatedModelPinChoice;
+  if (
+    (pin.runtimeKind === "pi" || pin.runtimeKind === "hermes") &&
+    (pin.provider !== "ollama" || unchangedOllamaPin) &&
+    (pin.provider !== "scripted" || deps.env.agentRuntime === "scripted")
+  ) {
+    const selected = selectConfiguredModel({ pin, credential });
+    if (selected.kind !== "resolved")
+      throw new ORPCError("BAD_REQUEST", { message: selected.reason });
+    checked = {
+      runtimeKind: pin.runtimeKind,
+      provider: selected.provider,
+      modelId: selected.id,
+      credentialId: pin.credentialId!,
+      effort: pin.effort,
+    };
+  } else {
+    checked = await validateModelPinSelection(deps, actor, pin, policies);
+  }
+  let metadata: ReturnType<typeof modelCredentialDto> | undefined;
+  if (credential) {
+    const secret = await deps.prisma.secret.findFirst({
+      where: { id: credential.secretId, userId: actor.userId, spaceId: null },
+    });
+    if (!secret)
+      throw new ORPCError("BAD_REQUEST", {
+        message: failureCategoryMessage("connection-missing", {
+          runtime: runtimeNames[pin.runtimeKind],
+          bot: "this bot",
+        }),
+      });
+    metadata = modelCredentialDto(credential, deps.secrets.load(secret.ciphertext, secret.id));
+  }
+  const problem = canBotRun({
+    pin: { ...pin, ...checked },
+    model: {
+      provider: checked.provider,
+      id: checked.modelId,
+      baseUrl: metadata?.baseUrl,
+      reasoning: metadata?.reasoning,
+      ...(metadata?.oauth || metadata?.connectionIssue === "api-key-required"
+        ? { oauth: { credential: { type: "oauth" as const, access: "", refresh: "", expires: 0 } } }
+        : {}),
+      contextWindow:
+        checked.provider === "openai-compatible"
+          ? metadata?.contextWindow
+          : (piModelContextWindow(checked.provider, checked.modelId) ?? metadata?.contextWindow),
+      maxTokens: metadata?.maxTokens,
+      thinkingLevel: ThinkingLevelSchema.parse(normalizedThinkingLevel(checked.effort)),
+    },
+    botPolicy: bot?.allowedModelDestinations,
+    spacePolicy: space?.allowedModelDestinations,
+  });
+  if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
+  const placementProblem = canBotRun({ pin, placement });
+  if (placementProblem) throw new ORPCError("BAD_REQUEST", { message: placementProblem.reason });
+  return checked;
 }

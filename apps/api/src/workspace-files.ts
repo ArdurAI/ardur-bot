@@ -48,9 +48,17 @@ export function workspaceFileSource(
       })
     | null,
 ): WorkspaceContext["files"] {
-  // Host folders require an explicit registered-root choice; a bot has no implicit host root.
-  if (!computer || computer.kind === "fake" || computerRunsOnHost(computer)) return "unavailable";
-  if (computer.state === "running" && computer.providerRef && !computer.maintenanceId)
+  if (!computer || computer.kind === "fake") return "unavailable";
+  const host = computerRunsOnHost(computer);
+  // The paired bridge requires run or maintenance authorization, not a pane request. A host
+  // computer without a location cannot be told apart from a stopped bridge, so it shows nothing.
+  if (host && (!computer.providerRef || computer.providerRef.startsWith("host:")))
+    return "unavailable";
+  if (
+    (computer.state === "running" || (host && computer.state === "suspended")) &&
+    computer.providerRef &&
+    !computer.maintenanceId
+  )
     return "live";
   if (computer.homeRevision !== "empty") return "saved";
   return "unavailable";
@@ -68,18 +76,33 @@ export function createWorkspaceFiles(deps: Deps) {
   function context(
     botId: string,
     computer: Awaited<ReturnType<typeof target>>["computer"],
+    gitAvailable: boolean,
   ): WorkspaceContext {
+    const files = workspaceFileSource(computer);
     return {
       botId,
       computerId: computer?.id ?? null,
       generation: computer?.screenGeneration ?? null,
-      files: workspaceFileSource(computer),
+      files,
+      // The Git observation is an optional provider capability on live worktrees only.
+      git: files === "live" && gitAvailable,
       runsOnHost: computerRunsOnHost(computer ?? {}),
-      ...(!computerRunsOnHost(computer ?? {}) && computer
-        ? { rootId: `sandbox-${computer.id}` }
-        : {}),
+      ...(computer ? { rootId: `sandbox-${computer.id}` } : {}),
       observedAt: new Date().toISOString(),
     };
+  }
+  /**
+   * Asks the routing wrapper whether the provider that owns this computer can
+   * serve the Git observation; a plain provider answers from its own shape.
+   */
+  async function gitCapability(
+    computer: NonNullable<Awaited<ReturnType<typeof target>>["computer"]>,
+    adapterContext: AdapterContext,
+  ): Promise<boolean> {
+    if (workspaceFileSource(computer) !== "live") return false;
+    const probe = deps.sandbox.canObserveGit;
+    if (probe) return probe.call(deps.sandbox, toComputerRef(computer), adapterContext);
+    return deps.sandbox.gitChanges !== undefined;
   }
   async function resolve(actor: Actor, input: Request, signal?: AbortSignal) {
     IdePathSchema.parse(input.path);
@@ -93,9 +116,6 @@ export function createWorkspaceFiles(deps: Deps) {
       computer.screenGeneration !== input.generation
     )
       throw new ORPCError("CONFLICT", { message: "Computer changed. Refresh files." });
-    const state = context(input.botId, computer);
-    if (state.files === "unavailable")
-      throw new ORPCError("CONFLICT", { message: "Files are unavailable on this computer." });
     const mode = parseComputerMode(computer.scope);
     const root = mode === "team" ? teamBotWorkspaceDirectory(bot.id) : "";
     const filePath = workspacePath(root, input.path);
@@ -104,10 +124,14 @@ export function createWorkspaceFiles(deps: Deps) {
       userId: actor.userId,
       spaceId: actor.spaceId,
       botId: bot.id,
+      ...(computerRunsOnHost(computer) ? { fileRoot: root } : {}),
       operationId,
       traceId: operationId,
       signal: signal ?? new AbortController().signal,
     };
+    const state = context(input.botId, computer, await gitCapability(computer, adapterContext));
+    if (state.files === "unavailable")
+      throw new ORPCError("CONFLICT", { message: "Files are unavailable on this computer." });
     return { computer, state, root, filePath, adapterContext };
   }
   async function list(actor: Actor, input: Request, signal?: AbortSignal) {
@@ -297,11 +321,24 @@ export function createWorkspaceFiles(deps: Deps) {
   return {
     async describe(actor: Actor, botId: string) {
       const bot = await target(actor, botId);
-      return context(botId, bot.computer);
+      const computer = bot.computer;
+      if (!computer) return context(botId, null, false);
+      const operationId = `workspace-${randomUUID()}`;
+      const adapterContext: AdapterContext = {
+        userId: actor.userId,
+        spaceId: actor.spaceId,
+        botId: bot.id,
+        operationId,
+        traceId: operationId,
+        signal: new AbortController().signal,
+      };
+      return context(botId, computer, await gitCapability(computer, adapterContext));
     },
     list,
     read,
     save,
+    /** Checked bot/computer/root/generation binding plus adapter context for reuse. */
+    resolve,
   };
 }
 

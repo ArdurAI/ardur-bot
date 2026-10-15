@@ -20,6 +20,7 @@ export interface RuntimeConfigPanelProps {
   onError?: (error: string | null) => void;
   onOpenLearning?: () => void;
   pin?: Partial<RuntimePin> | null;
+  checkPin?: boolean;
 }
 
 export function RuntimeConfigPanel({
@@ -28,6 +29,7 @@ export function RuntimeConfigPanel({
   onError,
   onOpenLearning,
   pin,
+  checkPin = true,
 }: RuntimeConfigPanelProps) {
   const id = useId();
   const { t } = useLingui();
@@ -49,21 +51,23 @@ export function RuntimeConfigPanel({
     let active = true;
     setPinError(null);
     const choice = RuntimePinSchema.omit({ revision: true }).safeParse(JSON.parse(pinKey));
-    if (choice.success && choice.data.runtimeKind === "hermes") {
-      void rpc.models.validatePin(choice.data).then(
-        () => {
-          if (active) setPinError(null);
-        },
-        (error: { code?: string; message: string }) => {
-          if (active)
-            setPinError(hermesContextMessage(rpcErrorMessage(error, checkFailedRef.current)));
-        },
-      );
+    if (checkPin && choice.success && choice.data.runtimeKind === "hermes") {
+      void rpc.models
+        .validatePin({ ...choice.data, computerLocation: "host", runtimeExperimental: true })
+        .then(
+          () => {
+            if (active) setPinError(null);
+          },
+          (error: { code?: string; message: string }) => {
+            if (active)
+              setPinError(hermesContextMessage(rpcErrorMessage(error, checkFailedRef.current)));
+          },
+        );
     }
     return () => {
       active = false;
     };
-  }, [pinKey]);
+  }, [pinKey, checkPin]);
 
   const [callsError, setCallsError] = useState<string | null>(null);
   const [timeError, setTimeError] = useState<string | null>(null);

@@ -1,5 +1,5 @@
 import type { Bot } from "@ardurbot/contracts";
-import { BotAvatar, Button } from "@ardurbot/ui-web";
+import { BotAvatar, Button, DropdownMenuCheckboxItem } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Settings } from "lucide-react";
 
@@ -16,7 +16,7 @@ export function hasSharedPanelHeader(panel: string | null): boolean {
 }
 
 /** The conversation header's entry to the settings of the bot or group in view. */
-export function ThreadSettingsButton({
+export function ThreadSettingsMenuItem({
   group,
   panel,
   onPanel,
@@ -30,17 +30,14 @@ export function ThreadSettingsButton({
   const open = panel === target;
   const label = group ? t`Group settings` : t`Bot settings`;
   return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={open}
-      title={label}
-      data-active={open ? "" : undefined}
+    <DropdownMenuCheckboxItem
+      checked={open}
+      closeOnClick
       onClick={() => onPanel(open ? null : target)}
-      className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent data-active:bg-accent"
     >
-      <Settings size={18} strokeWidth={1.6} aria-hidden="true" className="text-foreground/75" />
-    </button>
+      <Settings size={16} strokeWidth={1.6} aria-hidden="true" />
+      {label}
+    </DropdownMenuCheckboxItem>
   );
 }
 

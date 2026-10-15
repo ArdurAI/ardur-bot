@@ -1,11 +1,13 @@
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
+import { fileURLToPath } from "node:url";
 import type { CommandRequest, ProcessEvent } from "@ardurbot/adapter-kit";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { loadWin32NativeAddon } from "../../../apps/host-service/src/native-addon.js";
 
 const fake = vi.hoisted(() => ({ spawn: vi.fn(), environment: vi.fn() }));
 vi.mock("node:child_process", () => ({ spawn: fake.spawn }));
@@ -15,6 +17,7 @@ vi.mock("./host-environment.js", async (original) => ({
 }));
 
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
+import { installWin32NativeApi, win32NtRelativeAvailable } from "./desktop-sandbox-win32-path.js";
 import { filterHostEnvironment } from "./host-environment.js";
 
 const context = {
@@ -25,6 +28,19 @@ const context = {
   signal: new AbortController().signal,
 };
 const roots: string[] = [];
+beforeAll(() => {
+  if (process.platform !== "win32") return;
+  // Use the production loader and the addon staged by the Windows job's build step.
+  const bundle = fileURLToPath(
+    new URL("../../../apps/host-service/dist/host-service.cjs", import.meta.url),
+  );
+  const native = loadWin32NativeAddon(bundle);
+  expect(native, "The built host service must provide its staged Windows addon").toBeDefined();
+  installWin32NativeApi(() => native);
+  expect(win32NtRelativeAvailable(), "The staged addon must load the Windows NT file APIs").toBe(
+    true,
+  );
+});
 beforeEach(() => {
   fake.spawn.mockReset();
 });
@@ -82,25 +98,31 @@ async function fixture(opts: {
   };
 }
 
-it("wraps host commands in sandbox-exec on macOS with the computed deny profile", async () => {
-  const { root, execute } = await fixture({ platform: "darwin" });
-  fake.spawn.mockImplementation(() => processStub());
-  expect(await execute({ argv: ["echo", "hi"] })).toContainEqual({ type: "exit", code: 0 });
-  const [binary, args] = fake.spawn.mock.calls[0]!;
-  expect(binary).toBe("/usr/bin/sandbox-exec");
-  expect(args[0]).toBe("-p");
-  const profile = args[1];
-  expect(profile).toContain("(allow default)");
-  expect(profile).toContain(`(subpath "${path.join(root, "control-plane")}")`);
-  expect(profile).toContain('(remote ip "localhost:55433")');
-  expect(profile).toContain(
-    `(remote unix-socket (literal "${path.join(root, "control-plane", "engine.sock")}"))`,
-  );
-  // The real command follows the profile untouched.
-  expect(args.slice(2)).toEqual([path.join(root, "echo"), "hi"]);
-});
+// These command fixtures require Unix executable lookup and permissions.
+const posixCommandTest = it.skipIf(process.platform === "win32");
 
-it("runs commands unwrapped off macOS without implying protection", async () => {
+posixCommandTest(
+  "wraps host commands in sandbox-exec on macOS with the computed deny profile",
+  async () => {
+    const { root, execute } = await fixture({ platform: "darwin" });
+    fake.spawn.mockImplementation(() => processStub());
+    expect(await execute({ argv: ["echo", "hi"] })).toContainEqual({ type: "exit", code: 0 });
+    const [binary, args] = fake.spawn.mock.calls[0]!;
+    expect(binary).toBe("/usr/bin/sandbox-exec");
+    expect(args[0]).toBe("-p");
+    const profile = args[1];
+    expect(profile).toContain("(allow default)");
+    expect(profile).toContain(`(subpath "${path.join(root, "control-plane")}")`);
+    expect(profile).toContain('(remote ip "localhost:55433")');
+    expect(profile).toContain(
+      `(remote unix-socket (literal "${path.join(root, "control-plane", "engine.sock")}"))`,
+    );
+    // The real command follows the profile untouched.
+    expect(args.slice(2)).toEqual([path.join(root, "echo"), "hi"]);
+  },
+);
+
+posixCommandTest("runs commands unwrapped off macOS without implying protection", async () => {
   const { root, execute } = await fixture({ platform: "linux" });
   fake.spawn.mockImplementation(() => processStub());
   expect(await execute({ argv: ["echo", "hi"] })).toContainEqual({ type: "exit", code: 0 });
@@ -109,7 +131,7 @@ it("runs commands unwrapped off macOS without implying protection", async () => 
   expect(args).toEqual(["hi"]);
 });
 
-it("runs unwrapped when no guardrail is configured", async () => {
+posixCommandTest("runs unwrapped when no guardrail is configured", async () => {
   const { root, execute } = await fixture({
     guard: { paths: [], ports: [], sockets: [] },
     platform: "darwin",
@@ -119,44 +141,54 @@ it("runs unwrapped when no guardrail is configured", async () => {
   expect(fake.spawn.mock.calls[0]![0]).toBe(path.join(root, "echo"));
 });
 
-it("fails the command closed when the guardrail profile cannot be built", async () => {
-  const { execute } = await fixture({
-    guard: { paths: [], ports: [70000], sockets: [] },
-    platform: "darwin",
-  });
-  const events = await execute({ argv: ["echo", "hi"] });
-  expect(events).toContainEqual({
-    type: "stderr",
-    data: "Invalid host guardrail port.",
-  });
-  expect(events).toContainEqual({ type: "exit", code: 127 });
-  expect(fake.spawn).not.toHaveBeenCalled();
-});
+posixCommandTest(
+  "fails the command closed when the guardrail profile cannot be built",
+  async () => {
+    const { execute } = await fixture({
+      guard: { paths: [], ports: [70000], sockets: [] },
+      platform: "darwin",
+    });
+    const events = await execute({ argv: ["echo", "hi"] });
+    expect(events).toContainEqual({
+      type: "stderr",
+      data: "Invalid host guardrail port.",
+    });
+    expect(events).toContainEqual({ type: "exit", code: 127 });
+    expect(fake.spawn).not.toHaveBeenCalled();
+  },
+);
 
-it("refuses file reads and writes on protected paths with a clear error", async () => {
-  const { root, provider, computer } = await fixture({ platform: "darwin" });
-  // A registered folder is served through a computer rooted at that folder (bridge mapping).
-  const folderComputer = { ...computer, id: "folder", botId: "folder", providerRef: root };
-  await expect(
-    provider.readFile(folderComputer, "control-plane/secrets.env", context),
-  ).rejects.toThrow("This path is protected by the host guardrail.");
-  await expect(provider.listFiles(folderComputer, "control-plane", context)).rejects.toThrow(
-    "This path is protected by the host guardrail.",
-  );
-  await expect(
-    provider.writeFile(folderComputer, {
-      path: "control-plane/secrets.env",
-      content: new Uint8Array([1]),
-    }),
-  ).rejects.toThrow("This path is protected by the host guardrail.");
-  // A path that merely shares the prefix is not caught.
-  await mkdir(path.join(root, "control-plane-notes"));
-  expect(await provider.listFiles(folderComputer, "control-plane-notes", context)).toEqual([]);
-});
+it.each(["darwin", "win32", "linux"] as const)(
+  "refuses file reads and writes on protected paths on %s",
+  async (platform) => {
+    const { root, provider, computer } = await fixture({ platform });
+    // A registered folder is served through a computer rooted at that folder (bridge mapping).
+    const folderComputer = { ...computer, id: "folder", botId: "folder", providerRef: root };
+    await expect(
+      provider.readFile(folderComputer, "control-plane/secrets.env", context),
+    ).rejects.toThrow("This path is protected by the host guardrail.");
+    await expect(provider.listFiles(folderComputer, "control-plane", context)).rejects.toThrow(
+      "This path is protected by the host guardrail.",
+    );
+    await expect(
+      provider.writeFile(folderComputer, {
+        path: "control-plane/secrets.env",
+        content: new Uint8Array([1]),
+      }),
+    ).rejects.toThrow("This path is protected by the host guardrail.");
+    expect(await readFile(path.join(root, "control-plane", "secrets.env"), "utf8")).toBe(
+      "FAKE=1\n",
+    );
+    // A path that merely shares the prefix is not caught.
+    await mkdir(path.join(root, "control-plane-notes"));
+    expect(await provider.listFiles(folderComputer, "control-plane-notes", context)).toEqual([]);
+  },
+);
 
 it("still reads and writes the computer's own files", async () => {
-  const { provider, computer } = await fixture({ platform: "darwin" });
+  const { provider, computer } = await fixture({ platform: process.platform });
   await provider.writeFile(computer, { path: "notes.txt", content: new Uint8Array([65]) });
   expect([...(await provider.readFile(computer, "notes.txt", context))]).toEqual([65]);
+  expect(await readFile(path.join(computer.providerRef, "notes.txt"), "utf8")).toBe("A");
   expect(fake.spawn).not.toHaveBeenCalled();
 });

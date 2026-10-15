@@ -291,6 +291,7 @@ export async function installPerformanceFixture(
     else if (name === "voice/status") result = { ready: false };
     else if (name === "agentSkills/list") result = [];
     else if (name === "memory/list") result = [];
+    else if (name === "models/validatePin") result = { ok: true };
     else if (name === "runtimes/availability") result = [];
     else if (name === "delegations/policy") result = { mode: "any" };
     else if (name === "preferences/get") result = DEFAULT_USER_PREFERENCES;

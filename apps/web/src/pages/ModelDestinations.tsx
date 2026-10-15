@@ -1,15 +1,20 @@
 import type { LocalityPolicy } from "@ardurbot/contracts";
+import { failureCategoryFromText } from "@ardurbot/contracts";
+import { rpcErrorMessage } from "@ardurbot/core";
 import { Button, Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
+import { i18n } from "@lingui/core";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../lib/rpc";
+import { runSettingsMessage } from "../lib/use-can-run";
 
 export function ModelDestinations({ botId }: { botId?: string }) {
   const id = useId();
   const { t } = useLingui();
   const [policy, setPolicy] = useState<LocalityPolicy | null>(null);
   const [hosts, setHosts] = useState("");
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [blockedNames, setBlockedNames] = useState<string[]>([]);
   useEffect(() => {
     let live = true;
     void rpc.delegations
@@ -21,7 +26,7 @@ export function ModelDestinations({ botId }: { botId?: string }) {
         }
       })
       .catch(() => {
-        if (live) setError(true);
+        if (live) setError(t`Could not save destinations; try again.`);
       });
     return () => {
       live = false;
@@ -31,9 +36,40 @@ export function ModelDestinations({ botId }: { botId?: string }) {
     try {
       await rpc.delegations.setPolicy({ botId, policy: next });
       setPolicy(next);
-      setError(false);
-    } catch {
-      setError(true);
+      setError(null);
+      setBlockedNames([]);
+    } catch (cause) {
+      const fallback = t`Could not save destinations; try again.`;
+      const safe =
+        cause &&
+        typeof cause === "object" &&
+        "message" in cause &&
+        typeof cause.message === "string"
+          ? {
+              message: cause.message,
+              code: "code" in cause && typeof cause.code === "string" ? cause.code : undefined,
+            }
+          : { message: fallback };
+      const sentence = rpcErrorMessage(safe, fallback);
+      setError(
+        botId && failureCategoryFromText(sentence)?.id === "destinations-bot"
+          ? t`Change this bot's model first.`
+          : runSettingsMessage(sentence),
+      );
+      const data = cause && typeof cause === "object" && "data" in cause ? cause.data : null;
+      const bots =
+        data && typeof data === "object" && "blockedBots" in data && Array.isArray(data.blockedBots)
+          ? data.blockedBots
+          : [];
+      setBlockedNames(
+        botId || safe.code !== "BAD_REQUEST"
+          ? []
+          : bots.flatMap((bot: unknown) =>
+              bot && typeof bot === "object" && "name" in bot && typeof bot.name === "string"
+                ? [bot.name]
+                : [],
+            ),
+      );
     }
   };
   return (
@@ -86,7 +122,17 @@ export function ModelDestinations({ botId }: { botId?: string }) {
       ) : null}
       {error ? (
         <div role="alert" className="text-xs text-destructive">
-          <Trans>Could not save destinations; try again.</Trans>
+          <div>{error}</div>
+          {blockedNames.length ? (
+            <div>
+              <Trans>
+                Change these bots' models first:{" "}
+                {new Intl.ListFormat(i18n.locale, { style: "short", type: "unit" }).format(
+                  blockedNames,
+                )}
+              </Trans>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

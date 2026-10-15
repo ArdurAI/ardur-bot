@@ -1,10 +1,13 @@
+// #199: Use the shared Postgres image override without changing the local default.
+
 import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import type { createApp } from "../../../../apps/api/src/app.ts";
+import { TEST_POSTGRES_IMAGE } from "../postgres-image.js";
 import { createDeploymentOwnerFixture } from "./deployment-owner.js";
 import { runIntegrationSuites } from "./integration.js";
 import { runProcess } from "./process.js";
@@ -27,6 +30,7 @@ const e2eGrep = grepArg?.slice("--grep=".length);
 const e2eWorkers = workersArg?.slice("--workers=".length);
 const e2eShard = shardArg?.slice("--shard=".length);
 const agentRuntime = runtimeArg?.slice("--runtime=".length) ?? "scripted";
+const productDemo = e2e && (!e2eSpec || path.basename(e2eSpec) === "product-demo.spec.ts");
 
 if (Number(integration) + Number(e2e) !== 1) {
   throw new Error("Pass exactly one of --integration or --e2e");
@@ -43,6 +47,9 @@ if (integration && sandboxProvider !== "fake") {
 if (agentRuntime !== "pi" && agentRuntime !== "scripted") {
   throw new Error('Runtime must be "pi" or "scripted"');
 }
+if (productDemo && (!e2e || sandboxProvider !== "fake" || agentRuntime !== "scripted")) {
+  throw new Error("Product demo requires --e2e --sandbox=fake --runtime=scripted");
+}
 if (sandboxProvider === "e2b" && !process.env.E2B_API_KEY) {
   throw new Error("E2B_API_KEY is required when --sandbox=e2b");
 }
@@ -57,7 +64,19 @@ async function main() {
   const mode = integration ? "integration" : "e2e";
   const reportDir = path.resolve(process.env.TEST_REPORT_DIR ?? "test-report", mode);
   await mkdir(reportDir, { recursive: true });
-  const container = await new PostgreSqlContainer("postgres:16-alpine").start();
+  const productDemoDirectory = productDemo ? path.join("product-demo", randomUUID()) : null;
+  if (productDemoDirectory) {
+    process.env.PRODUCT_DEMO_REPORT_DIR = path.join(reportDir, productDemoDirectory);
+    process.env.PRODUCT_DEMO_BUILD_REVISION = execSync("git rev-parse HEAD", {
+      encoding: "utf8",
+    }).trim();
+    process.env.PRODUCT_DEMO_BUILD_DIRTY = execSync("git status --porcelain", {
+      encoding: "utf8",
+    }).trim()
+      ? "1"
+      : "0";
+  }
+  const container = await new PostgreSqlContainer(TEST_POSTGRES_IMAGE).start();
   try {
     const databaseUrl = container.getConnectionUri();
     if (new URL(databaseUrl).port === "5433")
@@ -102,6 +121,9 @@ async function main() {
     if (integration) {
       const suites = [
         "packages/testkit/src/cli-device.postgres.test.ts",
+        "packages/testkit/src/cli-stage4-home.postgres.test.ts",
+        "apps/api/src/device-events.postgres.test.ts",
+        "apps/api/src/usage-summary.postgres.test.ts",
         "packages/testkit/src/pi-offline.postgres.test.ts",
         "packages/testkit/src/capabilities-memory.postgres.test.ts",
         "packages/testkit/src/computer-approval.postgres.test.ts",
@@ -122,17 +144,23 @@ async function main() {
         "packages/db/src/evidence.postgres.test.ts",
         "packages/db/src/customization.postgres.test.ts",
         "packages/db/src/group-model-pins.postgres.test.ts",
+        "packages/db/src/goal-review.postgres.test.ts",
+        "packages/db/src/goal-freeze-settlement.postgres.test.ts",
+        "packages/db/src/goal-board.postgres.test.ts",
         "packages/db/src/protected-locations.postgres.test.ts",
         "packages/db/src/hermes-runtime-config.postgres.test.ts",
         "packages/testkit/src/group-model-visible.postgres.test.ts",
         "packages/testkit/src/chief-loop.postgres.test.ts",
         "packages/testkit/src/chief-corrections.postgres.test.ts",
+        "packages/testkit/src/chief-selection.postgres.test.ts",
+        "packages/testkit/src/chief-project-plan.postgres.test.ts",
         "packages/db/src/messaging.postgres.test.ts",
         "packages/db/src/bot-presence.postgres.test.ts",
         "packages/db/src/learning.postgres.test.ts",
         "packages/adapters/src/learning-insights.postgres.test.ts",
         "packages/adapters/src/bot-comms.postgres.test.ts",
         "packages/adapters/src/delegation-lock-timeout.postgres.test.ts",
+        "packages/adapters/src/restart-drain.postgres.test.ts",
         "packages/db/src/command-blocks.postgres.test.ts",
         "packages/adapters/src/board/filing.postgres.test.ts",
         "packages/adapters/src/board/delivery.postgres.test.ts",
@@ -147,6 +175,7 @@ async function main() {
         "packages/adapters/src/cloud-agent.postgres.test.ts",
         "apps/api/src/local-import.postgres.test.ts",
         "apps/api/src/evidence.postgres.test.ts",
+        "apps/api/src/device-runs.postgres.test.ts",
         "apps/api/src/scratchpad.postgres.test.ts",
       ];
       // Each app reconciles all durable work in its database, including intentionally
@@ -383,9 +412,23 @@ async function main() {
         if (failedRuns.length) console.error("Failed agent runs:", failedRuns);
         throw error;
       }
+      const productDemoWritten = productDemoDirectory
+        ? await access(path.join(reportDir, productDemoDirectory, "product-demo.json")).then(
+            () => true,
+            () => false,
+          )
+        : false;
       await writeSummary(reportDir, {
         ok: true,
         mode,
+        ...(productDemoWritten && productDemoDirectory
+          ? {
+              productDemo: {
+                file: path.join(productDemoDirectory, "product-demo.json"),
+                evidenceMode: "scripted",
+              },
+            }
+          : {}),
         sandbox: process.env.SANDBOX_PROVIDER,
         runtime: process.env.AGENT_RUNTIME,
         apiPort,

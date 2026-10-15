@@ -75,6 +75,11 @@ export const TOOL_CLASSES = {
   delete_bot: entry("write", "state_change", "bot"),
   message_bot: entry("send", "internal_write", "bot"),
   assign: entry("delegate", "subagent_launch", "bot"),
+  finish_goal: entry("write", "state_change", "task"),
+  // The chief's plan tools rewrite the goal's plan state; they never dispatch directly.
+  update_project_plan: entry("write", "state_change", "task"),
+  record_plan_step_outcome: entry("write", "state_change", "task"),
+  set_plan_step: entry("write", "state_change", "task"),
   handoff_to_bot: entry("delegate", "subagent_launch", "bot"),
   ask_members: entry("send", "internal_write", "bot"),
   board_ready: entry("read", "none", "board"),

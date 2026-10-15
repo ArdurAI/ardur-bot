@@ -1,6 +1,7 @@
 import {
   GOAL_DEFAULT_MAX_DESCENDANTS,
   GOAL_DEFAULT_PER_WORKER_TOKENS,
+  GOAL_FINAL_REVIEW_DESCRIPTION,
   GOAL_MAX_DEPTH,
   GOAL_MAX_HOPS,
 } from "@ardurbot/contracts";
@@ -252,7 +253,7 @@ export function integrationDocsFixture() {
   };
 }
 
-export function groupGoalDocsFixture() {
+export function groupGoalDocsFixture(review = false) {
   const group = {
     id: "operations-group",
     spaceId: "space",
@@ -271,7 +272,60 @@ export function groupGoalDocsFixture() {
       { botId: "bot-1", name: "Planner", color: "slate", status: "idle" },
     ],
   };
-  let goal: Record<string, unknown> | null = null;
+  let goal: Record<string, unknown> | null = review
+    ? {
+        id: "sample-goal",
+        spaceId: "space",
+        groupId: group.id,
+        threadId: group.threadId,
+        coordinatorBotId: "bot",
+        rootTaskId: "sample-task",
+        objective: "Review the sample release plan.",
+        doneWhen: [],
+        status: "completed",
+        usedTokens: 600,
+        reservedTokens: 0,
+        availableTokens: 599400,
+        usageComplete: true,
+        tokenLimit: 600000,
+        perWorkerTokens: GOAL_DEFAULT_PER_WORKER_TOKENS,
+        maxConcurrent: 2,
+        maxDescendants: GOAL_DEFAULT_MAX_DESCENDANTS,
+        maxDepth: GOAL_MAX_DEPTH,
+        maxHops: GOAL_MAX_HOPS,
+        untilAt: "2026-09-24T20:00:00.000Z",
+        createdAt: now,
+        stoppedAt: null,
+        boardWorkspaceId: "workspace",
+        boardItemId: "board-a",
+        boardDelivery: "pending",
+        currentRevision: {
+          id: "sample-revision",
+          goalId: "sample-goal",
+          summary: "The sample release plan is ready for review.",
+          conditions: [
+            {
+              id: "cond-final",
+              description: GOAL_FINAL_REVIEW_DESCRIPTION,
+              status: "unknown",
+              actorId: null,
+              reason: null,
+              evidenceId: null,
+              support: [{ kind: "run", recordId: "sample-run", revision: null }],
+              proposedSupport: [
+                { kind: "artifact", recordId: "sample-artifact", revision: "sample-hash" },
+              ],
+              createdAt: null,
+            },
+          ],
+          artifacts: [],
+          reports: [],
+          attempts: 1,
+          accountingSnapshot: { usedTokens: 600, reservedTokens: 0 },
+          createdAt: now,
+        },
+      }
+    : null;
   return {
     group,
     get goal() {
@@ -280,6 +334,64 @@ export function groupGoalDocsFixture() {
     rpc(procedure: string, input?: Record<string, unknown>): unknown {
       if (procedure === "groups/list") return [group];
       if (procedure === "goals/get") return goal;
+      if (procedure === "evidence/runSummary")
+        return {
+          sessionId: input?.runId,
+          recordedAt: now,
+          decisions: { allowed: 2, denied: 0, asked: 0, recorded: 2 },
+          captureLevel: "decisions",
+          evidence: null,
+          gates: { spend: null, risks: [] },
+          state: "verified",
+          sealed: true,
+          gapCount: 0,
+          failureCodes: [],
+        };
+      if (procedure === "evidence/record")
+        return {
+          id: "sample-record",
+          runId: "sample-run",
+          receiptId: "sample-receipt",
+          kid: "sample-kid",
+          toolName: "sample_tool",
+          verdict: "compliant",
+          decisionKind: "allowed",
+          sha256: "sample-record-hash",
+          createdAt: now,
+        };
+      if (procedure === "artifacts/get")
+        return {
+          id: "sample-artifact",
+          botId: "bot",
+          groupId: group.id,
+          runId: null,
+          name: "sample.md",
+          mimeType: "text/markdown",
+          size: 120,
+          createdAt: now,
+          contentBase64: btoa("# Sample plan\n"),
+        };
+      if (procedure === "goals/revision") {
+        if (
+          input?.groupId !== group.id ||
+          input.goalId !== "sample-goal" ||
+          input.revisionId !== "sample-revision"
+        )
+          throw new Error("Unexpected goal result link.");
+        return { goal, current: true };
+      }
+      if (procedure === "goals/accept" || procedure === "goals/reject") {
+        goal = { ...goal, status: procedure === "goals/accept" ? "accepted" : "running" };
+        return {
+          id: "sample-verdict",
+          goalId: "sample-goal",
+          revisionId: "sample-revision",
+          actorId: "user",
+          type: procedure === "goals/accept" ? "accept" : "reject",
+          reworkNotes: input?.reworkNotes ?? null,
+          createdAt: now,
+        };
+      }
       if (procedure === "goals/start") {
         goal = {
           ...input,
@@ -290,6 +402,35 @@ export function groupGoalDocsFixture() {
           coordinatorBotId: "bot",
           rootTaskId: "sample-task",
           status: "running",
+          plan: {
+            revision: 2,
+            steps: [
+              {
+                id: "draft",
+                title: "Draft the release plan",
+                ownerId: "bot-1",
+                ownerIsUser: false,
+                condition: "Draft saved",
+                status: "active",
+                prerequisiteIds: [],
+                outcome: null,
+                dispatch: null,
+                updatedAt: now,
+              },
+              {
+                id: "review",
+                title: "Review the release plan",
+                ownerId: "bot",
+                ownerIsUser: false,
+                condition: "Review saved",
+                status: "pending",
+                prerequisiteIds: ["draft"],
+                outcome: null,
+                dispatch: null,
+                updatedAt: now,
+              },
+            ],
+          },
           usedTokens: 0,
           perWorkerTokens: GOAL_DEFAULT_PER_WORKER_TOKENS,
           maxConcurrent: 2,

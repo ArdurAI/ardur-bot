@@ -9,7 +9,10 @@ import NowPanel from "./NowPanel";
 
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
-  useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
+  useLingui: () => ({
+    t: (parts: TemplateStringsArray, ...values: unknown[]) =>
+      parts.reduce((text, part, i) => text + part + (values[i] ?? ""), ""),
+  }),
 }));
 vi.mock("@lingui/core/macro", () => ({ t: (parts: TemplateStringsArray) => parts.join("") }));
 
@@ -116,6 +119,35 @@ it("retains queued runs, owner-held takeover work, and queued delegations", asyn
     );
     expect(takeover?.textContent).not.toContain("Status unavailable");
     expect(view.node.textContent).not.toContain("Nothing running");
+  } finally {
+    await view.close();
+  }
+});
+
+it("shows running time as a human duration instead of bare seconds", async () => {
+  const run = (runId: string, minutesAgo: number) => ({
+    ...makeRun(runId, "running", `${runId} task`),
+    createdAt: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
+  });
+  const row = {
+    botId: "worker",
+    availability: "busy",
+    observedAt: new Date().toISOString(),
+    activeRunIds: ["half", "long", "hour"],
+    currentTaskTitle: null,
+    delegations: [],
+  } as unknown as TeamRow;
+  const view = await render({
+    runs: [run("half", 0.75), run("long", 27), run("hour", 65)],
+    rows: [row],
+    approvals: [],
+  });
+  try {
+    expect(view.node.textContent).toContain("45s");
+    expect(view.node.textContent).toContain("27 min");
+    expect(view.node.textContent).toContain("1 h 5 min");
+    expect(view.node.textContent).not.toContain("1620s");
+    expect(view.node.textContent).not.toContain("3900s");
   } finally {
     await view.close();
   }

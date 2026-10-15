@@ -1,9 +1,13 @@
+// #199: Use the shared Postgres image override without changing the local default.
+
 import { execSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { PostgreSqlContainer } from "@testcontainers/postgresql";
+import { TEST_POSTGRES_IMAGE } from "../postgres-image.js";
 
 async function main() {
   loadRootEnv();
@@ -17,7 +21,7 @@ async function main() {
   const dataDir = await mkdtemp(path.join(tmpdir(), "ardurbot-canary-"));
   let postgres: StartedPostgreSqlContainer | undefined;
   try {
-    if (runOpenRouter) postgres = await new PostgreSqlContainer("postgres:16-alpine").start();
+    if (runOpenRouter) postgres = await new PostgreSqlContainer(TEST_POSTGRES_IMAGE).start();
     const env = {
       ...process.env,
       DATABASE_URL: postgres?.getConnectionUri() ?? "",

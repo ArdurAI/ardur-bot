@@ -51,7 +51,9 @@ export function activityRunFailure(row: {
   providerErrorKind?: string | null;
   runtimePin?: unknown;
   error?: string | null;
-}): { failureCategory: FailureCategoryId; failureRuntime: string | null } | Record<string, never> {
+}):
+  | { failureCategory: FailureCategoryId; failureRuntime: string | null; failureProvider?: string }
+  | Record<string, never> {
   if (row.status !== "failed") return {};
   const pin = RuntimePinSchema.safeParse(row.runtimePin);
   const pinRuntime =
@@ -62,6 +64,14 @@ export function activityRunFailure(row: {
     if (category.success)
       return {
         failureCategory: category.data,
+        ...(category.data === "provider-rate-limit"
+          ? {
+              failureProvider:
+                failureCategoryFromText(problem.data.reason)?.params.provider ??
+                problem.data.pin.provider ??
+                undefined,
+            }
+          : {}),
         failureRuntime: runtimeNames[problem.data.pin.runtimeKind] ?? pinRuntime,
       };
   }
@@ -76,7 +86,11 @@ export function activityRunFailure(row: {
     ? failureCategoryFromText(row.error, { runtimes: Object.values(runtimeNames) })
     : undefined;
   if (legacy)
-    return { failureCategory: legacy.id, failureRuntime: legacy.params.runtime ?? pinRuntime };
+    return {
+      failureCategory: legacy.id,
+      failureRuntime: legacy.params.runtime ?? pinRuntime,
+      ...(legacy.params.provider ? { failureProvider: legacy.params.provider } : {}),
+    };
   return {};
 }
 

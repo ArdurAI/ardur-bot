@@ -13,6 +13,7 @@ export function WorkspaceTabs({
   onClose,
   closeLabel,
   label = "Workspace",
+  mountAll = false,
 }: {
   tabs: readonly WorkspaceTab[];
   value: string;
@@ -20,6 +21,7 @@ export function WorkspaceTabs({
   onClose?(value: string): void;
   closeLabel?(name: string): string;
   label?: string;
+  mountAll?: boolean;
 }) {
   const [seen, setSeen] = useState(() => new Set([value]));
   useEffect(() => setSeen((current) => new Set(current).add(value)), [value]);
@@ -63,7 +65,7 @@ export function WorkspaceTabs({
           className="min-h-0 overflow-auto"
           keepMounted
         >
-          {ids.some((id) => seen.has(id) || value === id) ? tab.content : null}
+          {mountAll || ids.some((id) => seen.has(id) || value === id) ? tab.content : null}
         </TabsContent>
       ))}
     </Tabs>

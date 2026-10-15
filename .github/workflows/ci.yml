@@ -7,6 +7,13 @@ on:
 permissions:
   contents: read
 
+env:
+  # #199: Use public mirrors without credentials or changes to local defaults.
+  ARDUR_TEST_POSTGRES_IMAGE: mirror.gcr.io/library/postgres:16-alpine
+  DOCKERHUB_LIBRARY_PREFIX: mirror.gcr.io/library/
+  # #199: Hosted runners are disposable; do not pull the Ryuk reaper.
+  TESTCONTAINERS_RYUK_DISABLED: "true"
+
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -44,11 +51,26 @@ jobs:
       - run: pnpm lint
       # An invalid workflow file fails only when GitHub loads it, which for the release
       # workflow is at tag time. Check every workflow's syntax and expressions on each push.
-      # rhysd/actionlint 1.7.12, pinned by digest.
+      # #199: Use the checksum-verified release binary instead of a Docker Hub image.
       - name: Lint workflow files
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
         run: |
-          docker run --rm -v "$PWD:/repo" -w /repo \
-            rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -shellcheck= -pyflakes=
+          set -euo pipefail
+          download_dir="$(mktemp -d)"
+          trap 'rm -rf "$download_dir"' EXIT
+          asset="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          checksums="actionlint_${ACTIONLINT_VERSION}_checksums.txt"
+          release="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+          (
+            cd "$download_dir"
+            curl --fail --silent --show-error --location --retry 3 --output "$asset" "$release/$asset"
+            curl --fail --silent --show-error --location --retry 3 --output "$checksums" "$release/$checksums"
+            awk -v asset="$asset" '$2 == asset { print; found++ } END { if (found != 1) exit 1 }' "$checksums" > selected-checksum.txt
+            sha256sum --check --strict selected-checksum.txt
+            tar -xzf "$asset" actionlint
+          )
+          "$download_dir/actionlint" -shellcheck= -pyflakes=
 
   check:
     name: Typecheck
@@ -69,6 +91,22 @@ jobs:
       - run: pnpm check
       - run: pnpm site:facts:check
       - run: pnpm feature-docs:report
+
+  expo-check:
+    name: Expo package compatibility (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ardurbot/mobile check:expo
 
   build:
     name: Production builds
@@ -121,10 +159,40 @@ jobs:
           DATABASE_URL: postgres://ardurbot:ardurbot@127.0.0.1:5433/ardurbot
       - run: pnpm test
 
+  host-terminal-native:
+    name: Host terminal (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - name: Build Linux PTY for Electron
+        if: runner.os == 'Linux'
+        run: node apps/host-service/scripts/rebuild-linux-pty.mjs
+      - run: pnpm --filter @ardurbot/host-service build
+      - name: Check native terminals and offline lifecycle tests
+        shell: bash
+        run: TESTKIT_SKIP_ROOT_ENV=1 ./node_modules/.bin/vitest run apps/host-service/src/host-terminal-pty.test.ts apps/host-service/src/host-terminal-pty-win32.test.ts apps/host-service/src/host-terminal-process-linux.test.ts apps/host-service/src/host-terminal-pty.win32.test.ts apps/host-service/src/host-terminal-pty.linux.test.ts packages/host-runtime/src/host-terminal.test.ts packages/host-runtime/src/desktop-sandbox-guard.test.ts apps/host-service/src/native-build.test.ts
+      - name: Load staged PTY using Electron's embedded Node
+        shell: bash
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+        run: pnpm --filter @ardurbot/desktop exec electron ../host-service/scripts/smoke-platform-pty.cjs
+
   test-integration:
     name: Postgres journeys
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20 # #199: green runs take ~9.5 min; 10 min cancelled them on any slowdown
     steps:
       - uses: actions/checkout@v5
         with:

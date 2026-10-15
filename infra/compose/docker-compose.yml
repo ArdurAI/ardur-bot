@@ -61,6 +61,7 @@ services:
       - ../../data:/data
 
   api:
+    stop_grace_period: 90s
     build:
       context: ../..
       dockerfile: infra/compose/Dockerfile
@@ -98,6 +99,7 @@ services:
         condition: service_completed_successfully
 
   worker:
+    stop_grace_period: 90s
     build:
       context: ../..
       dockerfile: infra/compose/Dockerfile

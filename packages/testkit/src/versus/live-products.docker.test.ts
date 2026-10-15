@@ -1,3 +1,5 @@
+// #199: Use the shared Postgres image override without changing the local default.
+
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import { createServer } from "node:http";
@@ -6,6 +8,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { TEST_POSTGRES_IMAGE } from "../postgres-image.js";
 import { contentDigest } from "../scoreboard/manifest.js";
 import { getTask } from "../scoreboard/tasks/catalog.js";
 import { referenceSolution } from "../scoreboard/tasks/reference.js";
@@ -27,7 +30,7 @@ vi.mock("./manifest.js", async (importOriginal) => ({
 // GitHub CI has no Docker engine or cached images; this lane runs only where both exist.
 const imagesReady = (() => {
   try {
-    for (const image of [COMPUTER_IMAGE, HERMES_IMAGE, "postgres:16-alpine"])
+    for (const image of [COMPUTER_IMAGE, HERMES_IMAGE, TEST_POSTGRES_IMAGE])
       execFileSync("docker", ["image", "inspect", image, "--format", "{{.Id}}"], {
         stdio: "ignore",
         timeout: 8000,

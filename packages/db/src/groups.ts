@@ -15,7 +15,8 @@ import { parsePeerHoldRequest } from "@ardurbot/core";
 import { appendBotMessageAuditInTransaction } from "./bot-comms.js";
 import { lockPeerTrafficPolicy } from "./bot-comms-policy.js";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
-import { Prisma, type PrismaClient } from "./client.js";
+import type { PrismaClient } from "./client.js";
+import { Prisma } from "./client.js";
 import { expireComputerExecutionLeases } from "./computers.js";
 import { recordStoppedGroupAskOutcomesInTransaction } from "./group-asks.js";
 import { IsolationError } from "./scope.js";
@@ -174,6 +175,13 @@ async function assertOwnedBots(
   });
 }
 
+// Members added together share a timestamp; ids keep the order they were picked, so the
+// room snapshot, its default responder and the send path all see the same first member.
+export const GROUP_MEMBER_ORDER: Prisma.ChatGroupMemberOrderByWithRelationInput[] = [
+  { createdAt: "asc" },
+  { id: "asc" },
+];
+
 const groupInclude = {
   thread: {
     include: {
@@ -198,7 +206,7 @@ const groupInclude = {
         },
       },
     },
-    orderBy: { createdAt: "asc" as const },
+    orderBy: GROUP_MEMBER_ORDER,
   },
 } as const;
 
@@ -222,9 +230,42 @@ const groupTargetInclude = {
         },
       },
     },
-    orderBy: { createdAt: "asc" as const },
+    orderBy: GROUP_MEMBER_ORDER,
   },
 } as const;
+
+/** Read the owned, active group and its thread target. */
+export async function getOwnedGroupTarget(
+  prisma: Pick<Prisma.TransactionClient, "chatGroup">,
+  actor: Pick<Actor, "spaceId" | "userId">,
+  groupId: string,
+) {
+  const group = await prisma.chatGroup.findFirst({
+    where: {
+      id: groupId,
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      archivedAt: null,
+    },
+    include: {
+      ...groupTargetInclude,
+      space: { select: { coordinatorBotId: true } },
+      thread: {
+        select: {
+          id: true,
+          runs: {
+            where: { spaceId: actor.spaceId, userId: actor.userId },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            take: 1,
+            select: { botId: true },
+          },
+        },
+      },
+    },
+  });
+  if (!group || !hasMinimumActiveMembers(group.members)) throw new IsolationError();
+  return group;
+}
 
 export function createGroupRepos(prisma: PrismaClient) {
   async function listSpaceGroupsForSpaces(actor: Actor, spaceIds: string[]): Promise<SpaceGroup[]> {
@@ -294,17 +335,7 @@ export function createGroupRepos(prisma: PrismaClient) {
     },
 
     async getGroupTarget(actor: Actor, groupId: string) {
-      const group = await prisma.chatGroup.findFirst({
-        where: {
-          id: groupId,
-          spaceId: actor.spaceId,
-          userId: actor.userId,
-          archivedAt: null,
-        },
-        include: groupTargetInclude,
-      });
-      if (!group || !hasMinimumActiveMembers(group.members)) throw new IsolationError();
-      return group;
+      return getOwnedGroupTarget(prisma, actor, groupId);
     },
 
     async createGroup(
@@ -696,7 +727,7 @@ export function createGroupRepos(prisma: PrismaClient) {
           where: { id: groupId },
           select: {
             artifacts: { select: { storageKey: true } },
-            members: { orderBy: { createdAt: "asc" }, take: 1, select: { botId: true } },
+            members: { orderBy: GROUP_MEMBER_ORDER, take: 1, select: { botId: true } },
           },
         });
         const contextBotId = group?.members[0]?.botId;
@@ -711,6 +742,38 @@ export function createGroupRepos(prisma: PrismaClient) {
 
     mapGroup,
   };
+}
+
+/**
+ * Room admission locks member bots before its group/thread/root rows. The
+ * returned set lets the locked membership re-read detect a concurrent join;
+ * retry rather than acquire a newly eligible bot after the group lock.
+ */
+export async function lockGroupDelegationBots(
+  tx: Pick<Prisma.TransactionClient, "$queryRaw">,
+  actor: Pick<Actor, "spaceId" | "userId">,
+  groupId: string,
+  sourceBotId: string,
+): Promise<ReadonlySet<string>> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM bots
+    WHERE "spaceId" = ${actor.spaceId} AND "userId" = ${actor.userId}
+      AND (id = ${sourceBotId} OR id IN (
+        SELECT "botId" FROM chat_group_members WHERE "groupId" = ${groupId}
+      ))
+    ORDER BY id FOR UPDATE
+  `;
+  return new Set(rows.map((row) => row.id));
+}
+
+export function assertGroupDelegationBotsLocked(
+  locked: ReadonlySet<string>,
+  botIds: readonly string[],
+) {
+  if (botIds.some((id) => !locked.has(id))) {
+    // The transaction retry wrapper restarts with the fresh member set.
+    throw Object.assign(new Error("Group membership changed during admission"), { code: "P2034" });
+  }
 }
 
 export async function lockOwnedGroup(

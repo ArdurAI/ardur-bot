@@ -6,6 +6,23 @@ export const COMMAND_TRUNCATED = "[Output truncated]";
 export const COMMAND_SUPPRESSED = "[Output redacted: sensitive command]";
 export const COMMAND_NOT_RECORDED = "Not recorded";
 
+/** Original producer sentences; translation belongs only at the conversation boundary. */
+export const COMMAND_REFUSALS = {
+  "command-size":
+    "This command was not run because it exceeds 64 KB. Put code in a file and run that file.",
+  "file-location": "Use a path inside this bot's folder or a registered folder.",
+} as const;
+export const CommandRefusalIdSchema = z.enum(["command-size", "file-location"]);
+export type CommandRefusalId = z.infer<typeof CommandRefusalIdSchema>;
+
+/** A producer can identify a refusal without inspecting an arbitrary error's words. */
+export class CommandRefusalError extends Error {
+  constructor(readonly refusalId: CommandRefusalId) {
+    super(COMMAND_REFUSALS[refusalId]);
+    this.name = "CommandRefusalError";
+  }
+}
+
 export const CommandOutcomeSchema = z.enum([
   "waiting",
   "running",
@@ -44,6 +61,8 @@ export const CommandBlockSchema = z.object({
   stdout: z.string().nullable(),
   stderr: z.string().nullable(),
   error: z.string().nullable(),
+  /** Optional for old records; unknown future identifiers keep their original error. */
+  refusalId: z.string().optional(),
   redacted: z.boolean(),
   truncated: z.boolean(),
   replayOf: z.string().nullable(),

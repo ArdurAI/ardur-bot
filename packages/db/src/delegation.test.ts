@@ -3,6 +3,7 @@ import {
   ALL_DEVICE_SCOPES,
   DELEGATION_LIMITS,
   delegationStopLine,
+  goalBudget,
   TaskCardSchema,
 } from "@ardurbot/contracts";
 import { userVisibleMessages } from "@ardurbot/core";
@@ -23,6 +24,31 @@ import { deviceDigest } from "./device-grants.js";
 import { startDelegation, updateWorkerTask } from "./task-cards.js";
 
 describe("transactional delegation admission", () => {
+  it.each(["running", "completed", "accepted"])(
+    "checks %s goal before admitting a new worker",
+    async (status) => {
+      const f = fixture();
+      // Create the root before the attempted admission so refusal must preserve its budget.
+      await f.tx.delegationRoot.upsert({
+        create: { rootTaskId: "root", deadlineAt: new Date(Date.now() + 3_600_000) },
+      });
+      f.tx.teamGoal.findUnique.mockResolvedValue({ status } as never);
+      const before = structuredClone(f.state());
+      if (status === "running") {
+        await f.admit();
+        expect(f.state().rows).toHaveLength(1);
+      } else {
+        await expect(f.admit()).rejects.toMatchObject({ problem: { code: "authority-exceeded" } });
+        expect(f.state()).toEqual(before);
+        expect(f.tx.delegation.create).not.toHaveBeenCalled();
+        expect(f.tx.run.create).not.toHaveBeenCalled();
+        expect(f.tx.delegationRoot.update).not.toHaveBeenCalled();
+      }
+      expect(f.tx.teamGoal.findUnique).toHaveBeenCalledWith({
+        where: { rootTaskId: f.state().root.rootTaskId },
+      });
+    },
+  );
   it("keeps a card deadline below an explicit goal deadline and refuses an expired card", async () => {
     const future = new Date(Date.now() + 30 * 60_000);
     const later = new Date(Date.now() + 45 * 60_000);
@@ -85,6 +111,9 @@ describe("transactional delegation admission", () => {
       problem: { code: "budget-exhausted" },
     });
     expect(f.state()).toEqual(before);
+    expect(
+      goalBudget(DELEGATION_LIMITS.tokens, f.state().root, true).availableTokens,
+    ).toBeGreaterThanOrEqual(0);
   });
   it.each([
     ["depth-exceeded", { maxDepth: 0 }],
@@ -192,10 +221,17 @@ describe("transactional delegation admission", () => {
     await requestCancel(db, { spaceId: "space", userId: "owner" }, "root");
     expect(f.state().rows[0].status).toBe("cancel-requested");
     expect(f.state().root.activeDescendants).toBe(1);
+    expect(goalBudget(DELEGATION_LIMITS.tokens, f.state().root, true).reservedTokens).toBe(
+      DELEGATION_LIMITS.reservationTokens,
+    );
     await db.$transaction((tx) => finishDelegation(tx, row.id, "cancelled", "Stopped"));
     await db.$transaction((tx) => finishDelegation(tx, row.id, "cancelled", "Stopped"));
     expect(f.state().rows[0].cancelConfirmedAt).toBeInstanceOf(Date);
     expect(f.state().root.activeDescendants).toBe(0);
+    expect(goalBudget(DELEGATION_LIMITS.tokens, f.state().root, true)).toMatchObject({
+      reservedTokens: 0,
+      availableTokens: DELEGATION_LIMITS.tokens,
+    });
     expect(f.tx.message.create).toHaveBeenCalledOnce();
   });
   it("defaults to bounded roots", () => {

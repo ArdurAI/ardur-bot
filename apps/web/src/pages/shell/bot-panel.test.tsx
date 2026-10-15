@@ -1,4 +1,6 @@
 import { modelPinOptionKey, parseModelPinOptionKey } from "@ardurbot/core";
+import { i18n } from "@lingui/core";
+
 // @vitest-environment jsdom
 
 import type {
@@ -8,6 +10,7 @@ import type {
   ModelCredential,
   RuntimeAvailability,
 } from "@ardurbot/contracts";
+import { failureCategoryMessage, HERMES_CONTEXT_LIMIT_MESSAGE } from "@ardurbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -97,7 +100,18 @@ vi.mock("@ardurbot/ui-web", () => ({
       {children}
     </button>
   ),
-  Switch: () => null,
+  Switch: ({
+    checked,
+    onCheckedChange,
+    ...props
+  }: Omit<ComponentProps<"input">, "onChange"> & { onCheckedChange: (value: boolean) => void }) => (
+    <input
+      {...props}
+      type="checkbox"
+      checked={checked}
+      onChange={(event) => onCheckedChange(event.target.checked)}
+    />
+  ),
 }));
 
 import { useModelSettings } from "../../lib/use-model-settings";
@@ -167,6 +181,8 @@ const me = { defaultProvider: "openai-codex", defaultModel: "gpt-6-astra" };
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
+  i18n.load("en", {});
+  i18n.activate("en");
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();
   api.list.mockResolvedValue(catalog);
@@ -2004,4 +2020,193 @@ it("advances draft revision from the save response", async () => {
   expect(onSave).toHaveBeenLastCalledWith(
     expect.objectContaining({ expectedModelPinRevision: 5, title: "second edit" }),
   );
+});
+
+it.each([
+  failureCategoryMessage("experimental-off", { runtime: "Codex", bot: "this bot" }),
+  failureCategoryMessage("computer-unsupported", { runtime: "Codex", bot: "this bot" }),
+  failureCategoryMessage("destinations-space", { runtime: "Codex", bot: "this bot" }),
+  failureCategoryMessage("connection-missing", { runtime: "Ardur", bot: "this bot" }),
+  HERMES_CONTEXT_LIMIT_MESSAGE,
+])("blocks bot Save with the exact server sentence: %s", async (sentence) => {
+  api.validatePin.mockRejectedValue({ code: "BAD_REQUEST", message: sentence });
+  await act(async () => root.render(settings()));
+  const button = [...container.querySelectorAll("button")].find(
+    (item) => item.textContent === "Save",
+  )!;
+  expect(button.disabled).toBe(true);
+  expect(
+    [...container.querySelectorAll('[role="alert"]')].some((item) => item.textContent === sentence),
+  ).toBe(true);
+  onSave.mockClear();
+  await save();
+  expect(onSave).not.toHaveBeenCalled();
+  expect(api.validatePin).toHaveBeenCalledWith(
+    expect.objectContaining({ botId: bot.id, runtimeKind: "pi" }),
+  );
+});
+
+it("keeps new-bot Create disabled when the space default cannot run", async () => {
+  const sentence = failureCategoryMessage("connection-missing", { runtime: "Ardur" });
+  api.validatePin.mockRejectedValue({ code: "BAD_REQUEST", message: sentence });
+  const create = vi.fn();
+  await act(async () =>
+    root.render(<CreateBotForm onCreate={create} onCancel={() => undefined} />),
+  );
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe(sentence);
+  const button = [...container.querySelectorAll("button")].find(
+    (item) => item.textContent === "Create",
+  )!;
+  expect(button.disabled).toBe(true);
+  expect(api.validatePin).toHaveBeenCalledWith(
+    expect.objectContaining({ computerLocation: "sandbox", provider: null }),
+  );
+});
+
+it.each(["hermes", "codex-app-server", "claude-code", "antigravity"] as const)(
+  "choosing %s visibly turns Experimental on without silently moving the computer",
+  async (kind) => {
+    function Form() {
+      const [runtimeKind, setKind] = useState<RuntimeAvailability["runtimeKind"]>("pi");
+      const [experimental, setExperimental] = useState(false);
+      return (
+        <RuntimeSettings
+          kind={runtimeKind}
+          onKind={setKind}
+          experimental={experimental}
+          onExperimental={setExperimental}
+          modelKey=""
+          onModel={() => undefined}
+          effort=""
+          onEffort={() => undefined}
+        />
+      );
+    }
+    api.availability.mockResolvedValue({ runtimeKind: kind, available: true, models: [] });
+    await act(async () => root.render(<Form />));
+    const select = container.querySelector<HTMLSelectElement>('select[id$="-runtime"]')!;
+    await act(async () => {
+      select.value = kind;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(container.textContent).toContain("Experimental turned on for this runtime");
+    expect(container.textContent).toContain("Experimental");
+    const toggle = container.querySelector<HTMLInputElement>('input[aria-label="Experimental"]')!;
+    expect(toggle.checked).toBe(true);
+    await act(async () => toggle.click());
+    expect(toggle.checked).toBe(false);
+    expect(container.textContent).not.toContain("Experimental turned on for this runtime");
+  },
+);
+
+it("preview and Save use the same saved-credential fallback for an unbound model option", async () => {
+  api.validatePin.mockImplementation(async (choice) => {
+    if (!choice.credentialId) throw { code: "BAD_REQUEST", message: "missing connection" };
+    return { ok: true };
+  });
+  await act(async () =>
+    root.render(
+      settings({
+        modelProvider: "openai-codex",
+        modelId: "gpt-6-sol",
+        modelCredentialId: "credential-test",
+        thinkingLevel: "high",
+      }),
+    ),
+  );
+  const select = modelSelect();
+  await act(async () => {
+    const option = document.createElement("option");
+    option.value = "openai-codex::gpt-6-sol";
+    select.append(option);
+    select.value = option.value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(api.validatePin).toHaveBeenLastCalledWith(
+    expect.objectContaining({ credentialId: "credential-test" }),
+  );
+  await save();
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({ modelCredentialId: "credential-test" }),
+  );
+});
+
+it.each([null, "high"] as const)(
+  "an offline Ollama catalog preserves the saved %s effort in preview and Save",
+  async (effort) => {
+    api.list.mockResolvedValue([
+      {
+        provider: "ollama",
+        providerName: "Ollama",
+        id: "",
+        label: "Ollama",
+        billing: "",
+        placeholder: true,
+      },
+    ]);
+    api.credentials.mockResolvedValue([
+      {
+        id: "ollama-connection",
+        provider: "ollama",
+        label: "Local",
+        hasKey: true,
+        isDefault: false,
+        baseUrl: "http://localhost:11434/v1",
+      },
+    ]);
+    await act(async () =>
+      root.render(
+        settings({
+          modelProvider: "ollama",
+          modelId: "fixture-model",
+          modelCredentialId: "ollama-connection",
+          thinkingLevel: effort,
+        }),
+      ),
+    );
+    expect(api.validatePin).toHaveBeenLastCalledWith(
+      expect.objectContaining({ provider: "ollama", effort }),
+    );
+    await save();
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelProvider: "ollama",
+        modelId: "fixture-model",
+        thinkingLevel: effort,
+      }),
+    );
+  },
+);
+
+it("new-bot Create uses the inherited Ollama choice checked by the creation endpoint", async () => {
+  api.me.mockResolvedValue({ defaultProvider: "ollama", defaultModel: "fixture-model" });
+  api.validatePin.mockImplementation(async (choice) => {
+    expect(choice).toMatchObject({
+      runtimeKind: "pi",
+      provider: null,
+      modelId: null,
+      credentialId: null,
+    });
+    expect(choice.botId).toBeUndefined();
+    return { ok: true };
+  });
+  const create = vi.fn();
+  await act(async () =>
+    root.render(<CreateBotForm onCreate={create} onCancel={() => undefined} />),
+  );
+  const input = container.querySelector<HTMLInputElement>("input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      "Local bot",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const button = [...container.querySelectorAll("button")].find(
+    (item) => item.textContent === "Create",
+  )!;
+  expect(button.disabled).toBe(false);
+  await act(async () => button.click());
+  expect(create).toHaveBeenCalledOnce();
+  expect(container.querySelector('[role="alert"]')).toBeNull();
 });

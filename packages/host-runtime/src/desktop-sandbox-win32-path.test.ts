@@ -94,6 +94,8 @@ const functions: Record<string, (...args: any[]) => unknown> = {
   },
   _get_osfhandle: (fd: number) => (handles.has(fd) ? fd : -1),
   _open_osfhandle: (handle: number) => handle,
+  uv_get_osfhandle: (fd: number) => (handles.has(fd) ? fd : -1),
+  uv_open_osfhandle: (handle: number) => handle,
   CloseHandle: vi.fn(),
   GetFinalPathNameByHandleW: (fd: number, buffer: Buffer | null) => {
     const value = handles.get(fd);
@@ -103,10 +105,13 @@ const functions: Record<string, (...args: any[]) => unknown> = {
   },
 };
 const native: Win32NativeApi = {
-  load: vi.fn(() => ({
+  load: vi.fn((library: string | null) => ({
     func: (prototype: string) => {
       const name = prototype.match(/\s(\w+)\(/)?.[1];
       if (!name || !functions[name]) throw new Error(`Unexpected prototype: ${prototype}`);
+      // A separate CRT DLL cannot see Node's descriptor table.
+      if (["_get_osfhandle", "_open_osfhandle"].includes(name)) return () => -1;
+      if (name.startsWith("uv_") && library !== null) return () => -1;
       return functions[name];
     },
   })),
@@ -146,6 +151,15 @@ async function createDirectory(
 }
 
 describe("Windows relative-handle writer with a stubbed addon", () => {
+  it("shares Node's libuv descriptor table for parent and child handles", async () => {
+    const { desktop, computer, home } = await fixture();
+    await desktop.writeFile(computer, { path: "file.txt", content: Buffer.from("written") });
+    expect(await readFile(path.join(home, "file.txt"), "utf8")).toBe("written");
+    expect(native.load).toHaveBeenCalledWith(null);
+    expect(native.load).not.toHaveBeenCalledWith("msvcrt.dll");
+    expect(native.load).not.toHaveBeenCalledWith("ucrtbase.dll");
+  });
+
   it("creates and replaces files and creates directories through held parent handles", async () => {
     const { desktop, computer, home } = await fixture();
     for (const content of ["first", "second"])
@@ -284,5 +298,12 @@ describe("Windows relative-handle writer with a stubbed addon", () => {
     expect(pathFromWindowsHandle(8)).toBe("\\\\server\\share\\file.txt");
     expect(() => pathFromWindowsHandle(-1)).toThrow(/escapes/);
     expect(() => pathFromWindowsHandle(-1n)).toThrow(/escapes/);
+  });
+
+  it("refuses a final name that grows beyond the queried buffer size", () => {
+    vi.spyOn(functions, "GetFinalPathNameByHandleW").mockImplementation((_fd, buffer) =>
+      buffer ? 20 : 10,
+    );
+    expect(() => pathFromWindowsHandle(7)).toThrow(/escapes/);
   });
 });

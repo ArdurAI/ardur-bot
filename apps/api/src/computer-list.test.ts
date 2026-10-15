@@ -13,7 +13,7 @@ vi.mock("@ardurbot/db", () => ({
   createGroupRepos: vi.fn(() => ({})),
 }));
 
-it("lists computers even when one bot has an invalid stored runtime kind", async () => {
+it("deduplicates shared computers within the owner and space, even with an invalid stored runtime kind", async () => {
   const actor: Actor = {
     userId: "owner",
     spaceId: "space",
@@ -41,6 +41,7 @@ it("lists computers even when one bot has an invalid stored runtime kind", async
       computer: { ...computer, id: "native-computer" },
     },
   ];
+  bots.push({ ...bots[1]!, id: "sharing-bot", name: "Sharing" });
   const findMany = vi.fn(async () => bots);
   const prisma = {
     bot: { findMany },

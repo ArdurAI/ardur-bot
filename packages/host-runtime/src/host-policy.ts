@@ -1,9 +1,10 @@
 import { realpath, stat } from "node:fs/promises";
 import type { CommandRequest } from "@ardurbot/adapter-kit";
+import { COMMAND_REFUSALS } from "@ardurbot/contracts";
 import { isAllowedDesktopPath } from "./desktop-sandbox-paths.js";
 import { getHostEnvironment, resolveHostBinary } from "./host-environment.js";
 
-export const FILE_LOCATION_REFUSAL = "Use a path inside this bot's folder or a registered folder.";
+export const FILE_LOCATION_REFUSAL = COMMAND_REFUSALS["file-location"];
 
 export async function confinedHostCwd(candidate: string, roots: string[]) {
   if (candidate.includes("\0") || candidate.split(/[/\\]/u).includes(".."))

@@ -9,6 +9,7 @@ import {
   DEFAULT_MODEL_MAX_TOKENS,
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
+  MODEL_ID_MAX_LENGTH,
   modelContextWindowLabel,
   OPENAI_COMPATIBLE_BASE_URL_HINT,
   OPENAI_COMPATIBLE_PROVIDER_ID,
@@ -17,9 +18,10 @@ import {
   parseModelMaxImagesPerPrompt,
   parseModelMaxTokens,
 } from "@ardurbot/contracts";
-import { createModelProbe, featuredModelProviders, initialModelProbeState } from "@ardurbot/core";
+import type { ModelConnectionChoice } from "@ardurbot/core";
+import { createModelProbe, initialModelProbeState } from "@ardurbot/core";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -32,7 +34,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { CatalogModelPicker } from "../components/catalog-model-picker";
+import { NativeRuntimeSettings } from "../components/native-runtime-settings";
 import { OllamaConnection } from "../components/ollama-connection";
+import { RuntimeReliability } from "../components/runtime-reliability";
 import type { MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
 import { rpc } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
@@ -83,7 +88,9 @@ export default function Models() {
   const [credentials, setCredentials] = useState<MobileModelCredential[]>([]);
   const [me, setMe] = useState<MobileMe | null>(null);
   const [provider, setProvider] = useState("");
-  const [showAllProviders, setShowAllProviders] = useState(false);
+  const [credentialId, setCredentialId] = useState<string | undefined>();
+  const [editingConnection, setEditingConnection] = useState(false);
+  const [pickedEntry, setPickedEntry] = useState<MobileModel | null>(null);
   const [modelId, setModelId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -136,7 +143,10 @@ export default function Models() {
         : nextMe.defaultProvider) ??
       nextCatalog[0]?.provider ??
       "";
-    const nextCredential = nextCredentials.find((entry) => entry.provider === nextProvider);
+    const providerCredentials = nextCredentials.filter((entry) => entry.provider === nextProvider);
+    const nextCredential =
+      providerCredentials.find((entry) => entry.isDefault) ??
+      (providerCredentials.length === 1 ? providerCredentials[0] : undefined);
     const nextModel =
       nextProvider === OPENAI_COMPATIBLE_PROVIDER_ID
         ? preferred.modelId?.trim() ||
@@ -158,6 +168,7 @@ export default function Models() {
     setCredentials(nextCredentials);
     resetOpenAiCompatibleProbe();
     setProvider(nextProvider);
+    setCredentialId(nextCredential?.id);
     setModelId(nextModel);
     if (nextProvider === OPENAI_COMPATIBLE_PROVIDER_ID) {
       setBaseUrl(nextCredential?.baseUrl ?? "");
@@ -189,41 +200,22 @@ export default function Models() {
     }, [cancelOAuth, load, requestedProvider]),
   );
 
-  const groups = useMemo(() => {
-    const grouped = new Map<string, MobileModel[]>();
-    for (const entry of catalog) {
-      const entries = grouped.get(entry.provider) ?? [];
-      entries.push(entry);
-      grouped.set(entry.provider, entries);
-    }
-    return [...grouped].map(([id, entries]) => ({
-      id,
-      name: entries[0]?.providerName ?? id,
-      entries,
-    }));
-  }, [catalog]);
-  const featuredProviders = useMemo(
-    () =>
-      featuredModelProviders(
-        groups.map((group) => group.entries[0]!),
-        provider,
-      ),
-    [groups, provider],
-  );
-  const visibleGroups = useMemo(() => {
-    if (showAllProviders) return groups;
-    const byId = new Map(groups.map((group) => [group.id, group]));
-    return featuredProviders.map((entry) => byId.get(entry.provider)!);
-  }, [groups, featuredProviders, showAllProviders]);
   const modelsForProvider = catalog.filter((entry) => entry.provider === provider);
-  const selected = modelsForProvider.find((entry) => entry.id === modelId) ?? modelsForProvider[0];
+  const selected =
+    (pickedEntry?.provider === provider ? pickedEntry : undefined) ??
+    modelsForProvider.find((entry) => entry.id === modelId) ??
+    modelsForProvider[0];
   const isOpenAiCompatible = provider === OPENAI_COMPATIBLE_PROVIDER_ID;
-  const credential = credentials.find((entry) => entry.provider === provider);
+  const credential = credentials.find((entry) => entry.id === credentialId);
+  const connectionReady = Boolean(
+    credential?.hasKey && !credential.connectionIssue && !selected?.placeholder,
+  );
   const currentEntry = catalog.find(
     (entry) => entry.provider === me?.defaultProvider && entry.id === me?.defaultModel,
   );
   const isActive =
-    credential?.connectionIssue === undefined &&
+    credential?.isDefault === true &&
+    credential.connectionIssue === undefined &&
     me?.defaultProvider === selected?.provider &&
     me?.defaultModel === (isOpenAiCompatible ? modelId.trim() : selected?.id);
   const acceptsKey = selected?.auth !== "oauth";
@@ -247,9 +239,8 @@ export default function Models() {
     resetOpenAiCompatibleProbe();
   }
 
-  function chooseProvider(nextProvider: string) {
+  function chooseProvider(nextProvider: string, nextCredential?: MobileModelCredential) {
     cancelOAuth();
-    const nextCredential = credentials.find((entry) => entry.provider === nextProvider);
     setProvider(nextProvider);
     setReasoning(nextCredential?.reasoning ?? false);
     setThinkingLevel(nextCredential?.thinkingLevel ?? null);
@@ -274,6 +265,19 @@ export default function Models() {
     resetOpenAiCompatibleProbe();
     setError(null);
     setNotice(null);
+  }
+
+  function chooseModel(choice: ModelConnectionChoice | null) {
+    chooseProvider(choice?.entry.provider ?? "", choice?.credential);
+    setPickedEntry(choice?.entry ?? null);
+    setEditingConnection(false);
+    if (!choice) {
+      setCredentialId(undefined);
+      return;
+    }
+    setModelId(choice.entry.placeholder ? "" : choice.entry.id);
+    setCredentialId(choice.credential?.id);
+    setBaseUrl(choice.credential?.baseUrl ?? "");
   }
 
   async function probeServerModels() {
@@ -307,7 +311,11 @@ export default function Models() {
     setNotice(null);
     setPending("default");
     try {
-      await rpc("models/setDefault", { provider: selected.provider, modelId: activeModelId });
+      await rpc("models/setDefault", {
+        provider: selected.provider,
+        modelId: activeModelId,
+        credentialId: credential.id,
+      });
       await load({ provider, modelId: activeModelId });
       setNotice(
         isOpenAiCompatible
@@ -315,7 +323,7 @@ export default function Models() {
           : t("Now using {label}.", { label: selected.label }),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not change the default model"));
+      setError(err instanceof Error ? t(err.message) : t("Could not change the default model"));
     } finally {
       setPending(null);
     }
@@ -366,6 +374,7 @@ export default function Models() {
         isOpenAiCompatible
           ? {
               provider: selected.provider,
+              credentialId,
               baseUrl: effectiveBaseUrl,
               modelId: modelId.trim(),
               reasoning,
@@ -375,13 +384,14 @@ export default function Models() {
               supportsImages,
               maxImagesPerPrompt: maxImagesPerPromptInput,
               apiKey: apiKey.trim() || undefined,
-              label: selected.providerName ?? selected.provider,
+              label: credential?.label ?? selected.providerName ?? selected.provider,
             }
           : {
               provider: selected.provider,
+              credentialId,
               apiKey: apiKey.trim(),
               modelId: selected.id,
-              label: selected.providerName ?? selected.provider,
+              label: credential?.label ?? selected.providerName ?? selected.provider,
             },
       );
       setApiKey("");
@@ -392,7 +402,7 @@ export default function Models() {
           : t("Connected and using {label}.", { label: selected.label }),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not connect this provider"));
+      setError(err instanceof Error ? t(err.message) : t("Could not connect this provider"));
     } finally {
       setPending(null);
     }
@@ -509,54 +519,43 @@ export default function Models() {
           </Text>
         </View>
 
+        <NativeRuntimeSettings />
+        <RuntimeReliability />
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
-        <Text style={styles.sectionTitle}>{t("Providers")}</Text>
-        <View style={styles.card}>
-          {visibleGroups.map((group) => {
-            const connected = credentials.some(
-              (entry) => entry.provider === group.id && entry.hasKey,
-            );
-            return (
-              <Pressable
-                key={group.id}
-                accessibilityRole="button"
-                accessibilityState={{ selected: group.id === provider }}
-                onPress={() => chooseProvider(group.id)}
-                style={({ pressed }) => [
-                  styles.providerRow,
-                  group.id === provider && styles.selectedRow,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <View style={styles.providerCopy}>
-                  <Text style={styles.providerName}>{group.name}</Text>
-                  <Text style={styles.secondary}>
-                    {t(group.entries.length === 1 ? "{count} model" : "{count} models", {
-                      count: group.entries.length,
-                    })}
-                  </Text>
-                </View>
-                {connected ? <Text style={styles.connected}>{t("Connected")}</Text> : null}
-              </Pressable>
-            );
-          })}
-          {groups.length > featuredProviders.length ? (
+        <CatalogModelPicker
+          catalog={catalog}
+          credentials={credentials}
+          provider={provider}
+          modelId={modelId}
+          credentialId={credentialId}
+          onChange={chooseModel}
+          disabled={pending !== null}
+        />
+
+        {connectionReady && !editingConnection ? (
+          <View>
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ expanded: showAllProviders }}
-              onPress={() => setShowAllProviders((value) => !value)}
-              style={styles.providerRow}
+              disabled={busy || isActive}
+              onPress={() => void setModelDefault()}
+              style={styles.primaryButton}
             >
-              <Text style={styles.providerName}>
-                {showAllProviders ? t("Show less") : t("Show more")}
-              </Text>
+              <Text style={styles.primaryLabel}>{t("Use this model")}</Text>
             </Pressable>
-          ) : null}
-        </View>
-
-        {provider === "ollama" ? (
+            {!credential?.oauth ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setEditingConnection(true)}
+                style={styles.outlineButton}
+              >
+                <Text style={styles.outlineLabel}>{t("Connection settings")}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : provider === "ollama" ? (
           <OllamaConnection status={ollama} />
         ) : selected ? (
           <>
@@ -641,6 +640,7 @@ export default function Models() {
                   <>
                     <TextInput
                       accessibilityLabel={t("Model id")}
+                      maxLength={MODEL_ID_MAX_LENGTH}
                       autoCapitalize="none"
                       autoCorrect={false}
                       editable={!busy && !probing}
@@ -779,33 +779,7 @@ export default function Models() {
                   </View>
                 ) : null}
               </>
-            ) : (
-              <View style={styles.card}>
-                {modelsForProvider.map((entry) => (
-                  <Pressable
-                    key={`${entry.provider}:${entry.id}`}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: entry.id === selected.id }}
-                    onPress={() => {
-                      cancelOAuth();
-                      setModelId(entry.id);
-                      setError(null);
-                      setNotice(null);
-                    }}
-                    style={({ pressed }) => [
-                      styles.modelRow,
-                      entry.id === selected.id && styles.selectedRow,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <View style={styles.radio}>
-                      {entry.id === selected.id ? <View style={styles.radioDot} /> : null}
-                    </View>
-                    <Text style={styles.modelLabel}>{entry.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
+            ) : null}
             {!isOpenAiCompatible && selected.contextWindow ? (
               <Text style={styles.helpLabel}>
                 {t(modelContextWindowLabel("catalog"))}: {selected.contextWindow.toLocaleString()}

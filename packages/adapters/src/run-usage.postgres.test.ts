@@ -9,6 +9,7 @@ import {
   createDb,
   finishDelegation,
   rejectDelegation,
+  sizeDelegationRootForAsk,
   updateWorkerTask,
 } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -21,6 +22,7 @@ import {
 } from "./context/metrics.js";
 import { HermesProviderBroker } from "./hermes-provider-broker.js";
 import { loadLearningRecords } from "./learning-records.js";
+import { applyPiWireSnapshot } from "./pi-request-usage.js";
 import type { RecordedContextUsage } from "./run-usage.js";
 import {
   brokerRunAllowance,
@@ -157,6 +159,120 @@ postgres("request ledger on disposable PostgreSQL", () => {
     const root = () => prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: id } });
     return { id, run, pin, request, usage, record, rows, root, events };
   }
+
+  it("persists independent default collectors across consecutive runs of one bot", async () => {
+    const f = await fixture();
+    const observations: AgentUsage[][] = [];
+    const runs = [f.run];
+    for (const input of [1200, 300]) {
+      if (input === 300) {
+        await db.prisma.run.update({ where: { id: f.run.id }, data: { status: "completed" } });
+        runs.push(
+          await db.prisma.run.create({
+            data: {
+              spaceId: f.run.spaceId,
+              userId: f.run.userId,
+              botId: f.run.botId,
+              threadId: f.run.threadId,
+              taskId: f.run.taskId,
+              runtimePin: f.pin,
+              status: "running",
+              trigger: "manual",
+            },
+          }),
+        );
+      }
+      const run = runs.at(-1)!;
+      // Exercise production defaults, not synthetic reused request/attempt identities.
+      const collector = new RequestUsageCollector({
+        provider: "fixture",
+        model: "fixture",
+        mappingVersion: "pi-anthropic-messages-wire-v1",
+        inputSemantics: "additive-cache-categories",
+      });
+      const merged = {};
+      const payloads = [
+        {
+          type: "message_start",
+          message: {
+            usage: {
+              input_tokens: input,
+              output_tokens: 1,
+              cache_read_input_tokens: 0,
+              cache_creation_input_tokens: 0,
+            },
+          },
+        },
+        ...(input === 300
+          ? [
+              {
+                type: "message_delta",
+                usage: { input_tokens: 200, output_tokens: 0 },
+              },
+            ]
+          : []),
+        { type: "message_delta", usage: { output_tokens: input === 1200 ? 20 : 10 } },
+      ];
+      const usage = [
+        collector.start(),
+        ...payloads.map(
+          (payload) => applyPiWireSnapshot(collector, "anthropic-messages", payload, merged)!,
+        ),
+        collector.finish("success"),
+      ];
+      await f.record(usage[0]!, db.prisma, { id: run.id });
+      const startedRow = (await f.rows()).find((row) => row.runId === run.id)!;
+      expect(startedRow).toMatchObject({
+        threadId: run.threadId,
+        counterEpoch: usage[0]!.request!.counter.epochId,
+        lastSequence: 0,
+      });
+      expect(startedRow.observations).toHaveLength(1);
+      for (const event of usage.slice(1)) await f.record(event, db.prisma, { id: run.id });
+      for (const event of usage)
+        expect(await f.record(event, peer.prisma, { id: run.id })).toBeNull();
+      observations.push(usage);
+    }
+    const first = observations[0]![0]!.request!;
+    const second = observations[1]![0]!.request!;
+    expect(first.requestId).not.toBe(second.requestId);
+    expect(first.attemptId).not.toBe(second.attemptId);
+    expect(first.counter.epochId).not.toBe(second.counter.epochId);
+    for (const usage of observations) {
+      expect(new Set(usage.map((event) => event.request!.counter.epochId)).size).toBe(1);
+      expect(usage.at(-1)!.request!.collection!.outcome).toBe("success");
+    }
+    const rows = await f.rows();
+    expect(rows).toHaveLength(2);
+    for (const [index, run] of runs.entries()) {
+      const row = rows.find((value) => value.runId === run.id)!;
+      expect(row).toMatchObject({
+        botId: f.run.botId,
+        threadId: f.run.threadId,
+        runtimePin: f.pin,
+        counterMode: "cumulative",
+        counterEpoch: observations[index]![0]!.request!.counter.epochId,
+        inputTokens: index === 0 ? 1200 : 300,
+        outputTokens: index === 0 ? 20 : 10,
+      });
+      expect(row.observations).toHaveLength(observations[index]!.length);
+    }
+    const secondRow = rows.find((row) => row.runId === runs[1]!.id)!;
+    expect(secondRow).toMatchObject({
+      coverage: "partial",
+      categoryCoverage: { logicalInput: "partial", output: "partial" },
+    });
+    expect(secondRow.observations.map((receipt) => receipt.observation)).toContainEqual(
+      expect.objectContaining({
+        categories: expect.objectContaining({ logicalInput: 300, output: 1 }),
+        collection: expect.objectContaining({
+          raw: { input: 200, output: 0, cacheRead: 0, cacheWrite: 0 },
+          limitations: ["counter-discontinuity"],
+        }),
+      }),
+    );
+    expect(await f.root()).toMatchObject({ usedTokens: 1530 });
+  });
 
   it("persists accepted fake-provider broker usage once and leaves unmeasured usage unknown", async () => {
     async function turn(measured: boolean) {
@@ -306,6 +422,128 @@ postgres("request ledger on disposable PostgreSQL", () => {
     expect(rows[0]!.observations[0]!.observation).toEqual(f.request);
     expect(await db.prisma.event.count({ where: { runId: f.id, type: "usage.recorded" } })).toBe(1);
   });
+  it("persists a large standalone admission without enlarging the delegation root policy", async () => {
+    const f = await fixture();
+    await db.prisma.run.update({
+      where: { id: f.run.id },
+      data: { leaseOwner: "worker", leaseFence: 2 },
+    });
+    const fence = { leaseOwner: "worker", leaseFence: 2, runtimePin: f.pin };
+    const maxReservedTokens = 16 * (1_000_000 + 65_536);
+    const make = () =>
+      new RequestUsageCollector({
+        provider: "fixture",
+        model: "fixture",
+        requestId: randomUUID(),
+        attemptId: "0",
+        purpose: "main",
+        mappingVersion: "broker-chat-completions-v1",
+        inputSemantics: "total-with-cache-subsets",
+        admission: {
+          kind: "worker-provider-broker",
+          reservedTokens: 121_891,
+          maxRequests: 16,
+          maxReservedTokens,
+        },
+      });
+    const record = (usage: AgentUsage) =>
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, usage, fence);
+    const first = make();
+    await record(first.start());
+    expect(await f.root()).toMatchObject({
+      tokenLimit: DELEGATION_LIMITS.tokens,
+      reservedTokens: 121_891,
+      usedTokens: 0,
+    });
+    expect(await brokerRunAllowance(db.prisma, f.id)).toBe(maxReservedTokens);
+    await record(first.snapshot({ input: 14_000, output: 128 }));
+    await record(first.finish("success"));
+    expect(await f.root()).toMatchObject({
+      tokenLimit: DELEGATION_LIMITS.tokens,
+      usedTokens: 14_128,
+      reservedTokens: 0,
+    });
+    const rows = await f.rows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ inputTokens: 14_000, outputTokens: 128 });
+    // A room ask automatically raises this same root; it must not drop the run allowance.
+    const resized = await db.prisma.$transaction((tx) =>
+      sizeDelegationRootForAsk(tx, { runId: f.run.id, memberTokens: [36_864, 36_864, 36_864] }),
+    );
+    expect(resized.tokenLimit).toBeGreaterThan(DELEGATION_LIMITS.tokens);
+    await record(make().start());
+    expect(await f.root()).toMatchObject({
+      tokenLimit: resized.tokenLimit,
+      usedTokens: 14_128,
+      reservedTokens: 121_891,
+    });
+    // Root cancellation and expiry still block transport admission.
+    await db.prisma.delegationRoot.update({
+      where: { rootTaskId: f.id },
+      data: { cancelRequestedAt: new Date() },
+    });
+    await expect(record(make().start())).rejects.toThrow("Broker root task allowance exhausted");
+    await db.prisma.delegationRoot.update({
+      where: { rootTaskId: f.id },
+      data: { cancelRequestedAt: null, deadlineAt: new Date(0) },
+    });
+    await expect(record(make().start())).rejects.toThrow("Broker root task allowance exhausted");
+    expect(await f.rows()).toHaveLength(2);
+  });
+
+  it("keeps a configured goal ceiling even when it equals the delegation default", async () => {
+    const f = await fixture();
+    const group = await db.prisma.chatGroup.create({
+      data: { spaceId: f.id, userId: f.run.userId, name: "Fixture room" },
+    });
+    const goal = await db.prisma.teamGoal.create({
+      data: {
+        groupId: group.id,
+        spaceId: f.id,
+        userId: f.run.userId,
+        threadId: f.id,
+        coordinatorBotId: f.id,
+        rootTaskId: f.id,
+        objective: "Finish the fixture",
+        tokenLimit: DELEGATION_LIMITS.tokens,
+        perWorkerTokens: DELEGATION_LIMITS.reservationTokens,
+        maxConcurrent: 4,
+        maxDescendants: 12,
+        untilAt: new Date("2030-01-01"),
+      },
+    });
+    await db.prisma.run.update({
+      where: { id: f.id },
+      data: { goalId: goal.id, leaseOwner: "worker", leaseFence: 2 },
+    });
+    const collector = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      purpose: "main",
+      mappingVersion: "broker-chat-completions-v1",
+      inputSemantics: "total-with-cache-subsets",
+      admission: {
+        kind: "worker-provider-broker",
+        reservedTokens: 121_891,
+        maxRequests: 16,
+        maxReservedTokens: 16 * (1_000_000 + 65_536),
+      },
+    });
+    await expect(
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, collector.start(), {
+        leaseOwner: "worker",
+        leaseFence: 2,
+        runtimePin: f.pin,
+      }),
+    ).rejects.toThrow("Broker root task allowance exhausted");
+    expect(await f.rows()).toHaveLength(0);
+    expect(await f.root()).toMatchObject({
+      tokenLimit: DELEGATION_LIMITS.tokens,
+      reservedTokens: 0,
+      usedTokens: 0,
+    });
+  });
+
   it("serializes broker reservations and survives a new worker grant", async () => {
     const f = await fixture();
     await db.prisma.run.update({
@@ -467,38 +705,64 @@ postgres("request ledger on disposable PostgreSQL", () => {
     expect(await f.rows()).toHaveLength(2);
     expect(await f.root()).toMatchObject({ usedTokens: 210, reservedTokens: 0 });
   });
-  it("rejects a broker reservation beyond the persisted root token limit", async () => {
-    const f = await fixture();
-    await db.prisma.run.update({
-      where: { id: f.run.id },
-      data: { leaseOwner: "worker", leaseFence: 2 },
-    });
-    await db.prisma.delegationRoot.update({
-      where: { rootTaskId: f.id },
-      data: { tokenLimit: 99 },
-    });
-    const collector = new RequestUsageCollector({
-      provider: "fixture",
-      model: "fixture",
-      purpose: "unknown",
-      mappingVersion: "broker-chat-completions-v1",
-      inputSemantics: "total-with-cache-subsets",
-      admission: {
-        kind: "worker-provider-broker",
-        reservedTokens: 100,
-        maxRequests: 1,
-        maxReservedTokens: 100,
-      },
-    });
-    await expect(
-      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, collector.start(), {
-        leaseOwner: "worker",
-        leaseFence: 2,
-        runtimePin: f.pin,
-      }),
-    ).rejects.toThrow("root task allowance exhausted");
-    expect(await f.rows()).toHaveLength(0);
-  });
+  it.each([
+    { memberTokens: [36_864], runAllowance: 200_000 },
+    { memberTokens: [100_000], runAllowance: 150_000 },
+  ])(
+    "bounds coordinator spend by the larger task or run allowance: %j",
+    async ({ memberTokens, runAllowance }) => {
+      const f = await fixture();
+      await db.prisma.run.update({
+        where: { id: f.run.id },
+        data: { leaseOwner: "worker", leaseFence: 2 },
+      });
+      await db.prisma.delegationRoot.update({
+        where: { rootTaskId: f.id },
+        data: { usedTokens: 100_000 },
+      });
+      const resized = await db.prisma.$transaction((tx) =>
+        sizeDelegationRootForAsk(tx, { runId: f.run.id, memberTokens }),
+      );
+      const remaining = Math.max(resized.tokenLimit, runAllowance) - 100_000;
+      const make = (reservedTokens: number) =>
+        new RequestUsageCollector({
+          provider: "fixture",
+          model: "fixture",
+          purpose: "main",
+          mappingVersion: "broker-chat-completions-v1",
+          inputSemantics: "total-with-cache-subsets",
+          admission: {
+            kind: "worker-provider-broker",
+            reservedTokens,
+            maxRequests: 2,
+            maxReservedTokens: runAllowance,
+          },
+        });
+      const record = (usage: AgentUsage) =>
+        recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, usage, {
+          leaseOwner: "worker",
+          leaseFence: 2,
+          runtimePin: f.pin,
+        });
+      // The request fits its run allowance but exceeds the effective root ceiling.
+      await expect(record(make(remaining + 1).start())).rejects.toThrow(
+        "root task allowance exhausted",
+      );
+      expect(await f.rows()).toHaveLength(0);
+      // The exact ceiling is admitted, measured and settled before the next refusal.
+      const exact = make(remaining);
+      await record(exact.start());
+      await record(exact.snapshot({ input: remaining, output: 0 }));
+      await record(exact.finish("success"));
+      expect(await f.root()).toMatchObject({
+        tokenLimit: resized.tokenLimit,
+        usedTokens: Math.max(resized.tokenLimit, runAllowance),
+        reservedTokens: 0,
+      });
+      await expect(record(make(1).start())).rejects.toThrow("root task allowance exhausted");
+      expect(await f.rows()).toHaveLength(1);
+    },
+  );
 
   async function admittedWorker(parent: Awaited<ReturnType<typeof fixture>>) {
     await db.prisma.run.update({
@@ -1979,5 +2243,66 @@ postgres("request ledger on disposable PostgreSQL", () => {
       usedTokens: 0,
     });
     expect(await db.prisma.delegation.count({ where: { rootTaskId: f.id } })).toBe(1);
+  });
+
+  it("records late usage after a goal settlement as one visible discrepancy", async () => {
+    const f = await fixture();
+    // The owner accepted this goal while 150 tokens were used; settlement is durable.
+    const group = await db.prisma.chatGroup.create({
+      data: {
+        spaceId: f.id,
+        userId: f.run.userId,
+        name: "Late usage fixture",
+        coordinatorBotId: f.id,
+      },
+    });
+    const goal = await db.prisma.teamGoal.create({
+      data: {
+        spaceId: f.id,
+        userId: f.run.userId,
+        groupId: group.id,
+        threadId: f.id,
+        coordinatorBotId: f.id,
+        rootTaskId: f.id,
+        objective: "Synthetic accounting",
+        status: "accepted",
+        tokenLimit: 1_000,
+        perWorkerTokens: 100,
+        maxConcurrent: 1,
+        maxDescendants: 1,
+        untilAt: new Date("2030-01-01"),
+      },
+    });
+    await db.prisma.goalSettlement.create({
+      data: {
+        spaceId: f.id,
+        userId: f.run.userId,
+        goalId: goal.id,
+        revisionId: `revision-${f.id}`,
+        rootTaskId: f.id,
+        actorId: f.run.userId,
+        usedTokens: 150,
+        reservedTokens: 0,
+      },
+    });
+    await f.record();
+    expect((await f.root()).usedTokens).toBe(150);
+    const settlement = () =>
+      db.prisma.goalSettlement.findUniqueOrThrow({
+        where: { goalId: goal.id },
+        include: { discrepancies: true },
+      });
+    let marker = await settlement();
+    expect(marker.discrepancies).toHaveLength(1);
+    expect(marker.discrepancies[0]).toMatchObject({
+      tokens: 150,
+      usageRecordId: expect.any(String),
+    });
+
+    // A replayed receipt settles once: same ledger balance, no second discrepancy.
+    await f.record();
+    marker = await settlement();
+    expect(marker.discrepancies).toHaveLength(1);
+    expect((await f.root()).usedTokens).toBe(150);
   });
 });

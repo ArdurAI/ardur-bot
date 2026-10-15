@@ -39,7 +39,7 @@ import {
 import { getLogger } from "@ardurbot/logging";
 import { recordInboxFullChip, replyToBotDelivery } from "./bot-comms.js";
 import type { DelegationResolver } from "./delegation.js";
-import { delegationFailure, prepareDelegation } from "./delegation.js";
+import { delegationFailure, prepareDelegation, resolveDelegationTarget } from "./delegation.js";
 import type { ExecutorDeps } from "./executor.js";
 import {
   peerArtifactWhere,
@@ -349,7 +349,6 @@ export async function messageBot(
     }
   }
   const targetThreadId = target.thread.id;
-
   // A tool call can be re-executed after a lease expiry, so a delivery has to be
   // replayable: without this the recipient is messaged twice and woken twice.
   const deliveryKey = input.deliveryKey ? `bot-message:${input.deliveryKey}` : undefined;
@@ -397,6 +396,14 @@ export async function messageBot(
         runId?: string;
       };
   try {
+    const preparedTarget =
+      deps.resolveDelegationPin && !(goal && ["status", "fyi", "result"].includes(intent))
+        ? await resolveDelegationTarget(
+            deps.prisma,
+            { ...run, actingBotId: target.id },
+            deps.resolveDelegationPin,
+          )
+        : undefined;
     committed = await withTransactionRetry(() =>
       deps.prisma.$transaction(async (tx) => {
         // All quota-sensitive senders take this lock before any bot, thread or root lock.
@@ -409,11 +416,12 @@ export async function messageBot(
           }))
         )
           return { ok: false as const, error: "Team messages are paused." };
+        // Both sender and recipient foreign keys are used below. Bots precede
+        // the optional goal group and all coordinator/recipient thread locks.
+        await tx.$queryRaw`SELECT id FROM bots WHERE id IN (${run.botId}, ${target.id}) AND "spaceId" = ${run.spaceId} AND "userId" = ${run.userId} ORDER BY id FOR UPDATE`;
         if (goal) {
           await tx.$queryRaw`SELECT id FROM chat_groups WHERE id = ${goal.groupId} AND "spaceId" = ${run.spaceId} AND "userId" = ${run.userId} FOR UPDATE`;
         }
-        // Owner sends, run claiming, and archive take the recipient bot before its thread.
-        await tx.$queryRaw`SELECT id FROM bots WHERE id = ${target.id} AND "spaceId" = ${run.spaceId} AND "userId" = ${run.userId} FOR UPDATE`;
         const rootTaskId = goal?.rootTaskId ?? parentRun?.delegationRootTaskId ?? parentRun?.taskId;
         const root = rootTaskId
           ? await tx.delegationRoot.findUnique({
@@ -847,7 +855,7 @@ export async function messageBot(
                 }
               : {}),
           },
-          deps.resolveDelegationPin,
+          preparedTarget,
         );
         if (!admitted.ok) return admitted;
         if (

@@ -351,6 +351,17 @@ describe("site facts", () => {
     expect(SiteProductSchema.safeParse(product).success).toBe(false);
   });
 
+  it("describes evidence key rotation and revocation as available owner operations", async () => {
+    const product = SiteProductSchema.parse(
+      JSON.parse(await readFile(path.join(sourceRoot, "site/data/product.json"), "utf8")),
+    );
+    const approve = product.features.find((feature) => feature.id === "approve");
+    expect(approve?.body).toBeTruthy();
+    expect(approve!.body).not.toContain("Key rotation and revocation are not available.");
+    expect(approve!.body).toMatch(/rotat/i);
+    expect(approve!.body).toMatch(/revok/i);
+  });
+
   it("checks all four video files, captions, and the 8 MB cap", async () => {
     const root = await fixture();
     const product = SiteProductSchema.parse(

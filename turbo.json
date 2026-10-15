@@ -1,6 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalPassThroughEnv": ["COREPACK_ENABLE_DOWNLOAD_PROMPT"],
+  "globalPassThroughEnv": ["COREPACK_ENABLE_DOWNLOAD_PROMPT", "DOCKERHUB_LIBRARY_PREFIX"],
   "tasks": {
     "generate": {
       "cache": false
@@ -22,12 +22,18 @@
     },
     "test": {
       "dependsOn": ["^generate"],
+      "env": ["ARDUR_TEST_POSTGRES_IMAGE", "TESTCONTAINERS_RYUK_DISABLED"],
       "outputs": ["coverage/**"]
     },
     "dev": {
       "cache": false,
       "passThroughEnv": [
+        "ARDURBOT_DEVICE_LISTENER_ENABLED",
+        "ARDURBOT_DEVICE_LISTENER_BIND",
+        "ARDURBOT_DEVICE_LISTENER_PORT",
+        "ARDURBOT_DEVICE_LISTENER_ORIGIN",
         "ARDURBOT_DESKTOP_STACK_TOKEN",
+        "ARDUR_DESKTOP_ACCESSIBILITY",
         "ARDUR_HERMES_INSTALL",
         "ARDUR_DETAILED_PROCESS_LOGS"
       ],

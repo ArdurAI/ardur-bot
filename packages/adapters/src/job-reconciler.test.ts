@@ -44,6 +44,31 @@ function fakePrisma(
 }
 
 describe("createJobReconciler", () => {
+  it("redelivers an expired saved turn under the same run key without changing progress", async () => {
+    const saved = {
+      id: "saved-turn",
+      updatedAt: new Date(0),
+      providerRetryAt: null,
+      turnCheckpoint: "fake-encrypted-turn",
+      leaseExpiresAt: new Date(0),
+    };
+    const findMany = vi.fn(async (input: { where?: unknown }) => {
+      const filter = JSON.stringify(input.where);
+      return filter.includes("leaseExpiresAt") ? [saved] : [];
+    });
+    const prisma = { ...fakePrisma(), run: { findMany } } as unknown as PrismaClient;
+    const { jobs, enqueue } = publisher();
+    const reconciler = createJobReconciler({ prisma, jobs });
+    await reconciler.reconcileOnce();
+    await reconciler.reconcileOnce();
+    expect(
+      enqueue.mock.calls.filter(([job]) => job.name === "run.continue").map(([job]) => job),
+    ).toEqual([
+      { name: "run.continue", payload: { runId: "saved-turn" }, replaceKey: "run:saved-turn" },
+      { name: "run.continue", payload: { runId: "saved-turn" }, replaceKey: "run:saved-turn" },
+    ]);
+    expect(saved.turnCheckpoint).toBe("fake-encrypted-turn");
+  });
   it("includes evidence recovery on each scan and isolates its failures", async () => {
     const prisma = fakePrisma();
     const { jobs } = publisher();

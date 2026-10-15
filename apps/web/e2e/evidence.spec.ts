@@ -9,6 +9,12 @@ test("owner recording and sealed run evidence", async ({ page }, testInfo) => {
   let enabled = false;
   let summaries = 0;
   const summary: EvidenceRunSummary = {
+    signingIdentity: {
+      fingerprint: `sha256:${"a".repeat(64)}`,
+      scope: { type: "space", id: "space" },
+      keyVersion: 1,
+    },
+    signerMatch: "no_expected_key",
     sessionId: "run",
     state: "verified",
     sealed: true,
@@ -42,7 +48,31 @@ test("owner recording and sealed run evidence", async ({ page }, testInfo) => {
           : { feature: "governance", state: enabled ? "enabled" : "disabled" };
     if (procedure === "evidence/runSummary") {
       summaries++;
-      result = summary;
+      result = {
+        ...summary,
+        signerMatch: input.expectedFingerprint
+          ? input.expectedFingerprint === summary.signingIdentity!.fingerprint
+            ? "expected_key"
+            : "different_key"
+          : "no_expected_key",
+      };
+    }
+    if (procedure === "evidence/keyHistory") {
+      result = {
+        canManage: true,
+        keys: [
+          {
+            keyId: summary.signingIdentity!.fingerprint,
+            fingerprint: summary.signingIdentity!.fingerprint,
+            version: 1,
+            state: "active",
+            createdAt: "2026-09-29T12:00:00Z",
+            replacedAt: null,
+            revokedAt: null,
+            revokedReason: null,
+          },
+        ],
+      };
     }
     if (procedure === "threads/get") {
       const snapshot = result as ThreadSnapshot;
@@ -75,4 +105,27 @@ test("owner recording and sealed run evidence", async ({ page }, testInfo) => {
   await message.getByRole("button", { name: "More", exact: true }).click();
   await expect(page.getByRole("menuitem", { name: "Download evidence" })).toBeVisible();
   await captureScreenshot(page, testInfo, "evidence-verified-run");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Verified", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Signing identity" })).toBeVisible();
+  await expect(page.getByText("No expected key given; self-consistent only")).toBeVisible();
+  await page
+    .getByRole("textbox", { name: "Expected fingerprint" })
+    .fill(summary.signingIdentity!.fingerprint);
+  await page.getByRole("button", { name: "Check key" }).click();
+  await expect(page.getByText("Signed by the expected key", { exact: true })).toBeVisible();
+  await captureScreenshot(page, testInfo, "evidence-signing-identity");
+  await page
+    .getByRole("textbox", { name: "Expected fingerprint" })
+    .fill(`sha256:${"b".repeat(64)}`);
+  await page.getByRole("button", { name: "Check key" }).click();
+  await expect(page.getByText("Signed by a different key", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Revoke key", exact: true }).click();
+  await expect(
+    page.getByText(
+      "Revoke the signing key? Signing stops now. Earlier signatures verify, but those in the revocation second are untrusted.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await captureScreenshot(page, testInfo, "evidence-revocation-confirmation");
 });

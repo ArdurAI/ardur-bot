@@ -6,14 +6,17 @@
   "exports": {
     "./local-import-fixtures": "./src/fixtures/local-import.ts",
     ".": "./src/index.ts",
+    "./postgres-image": "./src/postgres-image.ts",
     "./memory-conformance": "./src/memory-conformance.ts",
     "./memory-fakes": "./src/memory-fakes.ts",
     "./model-emulator": "./src/model-emulator.ts",
+    "./racy-git-fixture": "./src/racy-git-fixture.ts",
     "./semantic-memory-http-fake": "./src/semantic-memory-http-fake.ts",
     "./semantic-memory-conformance": "./src/semantic-memory-conformance.ts"
   },
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",
+    "check:product-demo": "tsc --noEmit -p tsconfig.product-demo.json",
     "test": "vitest run --root ../.. packages/testkit/src"
   },
   "dependencies": {

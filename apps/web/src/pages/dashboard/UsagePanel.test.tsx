@@ -173,3 +173,79 @@ it("omits the marker when every period total was fully reported", async () => {
     await act(async () => root.unmount());
   }
 });
+
+it("shows named bot rows, distinct runs, partial known cost and unavailable cost", async () => {
+  const partial = {
+    ...period,
+    records: 3,
+    runs: 1,
+    cost: null,
+    knownCost: 0.2,
+    costStatus: "partial" as const,
+    pricingProvenance: [{ kind: "reported" }],
+  };
+  const unknown = { ...period, runs: 0, knownCost: null, costStatus: "unknown" as const };
+  const { container, root } = await render({
+    ...partialSummary(false),
+    bots: [
+      { botId: "reviewer", name: "Reviewer", today: partial, week: partial, providers: [] },
+      { botId: "local", name: "Local helper", today: unknown, week: unknown, providers: [] },
+      { botId: null, name: null, today: unknown, week: unknown, providers: [] },
+    ],
+  });
+  const bots = container.querySelector('[aria-label="By bot"]')!;
+  expect(bots.textContent).toContain("Reviewer");
+  expect(bots.textContent).toContain("1 run · 3 usage records");
+  expect(bots.textContent).toContain("Partial cost: 0.2");
+  expect(bots.textContent).toContain("Local helper");
+  expect(bots.textContent).toContain("0 runs");
+  expect(bots.textContent).toContain("Cost unavailable");
+  expect(bots.textContent).toContain("Unattributed usage");
+  expect(bots.textContent).not.toContain("Cost: 0");
+  await act(async () => root.unmount());
+});
+
+it("keeps a genuinely reported zero price and multiple provider subtotals", async () => {
+  const free = {
+    ...period,
+    records: 2,
+    runs: 1,
+    cost: 0,
+    knownCost: 0,
+    costStatus: "complete" as const,
+  };
+  const { container, root } = await render({
+    ...partialSummary(false),
+    bots: [
+      {
+        botId: "bot",
+        name: "Reviewer",
+        today: free,
+        week: free,
+        providers: [
+          { provider: "first", today: free, week: free },
+          { provider: "second", today: free, week: free },
+        ],
+      },
+    ],
+  });
+  const bots = container.querySelector('[aria-label="By bot"]')!;
+  expect(bots.textContent).toContain("Cost: 0");
+  expect(bots.textContent).toContain("first");
+  expect(bots.textContent).toContain("second");
+  expect(bots.textContent).not.toContain("Partial cost");
+  await act(async () => root.unmount());
+});
+
+it("fills every new usage message in all nine web catalogs", () => {
+  for (const locale of ["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+    for (const key of [
+      "By bot",
+      "Unknown bot",
+      "Unattributed usage",
+      "Partial cost",
+      "{runs, plural, one {# run} other {# runs}}",
+    ])
+      expect(catalogMessage(locale, key)).not.toBe("");
+  }
+});

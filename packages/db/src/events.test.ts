@@ -176,7 +176,7 @@ describe("finalizeRun", () => {
     ).toBe("");
   });
 
-  it("retries a transaction conflict without duplicating the terminal event or notification", async () => {
+  it("retries conflicts within the persist deadline without waiting for evidence enqueue", async () => {
     const conflict = Object.assign(new Error("serialization conflict"), { code: "P2034" });
     const createEvent = vi.fn(async () => ({ threadId: "thread-1", seq: 0 }));
     const tx = {
@@ -209,10 +209,13 @@ describe("finalizeRun", () => {
     });
     const publish = vi.fn(async () => undefined);
 
+    const deadlineAt = Date.now() + 60_000;
+    const enqueue = vi.fn(() => new Promise<never>(() => {}));
     await expect(
       finalizeRun(
         { $transaction: transaction } as unknown as PrismaClient,
         {
+          deadlineAt,
           onCommitted,
           spaceId: "space-1",
           threadId: "thread-1",
@@ -237,12 +240,27 @@ describe("finalizeRun", () => {
               revision: 1,
             },
             reason: "Missing connection",
+            failure: {
+              step: "stream",
+              errorClass: "CodexTransportError",
+              message: "Transport closed.",
+              exitCode: 17,
+              signal: null,
+              retryable: true,
+              retries: 3,
+            },
             actions: ["connect", "change-pin"],
           },
         },
         { publish } as never,
+        { enqueue } as never,
       ),
     ).resolves.toEqual({ continuationRunId: null });
+    expect(enqueue).toHaveBeenCalledOnce();
+    const options = transaction.mock.calls.at(-1)?.[1] as { maxWait: number; timeout: number };
+    expect(options.maxWait + options.timeout).toBeLessThanOrEqual(60_000);
+    expect(options.maxWait).toBeGreaterThan(0);
+    expect(options.timeout).toBeGreaterThan(0);
     expect(onCommitted).toHaveBeenCalledTimes(1);
     expect(transaction).toHaveBeenCalledTimes(2);
     expect(createEvent).toHaveBeenCalledOnce();
@@ -255,6 +273,15 @@ describe("finalizeRun", () => {
             providerErrorKind: "model-unavailable",
             runtimeProblem: expect.objectContaining({
               code: "pin-credential-missing",
+              failure: {
+                step: "stream",
+                errorClass: "CodexTransportError",
+                message: "Transport closed.",
+                exitCode: 17,
+                signal: null,
+                retryable: true,
+                retries: 3,
+              },
               pin: expect.objectContaining({ credentialId: "deleted" }),
             }),
           },
@@ -726,7 +753,12 @@ describe("pauseRunForInput", () => {
       expect(tx.run.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ status: "running", leaseFence: 3 }),
-          data: { status: "waiting_input", leaseOwner: null, leaseExpiresAt: null },
+          data: {
+            status: "waiting_input",
+            leaseOwner: null,
+            leaseExpiresAt: null,
+            turnCheckpoint: null,
+          },
         }),
       );
       expect(tx.event.create.mock.calls.map(([input]) => input.data.type)).toEqual([
@@ -879,6 +911,7 @@ describe("pauseRunForInput", () => {
           status: "waiting_input",
           leaseOwner: null,
           leaseExpiresAt: null,
+          turnCheckpoint: null,
           checkpoint: JSON.stringify({
             kind: "choice_ask_v1",
             actions: [
@@ -1165,7 +1198,7 @@ describe("answerRunInput", () => {
     expect(tx.run.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ status: "waiting_input" }),
-        data: { status: "queued", checkpoint: null },
+        data: { status: "queued", checkpoint: null, turnCheckpoint: null },
       }),
     );
     expect(tx.message.update).toHaveBeenCalledWith({
@@ -1290,7 +1323,7 @@ describe("answerRunInput", () => {
     });
     expect(tx.run.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { status: "queued", checkpoint: null },
+        data: { status: "queued", checkpoint: null, turnCheckpoint: null },
       }),
     );
   });
@@ -1356,7 +1389,7 @@ describe("answerRunInput", () => {
 
     expect(tx.run.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { status: "queued", checkpoint: null },
+        data: { status: "queued", checkpoint: null, turnCheckpoint: null },
       }),
     );
     expect(tx.task.updateMany).toHaveBeenCalledWith({
@@ -1512,7 +1545,7 @@ describe("answerWaitingRunWithTextInTransaction", () => {
     });
     expect(tx.run.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { status: "queued" },
+        data: { status: "queued", turnCheckpoint: null },
       }),
     );
   });
@@ -2370,6 +2403,22 @@ describe("claimSteering", () => {
 });
 
 describe("clearThread", () => {
+  it.each(["P2034", "P2002"])("bounds %s failures without publishing a clear", async (code) => {
+    const failure = Object.assign(new Error("transaction failed"), { code });
+    const transaction = vi.fn().mockRejectedValue(failure);
+    const fanout = new TestFanout();
+    const publish = vi.spyOn(fanout, "publish");
+    await expect(
+      clearThread(
+        { $transaction: transaction } as unknown as PrismaClient,
+        { spaceId: "workspace-1", threadId: "thread-1", botId: "bot-1" },
+        fanout,
+      ),
+    ).rejects.toBe(failure);
+    expect(transaction).toHaveBeenCalledTimes(code === "P2034" ? 3 : 1);
+    expect(publish).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])(
     "releases the computer execution lease without dropping the computer (preserve history: %s)",
     async (preserveHistory) => {
@@ -2401,9 +2450,10 @@ describe("clearThread", () => {
         },
         bot: { update: vi.fn() },
       };
-      const prisma = {
-        $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
-      } as unknown as PrismaClient;
+      const transaction = vi
+        .fn(async (callback: (client: typeof tx) => unknown) => callback(tx))
+        .mockRejectedValueOnce(Object.assign(new Error("conflict"), { code: "P2034" }));
+      const prisma = { $transaction: transaction } as unknown as PrismaClient;
 
       await expect(
         clearThread(
@@ -2443,6 +2493,8 @@ describe("clearThread", () => {
       });
       expect(tx.message.deleteMany).toHaveBeenCalledTimes(preserveHistory ? 0 : 1);
       expect(tx.event.deleteMany).toHaveBeenCalledTimes(preserveHistory ? 0 : 1);
+      expect(transaction).toHaveBeenCalledTimes(2);
+      expect(publish).toHaveBeenCalledOnce();
       expect(publish).toHaveBeenCalledWith("thread:thread-1", JSON.stringify({ cursor: 0 }));
     },
   );
@@ -2495,8 +2547,11 @@ describe("clearThread", () => {
       ),
     ).resolves.toMatchObject({ cancelledRunIds: ["group-run-1", "group-run-2"] });
 
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
     expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.thread.update.mock.invocationCallOrder[0]!,
+    );
+    expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
       tx.thread.update.mock.invocationCallOrder[0]!,
     );
 
@@ -2523,6 +2578,84 @@ describe("clearThread", () => {
     expect(tx.computerExecutionLease.updateMany).not.toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ botId: expect.anything() }) }),
     );
+  });
+
+  it("locks the target thread row in lock order before updating the thread", async () => {
+    const fanout = new TestFanout();
+    const queryRaws: string[] = [];
+    const tx = {
+      $queryRaw: vi.fn(async (strings: TemplateStringsArray) => {
+        const raw = strings.join("?");
+        queryRaws.push(raw);
+        return [{ id: "locked" }];
+      }),
+      thread: {
+        update: vi
+          .fn()
+          .mockResolvedValueOnce({ nextMessageSeq: 10, historyCompactionGeneration: 1 })
+          .mockResolvedValue({ nextEventSeq: 1 }),
+      },
+      run: { findMany: vi.fn().mockResolvedValue([]) },
+      delegationRoot: { findMany: vi.fn().mockResolvedValue([]) },
+      computerExecutionLease: { updateMany: vi.fn() },
+      computer: { updateMany: vi.fn() },
+      message: { deleteMany: vi.fn() },
+      event: {
+        deleteMany: vi.fn(),
+        create: vi.fn().mockResolvedValue({ ...event(0), type: "thread.cleared" }),
+      },
+      chatGroup: { update: vi.fn() },
+      bot: { update: vi.fn() },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+    } as unknown as PrismaClient;
+
+    await clearThread(
+      prisma,
+      {
+        spaceId: "workspace-1",
+        threadId: "thread-target",
+        botId: "bot-1",
+        groupId: "group-1",
+      },
+      fanout,
+    );
+
+    // Locks parent (chat_groups) first, then target thread, before updating thread
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(queryRaws[0]).toContain("FROM chat_groups");
+    expect(queryRaws[1]).toContain("FROM threads");
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.thread.update.mock.invocationCallOrder[0]!,
+    );
+    expect(tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
+      tx.thread.update.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("marks exhausted write conflicts as retryable before bubbling", async () => {
+    const fanout = new TestFanout();
+    const conflict = Object.assign(
+      new Error("Transaction failed due to a write conflict or a deadlock."),
+      { code: "P2034" },
+    );
+    const transaction = vi.fn().mockRejectedValue(conflict);
+    const prisma = { $transaction: transaction } as unknown as PrismaClient;
+
+    const error = await clearThread(
+      prisma,
+      {
+        spaceId: "workspace-1",
+        threadId: "thread-1",
+        botId: "bot-1",
+      },
+      fanout,
+    ).catch((err) => err);
+
+    expect(error).toBe(conflict);
+    expect(error.retryable).toBe(true);
+    expect(transaction).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -2636,4 +2769,24 @@ describe("appendEvent", () => {
     expect(persisted.delta).not.toMatch(/[\uD800-\uDFFF]/);
     expect(() => JSON.stringify(persisted)).not.toThrow();
   });
+});
+
+it("never starts terminal persistence after its deadline", async () => {
+  const transaction = vi.fn();
+  await expect(
+    finalizeRun({ $transaction: transaction } as unknown as PrismaClient, {
+      spaceId: "space-1",
+      threadId: "thread-1",
+      botId: "bot-1",
+      runId: "run-1",
+      taskId: "task-1",
+      attemptId: "attempt-1",
+      leaseOwner: "worker",
+      leaseFence: 1,
+      outcome: "failed",
+      error: "stopped",
+      deadlineAt: Date.now(),
+    }),
+  ).rejects.toMatchObject({ step: "persist" });
+  expect(transaction).not.toHaveBeenCalled();
 });

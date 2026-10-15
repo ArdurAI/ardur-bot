@@ -1,6 +1,9 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import type { HermesGrantRefusalCategory } from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
+import type {
+  HermesGrantRefusalCategory,
+  HermesProviderFailure,
+} from "@ardurbot/host-runtime/runtimes/hermes-provider-failure";
 import {
   HERMES_GRANT_REFUSAL_CATEGORIES,
   HermesProviderRelayError,
@@ -22,8 +25,10 @@ import type {
   Context as PiContext,
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
+import { diagnosticProviderFetch, upstreamHttpFailure } from "./hermes-provider-diagnostics.js";
+import type { AdmittedChatMessage } from "./hermes-provider-translation.js";
 import {
-  type AdmittedChatMessage,
+  BrokerTranslationError,
   piContext,
   providerThinkingLevel,
   translateStream,
@@ -191,6 +196,8 @@ export type BrokerOptions = {
   expiresAt: number;
   /** Rechecks cancellation, lease and connection revocation before each invocation. */
   active: () => Promise<boolean>;
+  /** Refuses new goal work while allowing already admitted receipts to drain. */
+  admit?: () => Promise<boolean>;
   /** A started observation must commit before the provider transport is called. */
   record: (usage: AgentUsage) => Promise<void>;
   observed?: (model: string | undefined, effort: string | undefined) => Promise<void>;
@@ -487,6 +494,7 @@ function admittedTranslatedBody(
 
 /** Dormant worker-only broker. The host relay is composed in a later stream. */
 export class HermesProviderBroker {
+  private providerFailure: HermesProviderFailure | undefined;
   private deliveredBytes = 0;
   readonly grant: BrokerGrant;
   private readonly options: BrokerOptions;
@@ -554,7 +562,12 @@ export class HermesProviderBroker {
       assertHttpsForKeyedOpenAiCompatibleUrl(url, connection.apiKey);
     }
     this.allowed = catalog(this.options.tools);
-    this.transport = createOpenAiCompatibleFetch(options.fetch);
+    this.transport = diagnosticProviderFetch(
+      createOpenAiCompatibleFetch(options.fetch),
+      (failure) => {
+        this.providerFailure = failure;
+      },
+    );
     this.grant = Object.freeze({
       id: randomUUID(),
       token: randomBytes(32).toString("base64url"),
@@ -646,20 +659,34 @@ export class HermesProviderBroker {
         },
       });
       let finished = false;
+      let accounting = Promise.resolve();
+      let accountingError: unknown;
+      let accountingFailed = false;
+      const record = (usage: AgentUsage) => {
+        const write = accounting.then(() => this.options.record(usage));
+        accounting = write.catch((error: unknown) => {
+          accountingError = error;
+          accountingFailed = true;
+        });
+        return write;
+      };
       const finish = async (
         outcome: "success" | "failed" | "cancelled" | "timed-out" | "unknown",
       ) => {
         if (finished) return;
         finished = true;
-        await this.options.record(collector.finish(outcome));
+        await accounting;
+        if (accountingFailed) throw accountingError;
+        await record(collector.finish(outcome));
       };
       try {
-        await this.options.record(collector.start());
+        if (this.options.admit && !(await this.options.admit())) denied("run-budget");
+        await record(collector.start());
       } catch {
         denied("run-budget");
       }
       if (this.translated)
-        return await this.openTranslated(body, controller, collector, finish, live, active);
+        return await this.openTranslated(body, controller, collector, record, finish, live, active);
       let responseBody: ReadableStream<Uint8Array> | null = null;
       let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
       try {
@@ -677,6 +704,10 @@ export class HermesProviderBroker {
         });
         responseBody = response.body;
         await active();
+        if (!response.ok)
+          throw new HermesProviderRelayError(
+            this.providerFailure ?? upstreamHttpFailure(response.status),
+          );
         const mime = response.headers.get("content-type") ?? "";
         if (!mime.includes("application/json") && !mime.includes("text/event-stream")) {
           controller.abort();
@@ -697,7 +728,7 @@ export class HermesProviderBroker {
           const value = object(payload);
           if (!value) return;
           const counts = chatCompletionsUsage(payload);
-          if (counts) await this.options.record(collector.snapshot(counts));
+          if (counts) await record(collector.snapshot(counts));
           await active();
           if (object(value.error)) throw new Error("Provider reported an error.");
           if (value.model !== undefined && value.model !== connection.modelId) {
@@ -823,6 +854,7 @@ export class HermesProviderBroker {
     body: JsonObject,
     controller: AbortController,
     collector: RequestUsageCollector,
+    record: (usage: AgentUsage) => Promise<void>,
     finish: (
       outcome: "success" | "failed" | "cancelled" | "timed-out" | "unknown",
     ) => Promise<void>,
@@ -832,6 +864,15 @@ export class HermesProviderBroker {
     const { connection } = this.options;
     const catalog = this.options.catalog;
     const model = catalog?.model;
+    let providerFailure: HermesProviderFailure | undefined;
+    let phase: "request-translation" | "provider-stream" | "response-translation" =
+      "request-translation";
+    const providerFetch = diagnosticProviderFetch(
+      this.options.fetch ?? globalThis.fetch,
+      (failure) => {
+        providerFailure = failure;
+      },
+    );
     try {
       live();
       await active();
@@ -859,8 +900,9 @@ export class HermesProviderBroker {
           : typeof body.stop === "string"
             ? { samplingParams: { stop: [body.stop] } }
             : {}),
-        ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
+        fetch: providerFetch,
       };
+      phase = "provider-stream";
       const invoked = this.options.streamSimple
         ? this.options.streamSimple(model, context, options)
         : piStreamSimple(model!, context, options);
@@ -873,9 +915,10 @@ export class HermesProviderBroker {
         onUsage: (usage) => {
           // Feed the broker accounting with the provider layer's counts so run
           // caps and honest usage match the pass-through path.
-          void this.options.record(collector.snapshot(usage));
+          void record(collector.snapshot(usage)).catch(() => undefined);
         },
       });
+      phase = "response-translation";
       await active();
       live();
       const payload = result.frames.join("") || JSON.stringify(result.body);
@@ -917,35 +960,27 @@ export class HermesProviderBroker {
       }
       if (outcome === "cancelled" || outcome === "timed-out")
         throw new Error("Provider request was cancelled.");
-      const isInlineImageError =
-        error instanceof Error && error.message === "Only inline images are supported.";
-      const status = isInlineImageError
-        ? 400
-        : error instanceof Error
-          ? providerErrorStatus(error)
-          : 500;
-      return new Response(
-        JSON.stringify({
-          error: {
-            message: isInlineImageError ? error.message : "Provider request failed.",
-            type: status === 400 ? "invalid_request_error" : "api_error",
-            code: status,
-          },
-        }),
-        { status, headers: { "content-type": "application/json" } },
-      );
+      if (error instanceof HermesProviderRelayError) throw error;
+      if (providerFailure) throw new HermesProviderRelayError(providerFailure);
+      const safe = hermesProviderFailure(error);
+      if (safe.kind !== "provider-failed" || safe.layer) throw new HermesProviderRelayError(safe);
+      // Exact SDK signature for an upstream SSE finish reason, not arbitrary vendor text.
+      if (
+        error instanceof BrokerTranslationError &&
+        error.message === "Provider finish_reason: network_error"
+      )
+        throw new HermesProviderRelayError({
+          kind: "provider-failed",
+          layer: "upstream",
+          reason: "stream-network",
+        });
+      throw new HermesProviderRelayError({
+        kind: "provider-failed",
+        layer: phase === "provider-stream" ? "provider-adapter" : "translation",
+        reason: phase,
+      });
     }
   }
-}
-
-/** Same status classes the pass-through path surfaces from provider HTTP codes. */
-function providerErrorStatus(error: Error): 400 | 401 | 429 | 500 {
-  const text = error.message.toLowerCase();
-  if (/unauthorized|invalid[ _-]api[ _-]key|authentication|token expired|api[ _-]key/.test(text))
-    return 401;
-  if (/rate limit|too many requests|quota/.test(text)) return 429;
-  if (/not found|unknown model|unsupported|invalid|malformed|must /.test(text)) return 400;
-  return 500;
 }
 
 export class HermesRelayDispatcher {

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { Bot, ComputerStatus } from "@ardurbot/contracts";
+import { terminalCollectionKey } from "@ardurbot/core";
 import type { ReactNode } from "react";
 import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -9,11 +10,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const calls = vi.hoisted(() => ({
   available: vi.fn(async () => ({ available: true })),
   release: vi.fn(async () => ({})),
-  session: vi.fn((_props: { botId: string; computerId: string }) => null as ReactNode),
+  close: vi.fn(async () => ({})),
+  session: vi.fn(
+    (_props: {
+      botId: string;
+      computerId: string;
+      visible?: boolean;
+      onSession?(id: string): void;
+      initialSession?: string;
+      initialSize?: { cols: number; rows: number };
+      shouldDetach?(): boolean;
+    }) => null as ReactNode,
+  ),
 }));
 vi.mock("../../lib/rpc", () => ({
   rpc: {
-    terminal: { available: calls.available },
+    terminal: { available: calls.available, close: calls.close },
     computer: { release: calls.release },
   },
 }));
@@ -90,9 +102,99 @@ afterEach(async () => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  window.sessionStorage.clear();
 });
 
 describe("WorkspaceTerminal", () => {
+  it("retains selected server identities on pagehide and restores only the current scope", async () => {
+    calls.session.mockReturnValue(null);
+    await import("./TerminalCollection");
+    const props = baseProps({
+      userId: "owner",
+      bot: { ...bot, spaceId: "space" },
+      computer: computer({ computerGeneration: 2, controlHolder: "user", controlBotId: "bot" }),
+    });
+    await render(props);
+    await act(async () => calls.session.mock.lastCall![0].onSession!("shell-one"));
+    const add = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "New terminal",
+    )!;
+    await act(async () => add.click());
+    await act(async () =>
+      calls.session.mock.calls.findLast(([value]) => value.visible)![0].onSession!("shell-two"),
+    );
+    await act(async () => window.dispatchEvent(new Event("pagehide")));
+    expect(calls.session.mock.lastCall![0].shouldDetach!()).toBe(true);
+    await act(async () => root.unmount());
+    expect(calls.release).not.toHaveBeenCalled();
+    const key = terminalCollectionKey({
+      userId: "owner",
+      spaceId: "space",
+      botId: "bot",
+      computerId: "computer",
+      generation: 2,
+    });
+    const stored = JSON.parse(window.sessionStorage.getItem(key)!);
+    expect(stored.sessions.map((value: { id: string }) => value.id)).toEqual([
+      "shell-one",
+      "shell-two",
+    ]);
+    expect(stored.activeId).toBe("shell-two");
+    root = createRoot(container);
+    calls.session.mockClear();
+    await render(props);
+    expect(calls.session.mock.calls.map(([value]) => value.initialSession)).toEqual([
+      "shell-one",
+      "shell-two",
+    ]);
+    expect(calls.session.mock.calls.find(([value]) => value.visible)![0].initialSession).toBe(
+      "shell-two",
+    );
+    await render({
+      ...props,
+      computer: computer({ computerGeneration: 3, controlHolder: "user", controlBotId: "bot" }),
+    });
+    expect(calls.session.mock.lastCall![0].initialSession).toBeUndefined();
+    expect(window.sessionStorage.getItem(key)).toBeNull();
+  });
+  it("keeps four sessions under one grant and confirms only the final close", async () => {
+    calls.session.mockReturnValue(null);
+    await import("./TerminalCollection");
+    await render(baseProps({ computer: computer({ controlHolder: "user", controlBotId: "bot" }) }));
+    const add = () =>
+      [...container.querySelectorAll("button")].find(
+        (button) => button.textContent === "New terminal",
+      )!;
+    for (const id of ["shell-one", "shell-two", "shell-three", "shell-four"]) {
+      const session = calls.session.mock.calls.findLast(([props]) => props.visible)![0];
+      await act(async () => session.onSession!(id));
+      if (id !== "shell-four") await act(async () => add().click());
+    }
+    expect(container.querySelectorAll('[role="tab"]')).toHaveLength(4);
+    expect(add().disabled).toBe(true);
+    expect(add().title).toBe("Four terminals are already open.");
+    await act(async () =>
+      container.querySelectorAll<HTMLButtonElement>('[aria-label="Close terminal"]')[1]!.click(),
+    );
+    expect(calls.close).toHaveBeenCalledExactlyOnceWith({
+      botId: "bot",
+      computerId: "computer",
+      sessionId: "shell-two",
+    });
+    expect(calls.release).not.toHaveBeenCalled();
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(container.querySelectorAll('[role="tab"]')).toHaveLength(3);
+    for (const _ of [0, 1])
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('[aria-label="Close terminal"]')!.click(),
+      );
+    expect(container.querySelectorAll('[role="tab"]')).toHaveLength(1);
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Close terminal"]')!.click(),
+    );
+    expect(window.confirm).toHaveBeenCalledWith("End this terminal?");
+    expect(calls.release).toHaveBeenCalledExactlyOnceWith({ botId: "bot" });
+  });
   it("keeps authority and Release reachable outside the hidden tab", async () => {
     const controlsHost = document.createElement("div");
     document.body.append(controlsHost);

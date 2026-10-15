@@ -325,3 +325,46 @@ it("logs a fixed refusal category through a message-only callback without values
     relay.close();
   }
 });
+
+it.each([
+  { kind: "provider-http", status: 500, layer: "upstream", reason: "http-server" },
+  { kind: "provider-failed", layer: "provider-adapter", reason: "provider-stream" },
+  { kind: "provider-failed", layer: "translation", reason: "response-translation" },
+  { kind: "provider-failed", layer: "upstream", reason: "stream-network" },
+  { kind: "provider-failed", layer: "provider-transport", reason: "transport" },
+] as const)("logs the fixed failing layer through a remote-style callback: %j", async (failure) => {
+  const authorized = grant();
+  const sink = createTestSink();
+  const logger = createLogger({ service: "fixture", sinks: [sink], level: "info" });
+  const failed = vi.fn();
+  const relay = await startHermesProviderRelay(
+    authorized,
+    async () => {
+      const safe = new HermesProviderRelayError(failure);
+      throw Object.assign(new Error(safe.message), {
+        data: "private fixture body",
+        cause: { headers: authorized.token },
+      });
+    },
+    failed,
+    logger,
+  );
+  try {
+    const response = await fetch(`${relay.url}/chat/completions`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${authorized.token}` },
+      body: "{}",
+    });
+    expect(response.status).toBe(502);
+    expect(await response.text()).toBe("Provider request failed.");
+    expect(failed).toHaveBeenCalledWith(failure);
+    const logged = JSON.stringify(sink.events);
+    expect(logged).toContain(failure.layer);
+    expect(logged).toContain(failure.reason);
+    expect(logged).not.toContain("private fixture");
+    expect(logged).not.toContain(authorized.token);
+    expect(logged).not.toContain("stack");
+  } finally {
+    relay.close();
+  }
+});

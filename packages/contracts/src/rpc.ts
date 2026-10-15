@@ -79,6 +79,7 @@ import {
   ModelCatalogEntrySchema,
   ModelConnectInputSchema,
   ModelCredentialSchema,
+  ModelIdSchema,
   ModelOAuthBeginSchema,
   REPLY_QUOTE_MAX_LENGTH,
   ReorderBotsInput,
@@ -119,7 +120,7 @@ import {
   FleetUpdateResultSchema,
   PlacementSettingsSchema,
 } from "./fleet.js";
-import { goalsContract } from "./goal.js";
+import { type GoalsContract, goalsContract } from "./goal.js";
 import { HostStatusSchema } from "./host-bridge.js";
 import {
   IDE_FILE_BYTES,
@@ -193,13 +194,16 @@ import { ExportDownloadSchema } from "./privacy.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RoutineRunSchema, RunsListOutputSchema } from "./runs.js";
 import { HermesRuntimeConfigPreviewSchema, RuntimeConfigIssueSchema } from "./runtime-config.js";
+import { RuntimeCapabilityReportSchema } from "./runtime-evidence.js";
 import { RuntimeAvailabilitySchema, RuntimeKindSchema, RuntimePinSchema } from "./runtime-pins.js";
+import { RuntimeReliabilitySchema } from "./runtime-reliability.js";
 import { SearchQueryOutputSchema } from "./search.js";
 import { teamContract } from "./team.js";
 import {
   WorkspaceContextSchema,
   WorkspaceFileSchema,
   WorkspaceFilesSchema,
+  WorkspaceGitSchema,
   WorkspaceRootBindingSchema,
   WorkspaceTasksSchema,
 } from "./workspace.js";
@@ -555,6 +559,10 @@ export const appContract = {
     disconnect: oc.input(z.object({}).optional()).output(z.object({ ok: z.literal(true) })),
   },
   runtimes: {
+    reliability: oc.output(RuntimeReliabilitySchema),
+    capabilities: oc
+      .input(z.object({ runtimeKind: RuntimeKindSchema }))
+      .output(RuntimeCapabilityReportSchema),
     availability: oc
       .input(
         z.object({
@@ -598,12 +606,22 @@ export const appContract = {
   },
   models: {
     validatePin: oc
-      .input(RuntimePinSchema.omit({ revision: true }))
+      .input(
+        RuntimePinSchema.omit({ revision: true }).extend({
+          botId: Id.optional(),
+          runtimeExperimental: z.boolean().optional(),
+          computerLocation: z.enum(["host", "sandbox"]).optional(),
+          computerMode: z.enum(["team", "dedicated"]).optional(),
+          inheritBotPin: z.boolean().optional(),
+        }),
+      )
       .output(z.object({ ok: z.literal(true) })),
-    ollama: oc.output(OllamaStatusSchema),
+    ollama: oc
+      .input(z.object({ credentialId: Id.optional() }).optional())
+      .output(OllamaStatusSchema),
     testOllama: oc.input(z.object({ baseUrl: z.string() })).output(OllamaStatusSchema),
     pullOllama: oc
-      .input(z.object({ model: z.string().trim().min(1).max(256) }))
+      .input(z.object({ model: z.string().trim().min(1).max(256), credentialId: Id.optional() }))
       .output(eventIterator(OllamaPullProgressSchema)),
     list: oc.output(z.array(ModelCatalogEntrySchema)),
     credentials: oc.output(z.array(ModelCredentialSchema)),
@@ -621,7 +639,7 @@ export const appContract = {
         z.object({
           provider: z.string(),
           label: z.string().optional(),
-          modelId: z.string().optional(),
+          modelId: ModelIdSchema.optional(),
         }),
       )
       .output(ModelOAuthBeginSchema),
@@ -642,7 +660,13 @@ export const appContract = {
       .input(z.object({ loginId: z.string() }))
       .output(z.object({ ok: z.literal(true) })),
     setDefault: oc
-      .input(z.object({ provider: z.string(), modelId: z.string().optional() }))
+      .input(
+        z.object({
+          provider: z.string(),
+          modelId: ModelIdSchema.optional(),
+          credentialId: Id.optional(),
+        }),
+      )
       .output(z.object({ ok: z.literal(true) })),
   },
   bots: {
@@ -725,6 +749,17 @@ export const appContract = {
         }),
       ),
     tasks: oc.input(botId).output(WorkspaceTasksSchema),
+    git: oc
+      .input(
+        z.object({
+          botId: Id,
+          computerId: Id,
+          generation: z.number().int().nonnegative(),
+          path: IdePathSchema.min(1).optional(),
+          rootId: Id.optional(),
+        }),
+      )
+      .output(WorkspaceGitSchema),
   },
   terminal: {
     close: oc
@@ -740,6 +775,7 @@ export const appContract = {
           computerId: Id,
           sessionId: Id.optional(),
           workspace: z.literal("computer").optional(),
+          releaseOnDisconnect: z.boolean().optional(),
         }),
       )
       .output(z.object({ sessionId: Id, ticket: z.string(), path: z.string() })),
@@ -804,7 +840,9 @@ export const appContract = {
       .output(z.array(z.object({ name: z.string(), local: z.boolean() }))),
     configure: oc.input(ComputerConfigurationSchema).output(ComputerUpdateSchema),
 
-    status: oc.input(botId).output(ComputerStatusSchema),
+    status: oc
+      .input(botId.extend({ includeLimits: z.boolean().optional() }))
+      .output(ComputerStatusSchema),
     boot: oc.input(botId).output(ComputerStatusSchema),
     stop: oc.input(botId).output(ComputerStatusSchema),
     recover: oc.input(botId).output(ComputerUpdateSchema),
@@ -1566,7 +1604,7 @@ export const appContract = {
       .input(ProtectedLocationsPatchInputSchema)
       .output(ProtectedLocationViewsSchema),
   },
-  goals: goalsContract,
+  goals: goalsContract as GoalsContract,
   botComms: botCommsContract,
   team: teamContract,
   comparisons: comparisonsContract,

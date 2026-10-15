@@ -38,3 +38,76 @@ it.each([
     expect(error).toMatchObject({ exitCode: 3 });
   }
 });
+
+it.each([
+  ["180s", 180000],
+  ["2m", 120000],
+  ["500ms", 500],
+  ["0.5", 500],
+])("parses bot test timeout %s", (value, timeoutMs) => {
+  expect(
+    parseArgs([
+      "test",
+      "bot",
+      "bot-id",
+      "--prompt",
+      "hello",
+      "--expect-contains",
+      "world",
+      "--timeout",
+      value,
+    ]),
+  ).toMatchObject({
+    kind: "test",
+    bot: "bot-id",
+    prompt: "hello",
+    expectContains: "world",
+    timeoutMs,
+    json: false,
+  });
+});
+it.each([
+  ["test", "room", "room-id"],
+  ["test", "bot"],
+  ["test", "bot", "bot-id", "--json", "--json"],
+  ["test", "bot", "bot-id", "--prompt", "hello", "--prompt", "again", "--expect-contains", "world"],
+  [
+    "test",
+    "bot",
+    "bot-id",
+    "--prompt",
+    "hello",
+    "--expect-contains",
+    "world",
+    "--timeout",
+    "2147483648ms",
+  ],
+])("refuses invalid bot test arguments %j", (input) => {
+  expect(() => parseArgs(input)).toThrow();
+});
+
+it.each([
+  [
+    ["runs", "list", "--limit", "2", "--cursor", "run"],
+    { kind: "runs-list", limit: 2, cursor: "run" },
+  ],
+  [["runs", "show", "run"], { kind: "runs-show", runId: "run" }],
+  [["tasks", "show", "task"], { kind: "tasks-show", taskId: "task" }],
+  [["wait", "--run", "run", "--timeout", "2s"], { kind: "wait", runId: "run", timeoutMs: 2000 }],
+  [
+    ["send", "Hello", "--request-id", "stable-request-0001"],
+    { kind: "send", requestId: "stable-request-0001" },
+  ],
+])("parses the exact-read and recovery command %j", (args, expected) =>
+  expect(parseArgs(args as string[])).toMatchObject(expected),
+);
+it.each([
+  ["runs", "list", "--limit", "101"],
+  ["runs", "list", "--cursor"],
+  ["wait"],
+  ["wait", "--run", "one", "--run", "two"],
+  ["wait", "--run", "run", "--timeout", "0"],
+  ["send", "Hello", "--request-id", "short"],
+  ["tasks", "show"],
+  ["runs", "show", "run", "extra"],
+])("refuses invalid Stage 3 arguments %j", (args) => expect(() => parseArgs(args)).toThrow());

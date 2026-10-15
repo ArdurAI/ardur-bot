@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Bot, ComputerStatus } from "@ardurbot/contracts";
+import type { Bot, ComputerStatus, WorkspaceContext } from "@ardurbot/contracts";
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -31,7 +31,20 @@ vi.mock("../../lib/rpc", () => ({
 }));
 vi.mock("./WorkspaceTasks", () => ({ WorkspaceTasks: () => <div data-body="tasks" /> }));
 vi.mock("./WorkspaceFiles", () => ({
-  WorkspaceFiles: () => <textarea data-body="files" defaultValue="draft" />,
+  WorkspaceFiles: ({
+    context,
+    onContextChange,
+  }: {
+    context: WorkspaceContext;
+    onContextChange?(context: WorkspaceContext): void;
+  }) => (
+    <>
+      <textarea data-body="files" data-generation={context.generation} defaultValue="draft" />
+      <button type="button" onClick={() => onContextChange?.({ ...context, generation: 2 })}>
+        Recover binding
+      </button>
+    </>
+  ),
 }));
 vi.mock("./WorkspaceTerminal", () => ({ WorkspaceTerminal: () => <div data-body="terminal" /> }));
 const bot = { id: "bot", name: "Bot" } as Bot;
@@ -148,4 +161,54 @@ it("a lost capability keeps its selection and offers Retry, not a Tasks fallback
     [...host.querySelectorAll("button")].find((button) => button.textContent === "Retry")!.click(),
   );
   expect(retry).toHaveBeenCalledOnce();
+});
+
+it("publishes a recovered binding to the pane owner while retaining its file view", async () => {
+  await act(async () =>
+    root.render(
+      <WorkspacePane
+        {...props}
+        openViews={[{ type: "files" }]}
+        tab="files"
+        onTabChange={vi.fn()}
+      />,
+    ),
+  );
+  const editor = host.querySelector("textarea");
+  expect(editor?.getAttribute("data-generation")).toBe("1");
+  await act(async () =>
+    [...host.querySelectorAll("button")]
+      .find((button) => button.textContent === "Recover binding")!
+      .click(),
+  );
+  expect(host.querySelector("textarea")).toBe(editor);
+  expect(editor?.getAttribute("data-generation")).toBe("2");
+});
+it("forwards recovery to the supplied context owner", async () => {
+  const publish = vi.fn();
+  const context: WorkspaceContext = {
+    botId: "bot",
+    computerId: "computer",
+    generation: 1,
+    files: "live",
+    observedAt: "2026-09-30T00:00:00Z",
+  };
+  await act(async () =>
+    root.render(
+      <WorkspacePane
+        {...props}
+        context={context}
+        onContextChange={publish}
+        openViews={[{ type: "files" }]}
+        tab="files"
+        onTabChange={vi.fn()}
+      />,
+    ),
+  );
+  await act(async () =>
+    [...host.querySelectorAll("button")]
+      .find((button) => button.textContent === "Recover binding")!
+      .click(),
+  );
+  expect(publish).toHaveBeenCalledWith({ ...context, generation: 2 });
 });

@@ -5941,6 +5941,62 @@ describeJourneys("required product journeys", () => {
     );
   });
 
+  it("55d: room recipient metadata matches one, two and everyone sends", async () => {
+    const owner = await signup(app, `recipients-${stamp}@example.test`, "Recipient fixture");
+    const makeBot = (name: string) =>
+      rpc<Bot>(app, owner, "bots/create", {
+        name,
+        title: "",
+        description: "",
+        instructions: "",
+        notifyOnFinish: false,
+      });
+    const first = await makeBot("PreviewAlpha"),
+      second = await makeBot("PreviewBeta");
+    const group = await rpc<{ id: string; threadId: string }>(app, owner, "groups/create", {
+      name: "Recipient room",
+      botIds: [first.id, second.id],
+    });
+    type Preview = {
+      groupRouting: { coordinatorBotId: string | null; defaultBotId: string | null };
+    };
+    const preview = () => rpc<Preview>(app, owner, "threads/get", { groupId: group.id });
+    expect((await preview()).groupRouting).toEqual({
+      coordinatorBotId: null,
+      defaultBotId: first.id,
+    });
+    const assertSend = async (text: string, ids: string[]) => {
+      const result = await rpc<{ runIds: string[] }>(app, owner, "threads/send", {
+        groupId: group.id,
+        text,
+      });
+      expect(result.runIds).toHaveLength(ids.length);
+      const rows = await prisma.run.findMany({
+        where: { id: { in: result.runIds } },
+        select: { botId: true },
+      });
+      expect(rows.map((row) => row.botId).sort()).toEqual([...ids].sort());
+      await waitForDatabase(
+        async () =>
+          (await prisma.run.count({
+            where: { id: { in: result.runIds }, status: { in: [...ACTIVE_RUN_STATUSES] } },
+          })) === 0,
+      );
+    };
+    await assertSend("Each member, reply with your model.", [first.id]);
+    await assertSend("@PreviewBeta reply", [second.id]);
+    expect((await preview()).groupRouting.defaultBotId).toBe(second.id);
+    await assertSend("Each member, reply again.", [second.id]);
+    await assertSend("@PreviewAlpha @PreviewBeta reply", [first.id, second.id]);
+    await assertSend("@everyone reply", [first.id, second.id]);
+    await rpc(app, owner, "groups/update", { groupId: group.id, coordinatorBotId: first.id });
+    expect((await preview()).groupRouting).toEqual({
+      coordinatorBotId: first.id,
+      defaultBotId: first.id,
+    });
+    await assertSend("Each member, reply with the status.", [first.id]);
+  });
+
   it("55c: a room narrowed to one bot at a time answers in turn and keeps the setting", async () => {
     const turn = await signup(app, `turn-${stamp}@example.test`, "Turn Rooms");
     const makeBot = (name: string) =>
