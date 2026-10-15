@@ -92,6 +92,44 @@ function fixture(environmentPatch: NodeJS.ProcessEnv = {}) {
 }
 
 describe("host terminal process boundary", () => {
+  it.each(["win32", "linux"] as const)(
+    "keeps protected cwd refusal and environment filtering on %s",
+    async (platform) => {
+      const f = fixture({
+        SystemRoot: "C:\\Windows",
+        SHELL: "/bin/bash",
+        COMSPEC: "untrusted.exe",
+      });
+      await mkdir(path.join(root, "protected"));
+      // Keep filesystem path semantics native to this runner. The platform passed
+      // to filterHostEnvironment and shell selection is the behavior under test.
+      const descriptor = Object.getOwnPropertyDescriptor(process, "platform")!;
+      Object.defineProperty(process, "platform", { configurable: true, value: platform });
+      try {
+        await expect(
+          f.provider.open(f.computer, size, {
+            ...f.context,
+            workingRoot: path.join(root, "protected"),
+          }),
+        ).rejects.toThrow("protected");
+        expect(f.spawn).not.toHaveBeenCalled();
+        const opened = await f.provider.open(f.computer, size, f.context);
+        const [shell, , env] = f.spawn.mock.calls[0] as unknown as [
+          string,
+          string,
+          NodeJS.ProcessEnv,
+        ];
+        expect(shell).toBe(platform === "win32" ? "C:\\Windows\\System32\\cmd.exe" : "/bin/bash");
+        expect(env).not.toHaveProperty("PAIRING_TOKEN");
+        expect(env).not.toHaveProperty("SERVICE_API_KEY");
+        expect(env).not.toHaveProperty("NODE_OPTIONS");
+        expect(env).not.toHaveProperty("COMSPEC");
+        await f.provider.close(opened.id, "closed");
+      } finally {
+        Object.defineProperty(process, "platform", descriptor);
+      }
+    },
+  );
   it.skipIf(process.platform === "win32")(
     "uses the captured login shell and rejects relative shell paths",
     async () => {

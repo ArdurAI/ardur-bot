@@ -146,7 +146,8 @@ export class HostTerminalProvider implements TerminalProvider {
         throw unavailable();
     };
     check();
-    // Re-check Linux shell selection in step 3 before injecting a factory there.
+    // Use the captured absolute POSIX shell; Windows uses cmd with AutoRun disabled
+    // by its native adapter. No caller-supplied shell or environment is accepted.
     const shell =
       this.options.shell ??
       (process.platform === "win32"

@@ -12,26 +12,35 @@ import type {
   HostTerminalProcess,
 } from "@ardurbot/host-runtime/host-terminal";
 import { TERMINAL_CLEANUP_DEADLINE_MS } from "@ardurbot/host-runtime/terminal-cleanup";
-import type { IPty, IPtyForkOptions } from "node-pty";
+import type { IPty, IPtyForkOptions, IWindowsPtyForkOptions } from "node-pty";
 
 export interface PtyModule {
-  spawn(file: string, args: string[], options: IPtyForkOptions): IPty;
+  spawn(file: string, args: string[], options: IPtyForkOptions | IWindowsPtyForkOptions): IPty;
 }
 
-/** Never load a native addon on the platforms whose terminal support is still pending. */
-export function loadDarwinPty(
+/** Load only explicitly supported native targets; this does not enable admission. */
+export function loadHostPty(
   bundleFile = typeof __filename === "string" && __filename.endsWith(".cjs")
     ? __filename
     : undefined,
 ): PtyModule | undefined {
-  if (process.platform !== "darwin") return undefined;
+  if (!["darwin", "linux", "win32"].includes(process.platform)) return undefined;
   if (process.arch !== "arm64" && process.arch !== "x64") return undefined;
   const require = createRequire(bundleFile ?? import.meta.url);
   return require(
     bundleFile
-      ? path.join(path.dirname(bundleFile), "native", `mac_${process.arch}`, "node-pty")
+      ? path.join(
+          path.dirname(bundleFile),
+          "native",
+          `${process.platform === "darwin" ? "mac" : process.platform === "win32" ? "win" : "linux"}_${process.arch}`,
+          "node-pty",
+        )
       : "node-pty",
   ) as PtyModule;
+}
+
+export function loadDarwinPty(bundleFile?: string): PtyModule | undefined {
+  return process.platform === "darwin" ? loadHostPty(bundleFile) : undefined;
 }
 
 export type ProcessIdentity = {
@@ -40,9 +49,11 @@ export type ProcessIdentity = {
   group: number;
   birth: string;
   zombie: boolean;
+  session?: number;
 };
 export interface TreeOperations {
   snapshot(timeoutMs: number): Promise<ProcessIdentity[]>;
+  requireSessionLeader?: boolean;
   signal(pid: number, signal: "SIGTERM" | "SIGKILL"): void;
 }
 
@@ -114,16 +125,16 @@ async function processSnapshot(operations: TreeOperations, timeoutMs: number) {
   }
 }
 
-class DarwinPoller {
-  private readonly trees = new Set<DarwinTree>();
+class PosixPoller {
+  private readonly trees = new Set<PosixTree>();
   private timer?: ReturnType<typeof setTimeout>;
   private polling = false;
   constructor(private readonly operations: TreeOperations) {}
-  add(tree: DarwinTree) {
+  add(tree: PosixTree) {
     this.trees.add(tree);
     this.poll();
   }
-  remove(tree: DarwinTree) {
+  remove(tree: PosixTree) {
     this.trees.delete(tree);
     if (!this.trees.size) {
       clearTimeout(this.timer);
@@ -157,31 +168,39 @@ class DarwinPoller {
   }
 }
 
-const pollers = new WeakMap<TreeOperations, DarwinPoller>();
+const pollers = new WeakMap<TreeOperations, PosixPoller>();
 function sharedPoller(operations: TreeOperations) {
   let poller = pollers.get(operations);
   if (!poller) {
-    poller = new DarwinPoller(operations);
+    poller = new PosixPoller(operations);
     pollers.set(operations, poller);
   }
   return poller;
 }
 
 /** Tracks descendants while their parent links still exist, including across shell exit. */
-class DarwinTree {
+class PosixTree {
   private readonly owned = new Map<number, string>();
   private rootSeen = false;
   private cleanup?: Promise<void>;
   constructor(
     private readonly root: number,
     private readonly operations: TreeOperations,
-    private readonly poller: DarwinPoller,
+    private readonly poller: PosixPoller = sharedPoller(operations),
   ) {
     if (!Number.isSafeInteger(root) || root <= 1) throw new Error("Invalid terminal PID.");
   }
   async start() {
     // A background snapshot may have started before this shell was spawned.
-    this.observe(await processSnapshot(this.operations, LOOKUP_TIMEOUT_MS));
+    const initial = await processSnapshot(this.operations, LOOKUP_TIMEOUT_MS);
+    const root = initial.find((row) => row.pid === this.root);
+    if (
+      this.operations.requireSessionLeader &&
+      root &&
+      (root.session !== this.root || root.group !== this.root)
+    )
+      throw new Error("Terminal shell is not a session leader.");
+    this.observe(initial);
     // A shell that already exited must not be adopted later through PID reuse.
     this.rootSeen = true;
     this.poller.add(this);
@@ -197,11 +216,15 @@ class DarwinTree {
     const live = new Set(
       rows.filter((row) => this.owned.get(row.pid) === row.birth).map((r) => r.pid),
     );
+    const ownSession =
+      this.operations.requireSessionLeader &&
+      rows.some((row) => live.has(row.pid) && row.session === this.root);
     let added = true;
     while (added) {
       added = false;
       for (const row of rows) {
-        if (row.pid <= 1 || live.has(row.pid) || !live.has(row.parent)) continue;
+        if (row.pid <= 1 || live.has(row.pid)) continue;
+        if (!live.has(row.parent) && !(ownSession && row.session === this.root)) continue;
         if (this.owned.has(row.pid) && this.owned.get(row.pid) !== row.birth) continue;
         if (this.owned.size >= 4096)
           throw new Error("Terminal process tree exceeds tracking limit.");
@@ -210,8 +233,8 @@ class DarwinTree {
         added = true;
       }
     }
-    // A descendant that calls setsid and reparents between observations can escape.
-    // Step 3 must close this gap before terminal capability admission is enabled.
+    // Polling cannot discover a child that detaches and reparents entirely between
+    // observations. Capability admission stays off pending stronger containment.
   }
   killTree() {
     if (this.cleanup) return this.cleanup;
@@ -276,6 +299,73 @@ class DarwinTree {
   }
 }
 
+/** Register listeners before the first asynchronous ancestry lookup. */
+export async function trackedPosixTerminal(child: IPty, operations: TreeOperations) {
+  const tree = new PosixTree(child.pid, operations);
+  let exited = false;
+  const terminal = terminalProcess(
+    child,
+    () => tree.killTree(),
+    undefined,
+    () => {
+      exited = true;
+    },
+  );
+  try {
+    await tree.start();
+  } catch (error) {
+    try {
+      if (!exited) child.kill("SIGKILL");
+    } catch (killError) {
+      if ((killError as NodeJS.ErrnoException).code !== "ESRCH") throw killError;
+    }
+    throw error;
+  }
+  return terminal;
+}
+
+/** Keep lifecycle and stream behavior identical across native backends. */
+export function terminalProcess(
+  child: IPty,
+  cleanup: () => Promise<void>,
+  write: (bytes: Uint8Array) => void = (bytes) => child.write(Buffer.from(bytes)),
+  exit: () => void = () => {},
+): HostTerminalProcess {
+  child.pause();
+  let exited = false;
+  const exits = new Set<() => void>();
+  child.onExit(() => {
+    exited = true;
+    exit();
+    for (const listener of exits) listener();
+  });
+  let closing = false;
+  return {
+    write(bytes) {
+      if (closing || exited) throw new Error("Terminal process is closing.");
+      write(bytes);
+    },
+    resize(columns, lines) {
+      if (closing || exited) throw new Error("Terminal process is closing.");
+      child.resize(columns, lines);
+    },
+    onData(listener) {
+      const subscription = child.onData((data) => listener(Buffer.from(data)));
+      child.resume();
+      return () => subscription.dispose();
+    },
+    onExit(listener) {
+      exits.add(listener);
+      if (exited) listener();
+      return () => exits.delete(listener);
+    },
+    killTree() {
+      closing = true;
+      return cleanup();
+    },
+  };
+}
+
 /** The composition root may inject this factory only after platform admission is enabled. */
 export function darwinHostTerminalFactory(
   pty: PtyModule,
@@ -296,55 +386,7 @@ export function darwinHostTerminalFactory(
         name: "xterm-256color",
         encoding: null,
       });
-      // Keep the initial prompt in the PTY stream until the provider subscribes.
-      child.pause();
-      const tree = new DarwinTree(child.pid, operations, sharedPoller(operations));
-      // Register before the first asynchronous lookup so a quick exit isn't lost.
-      let exited = false;
-      const exits = new Set<() => void>();
-      child.onExit(() => {
-        exited = true;
-        for (const listener of exits) listener();
-      });
-      try {
-        await tree.start();
-      } catch (error) {
-        // The spawned shell is ours, but without ancestry evidence we cannot
-        // claim tree cleanup. Keep the failure visible to admission.
-        if (!exited) {
-          try {
-            child.kill("SIGKILL");
-          } catch (killError) {
-            if ((killError as NodeJS.ErrnoException).code !== "ESRCH") throw killError;
-          }
-        }
-        throw error;
-      }
-      let closing = false;
-      return {
-        write(bytes) {
-          if (closing || exited) throw new Error("Terminal process is closing.");
-          child.write(Buffer.from(bytes));
-        },
-        resize(columns, lines) {
-          if (closing || exited) throw new Error("Terminal process is closing.");
-          child.resize(columns, lines);
-        },
-        onData(listener) {
-          const subscription = child.onData((data) => listener(Buffer.from(data)));
-          child.resume();
-          return () => subscription.dispose();
-        },
-        onExit(listener) {
-          exits.add(listener);
-          if (exited) listener();
-          return () => exits.delete(listener);
-        },
-        killTree() {
-          closing = true;
-          return tree.killTree();
-        },
-      };
+      return trackedPosixTerminal(child, operations);
     },
   });
 }

@@ -133,26 +133,29 @@ it("fails the command closed when the guardrail profile cannot be built", async 
   expect(fake.spawn).not.toHaveBeenCalled();
 });
 
-it("refuses file reads and writes on protected paths with a clear error", async () => {
-  const { root, provider, computer } = await fixture({ platform: "darwin" });
-  // A registered folder is served through a computer rooted at that folder (bridge mapping).
-  const folderComputer = { ...computer, id: "folder", botId: "folder", providerRef: root };
-  await expect(
-    provider.readFile(folderComputer, "control-plane/secrets.env", context),
-  ).rejects.toThrow("This path is protected by the host guardrail.");
-  await expect(provider.listFiles(folderComputer, "control-plane", context)).rejects.toThrow(
-    "This path is protected by the host guardrail.",
-  );
-  await expect(
-    provider.writeFile(folderComputer, {
-      path: "control-plane/secrets.env",
-      content: new Uint8Array([1]),
-    }),
-  ).rejects.toThrow("This path is protected by the host guardrail.");
-  // A path that merely shares the prefix is not caught.
-  await mkdir(path.join(root, "control-plane-notes"));
-  expect(await provider.listFiles(folderComputer, "control-plane-notes", context)).toEqual([]);
-});
+it.each(["darwin", "win32", "linux"] as const)(
+  "refuses file reads and writes on protected paths on %s",
+  async (platform) => {
+    const { root, provider, computer } = await fixture({ platform });
+    // A registered folder is served through a computer rooted at that folder (bridge mapping).
+    const folderComputer = { ...computer, id: "folder", botId: "folder", providerRef: root };
+    await expect(
+      provider.readFile(folderComputer, "control-plane/secrets.env", context),
+    ).rejects.toThrow("This path is protected by the host guardrail.");
+    await expect(provider.listFiles(folderComputer, "control-plane", context)).rejects.toThrow(
+      "This path is protected by the host guardrail.",
+    );
+    await expect(
+      provider.writeFile(folderComputer, {
+        path: "control-plane/secrets.env",
+        content: new Uint8Array([1]),
+      }),
+    ).rejects.toThrow("This path is protected by the host guardrail.");
+    // A path that merely shares the prefix is not caught.
+    await mkdir(path.join(root, "control-plane-notes"));
+    expect(await provider.listFiles(folderComputer, "control-plane-notes", context)).toEqual([]);
+  },
+);
 
 it("still reads and writes the computer's own files", async () => {
   const { provider, computer } = await fixture({ platform: "darwin" });

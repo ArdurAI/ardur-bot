@@ -16,9 +16,11 @@ import * as z from "zod";
 import { HostMcpAuthorizationError, readHostMcpConfiguration } from "./mcp-configuration.js";
 import { loadWin32NativeAddon } from "./native-addon.js";
 
+export { loadHostPty, macOSHostTerminalFactory } from "./host-terminal-pty.js";
 // Export for explicit injection by platform conformance tests and the later
 // platform-admission step. Shipping this adapter does not enable the capability.
-export { macOSHostTerminalFactory } from "./host-terminal-pty.js";
+export { linuxHostTerminalFactory } from "./host-terminal-pty-linux.js";
+export { win32HostTerminalFactory, windowsTerminalJob } from "./host-terminal-pty-win32.js";
 
 // esbuild preserves the CJS bundle's own filename. ESM source mode has no packaged addon.
 installWin32NativeApi(() =>

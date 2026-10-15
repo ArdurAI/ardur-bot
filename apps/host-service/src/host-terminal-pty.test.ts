@@ -4,6 +4,7 @@ import type { IPty } from "node-pty";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProcessIdentity } from "./host-terminal-pty.js";
 import { darwinHostTerminalFactory, loadDarwinPty } from "./host-terminal-pty.js";
+import { linuxHostTerminalFactory } from "./host-terminal-pty-linux.js";
 
 const row = (pid: number, parent = 1, group = pid, birth = `birth-${pid}`): ProcessIdentity => ({
   pid,
@@ -62,27 +63,31 @@ function fakePty(pid = 100) {
     exit: () => exit(),
   };
 }
-async function fixture(pid = 100, operations = fakeOperations(), pty = fakePty(pid)) {
-  const { snapshot, signal } = operations;
-  const factory = darwinHostTerminalFactory(pty, operations);
-  const guard = {
-    paths: ["/fixture/protected"],
-    ports: [12345],
-    sockets: ["/fixture/engine.sock"],
-  };
-  const environment = { PATH: "/usr/bin:/bin", HOME: "/fixture", TERM: "xterm-256color" };
-  const terminal = await factory(guard).spawn("/bin/sh", "/fixture/work", environment, 93, 31);
-  processes.push(terminal);
-  return {
-    ...pty,
-    terminal,
-    snapshot,
-    signal,
-    environment,
-  };
-}
 
-describe("macOS host PTY boundary", () => {
+describe.each(["macOS", "Linux"])("%s host PTY boundary", (platform) => {
+  async function fixture(pid = 100, operations = fakeOperations(), pty = fakePty(pid)) {
+    const { snapshot, signal } = operations;
+    const factory = (platform === "macOS" ? darwinHostTerminalFactory : linuxHostTerminalFactory)(
+      pty,
+      operations,
+    );
+    const guard = {
+      paths: ["/fixture/protected"],
+      ports: [12345],
+      sockets: ["/fixture/engine.sock"],
+    };
+    const environment = { PATH: "/usr/bin:/bin", HOME: "/fixture", TERM: "xterm-256color" };
+    const terminal = await factory(guard).spawn("/bin/sh", "/fixture/work", environment, 93, 31);
+    processes.push(terminal);
+    return {
+      ...pty,
+      terminal,
+      snapshot,
+      signal,
+      environment,
+    };
+  }
+
   it.each([
     { failure: "rejects", alreadyGone: false },
     { failure: "rejects", alreadyGone: true },
@@ -121,16 +126,21 @@ describe("macOS host PTY boundary", () => {
     },
   );
 
-  it("launches the requested login shell under all guards with only the supplied environment", async () => {
+  it("launches the login shell with only the supplied environment and macOS-only process guards", async () => {
     const f = await fixture();
     expect(f.spawn).toHaveBeenCalledOnce();
     const [binary, args, options] = f.spawn.mock.calls[0]! as unknown as [string, string[], object];
-    expect(binary).toBe("/usr/bin/sandbox-exec");
-    expect(args.slice(2)).toEqual(["/bin/sh", "-l"]);
-    expect(args[0]).toBe("-p");
-    expect(args[1]).toContain('(subpath "/fixture/protected")');
-    expect(args[1]).toContain('(remote ip "localhost:12345")');
-    expect(args[1]).toContain('(remote unix-socket (literal "/fixture/engine.sock"))');
+    if (platform === "macOS") {
+      expect(binary).toBe("/usr/bin/sandbox-exec");
+      expect(args.slice(2)).toEqual(["/bin/sh", "-l"]);
+      expect(args[0]).toBe("-p");
+      expect(args[1]).toContain('(subpath "/fixture/protected")');
+      expect(args[1]).toContain('(remote ip "localhost:12345")');
+      expect(args[1]).toContain('(remote unix-socket (literal "/fixture/engine.sock"))');
+    } else {
+      expect(binary).toBe("/bin/sh");
+      expect(args).toEqual(["-l"]);
+    }
     expect(options).toEqual({
       cwd: "/fixture/work",
       env: f.environment,
