@@ -685,7 +685,8 @@ async function enqueueGoalPlanWake(
     });
 }
 
-async function goalReviewCall<T>(action: () => Promise<T>): Promise<T> {  try {
+async function goalReviewCall<T>(action: () => Promise<T>): Promise<T> {
+  try {
     return await action();
   } catch (error) {
     if (error instanceof IsolationError) throw new ORPCError("FORBIDDEN");
