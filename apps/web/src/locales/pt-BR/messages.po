@@ -607,6 +607,7 @@ msgid "Actions usually run automatically. Rules, safety checks, and integration 
 msgstr ""
 
 #: src/components/RunEvidence.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
 msgstr "Ativo"
@@ -1736,6 +1737,7 @@ msgstr "cancelado"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/settings/RuntimeReliability.tsx
 msgid "Cancelled"
 msgstr "Cancelado"
@@ -4097,6 +4099,7 @@ msgstr "Não tem uma conta?"
 #: src/lib/run-status-label.ts
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Done"
 msgstr "Concluído"
@@ -7138,6 +7141,10 @@ msgstr "Pausar mensagens da equipe"
 msgid "Paused"
 msgstr "Pausado"
 
+#: src/pages/GroupPanel.tsx
+msgid "Pending"
+msgstr "Pendente"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
 msgstr "Permissão negada no socket"
@@ -7170,6 +7177,10 @@ msgstr "Fixado"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Placement"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Plan"
+msgstr "Plano"
 
 #: src/pages/account/AccountTables.tsx
 #: src/pages/settings-sections.ts
@@ -10399,6 +10410,10 @@ msgstr "Falha na voz"
 msgid "Voice shortcut"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Waiting for"
+msgstr "Aguardando"
+
 #: src/lib/working-indicator.ts
 msgid "Waiting for a free place"
 msgstr "Aguardando um lugar livre"
@@ -10633,6 +10648,7 @@ msgstr ""
 msgid "Yesterday"
 msgstr "Ontem"
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/Shell.tsx
 msgid "You"

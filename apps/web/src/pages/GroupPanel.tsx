@@ -521,12 +521,14 @@ export function GroupSettings({
 
 export function GroupGoalStrip({
   goal,
+  members,
   onStop,
   onRefresh,
   openReview = false,
   recordedResult = false,
 }: {
   goal: Goal;
+  members?: Group["members"];
   onStop: () => Promise<void>;
   onRefresh: () => Promise<void>;
   openReview?: boolean;
@@ -674,6 +676,28 @@ export function GroupGoalStrip({
   const showResult =
     Boolean(goal.currentRevision) && (goal.status === "completed" || recordedResult);
   const allowDecision = goal.status === "completed" && !recordedResult;
+  // Next step first: in flight, then ready, then blocked, then finished and cancelled.
+  const planRank = (status: string) =>
+    status === "active" ? 0 : status === "pending" ? 1 : status === "blocked" ? 2 : status === "done" ? 3 : 4;
+  const planSteps = goal.plan
+    ? [...goal.plan.steps].sort((a, b) => planRank(a.status) - planRank(b.status))
+    : [];
+  const stepById = new Map(goal.plan?.steps.map((step) => [step.id, step]) ?? []);
+  const planStepStatus = (status: string) =>
+    status === "active"
+      ? t`Active`
+      : status === "blocked"
+        ? t`Blocked`
+        : status === "done"
+          ? t`Done`
+          : status === "cancelled"
+            ? t`Cancelled`
+            : t`Pending`;
+  const planBlockers = (step: (typeof planSteps)[number]) =>
+    step.prerequisiteIds.flatMap((id) => {
+      const pre = stepById.get(id);
+      return pre && pre.status !== "done" ? [pre] : [];
+    });
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-1 text-xs text-muted-foreground md:px-[22px]">
       <details className="min-w-0 flex-1" open={openReview || undefined}>
@@ -803,6 +827,36 @@ export function GroupGoalStrip({
             </Button>
           </p>
         ))}
+        {planSteps.length ? (
+          <div className="py-2">
+            <h4 className="font-semibold mb-1">
+              <Trans>Plan</Trans>
+            </h4>
+            <ul className="mb-2">
+              {planSteps.map((step) => {
+                const blockers = step.status === "blocked" ? planBlockers(step) : [];
+                return (
+                  <li key={step.id} className="flex flex-wrap items-baseline gap-x-2">
+                    <span className={step.status === "done" ? "line-through" : undefined}>
+                      {step.title}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {step.ownerIsUser
+                        ? t`You`
+                        : (memberName(members, step.ownerId) ?? step.ownerId)}
+                    </span>
+                    <span>{planStepStatus(step.status)}</span>
+                    {blockers.length ? (
+                      <span className="text-warning">
+                        <Trans>Waiting for</Trans> {blockers.map((pre) => pre.title).join(", ")}
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 py-2">
           <dt>
             <Trans>Used</Trans>

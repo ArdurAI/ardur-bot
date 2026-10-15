@@ -954,6 +954,7 @@ export function ShellPage({
     inGroup && goal && groupId && goal.groupId === groupId ? (
       <GroupGoalStrip
         goal={goal}
+        members={groups.find((candidate) => candidate.id === goal.groupId)?.members}
         onRefresh={async () => {
           setGoal(await rpc.goals.get({ groupId: goal.groupId }));
         }}

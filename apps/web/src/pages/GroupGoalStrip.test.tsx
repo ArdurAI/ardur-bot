@@ -67,3 +67,77 @@ it("shows review panel for completed goal", () => {
   expect(html).toContain("check");
   expect(html).toContain("Pass");
 });
+
+it("shows the project plan next step first with owner, status and blockers", () => {
+  const html = renderToStaticMarkup(
+    <GroupGoalStrip
+      goal={
+        {
+          status: "running",
+          usedTokens: 120,
+          tokenLimit: 600,
+          untilAt: "2030-01-01T00:00:00.000Z",
+          plan: {
+            revision: 2,
+            steps: [
+              {
+                id: "step-draft",
+                title: "Draft the report",
+                ownerId: "bot-writer",
+                ownerIsUser: false,
+                condition: "Draft saved",
+                status: "done",
+                prerequisiteIds: [],
+                outcome: null,
+                dispatch: null,
+                updatedAt: "2030-01-01T00:00:00.000Z",
+              },
+              {
+                id: "step-review",
+                title: "Review the draft",
+                ownerId: "bot-reviewer",
+                ownerIsUser: false,
+                condition: "Notes posted",
+                status: "pending",
+                prerequisiteIds: ["step-draft"],
+                outcome: null,
+                dispatch: null,
+                updatedAt: "2030-01-01T00:00:00.000Z",
+              },
+              {
+                id: "step-approve",
+                title: "Approve the result",
+                ownerId: "owner-1",
+                ownerIsUser: true,
+                condition: "Signed off",
+                status: "blocked",
+                prerequisiteIds: ["step-review", "step-draft"],
+                outcome: null,
+                dispatch: null,
+                updatedAt: "2030-01-01T00:00:00.000Z",
+              },
+            ],
+          },
+        } as never
+      }
+      members={
+        [
+          { botId: "bot-writer", name: "Writer" },
+          { botId: "bot-reviewer", name: "Reviewer" },
+        ] as never
+      }
+      onStop={vi.fn()}
+      onRefresh={vi.fn()}
+    />,
+  );
+  expect(html).toContain("Plan");
+  expect(html).toContain("Review the draft");
+  expect(html).toContain("Reviewer");
+  expect(html).toContain("Approve the result");
+  expect(html).toContain("You");
+  expect(html).toContain("Blocked");
+  expect(html).toContain("Waiting for");
+  // The ready step sorts before the blocked one; done sorts last.
+  expect(html.indexOf("Review the draft")).toBeLessThan(html.indexOf("Approve the result"));
+  expect(html.indexOf("Approve the result")).toBeLessThan(html.indexOf("Draft the report"));
+});
