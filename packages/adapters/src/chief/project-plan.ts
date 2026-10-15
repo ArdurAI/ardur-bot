@@ -4,7 +4,7 @@ import type {
   ChiefPlanStepOutcomeInput,
   ChiefPlanUpdateInput,
 } from "@ardurbot/contracts";
-import { nextBotMessageHop } from "@ardurbot/core";
+import { nextBotMessageHop, redactSecrets } from "@ardurbot/core";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
@@ -276,13 +276,28 @@ function planToolError(error: unknown): { ok: false; error: string } {
 export async function updateProjectPlanFromRun(
   deps: PlanDispatchDeps,
   run: { id: string; spaceId: string; userId: string; threadId: string; botId: string },
-  input: { goalId: string; threadId: string; raw: ChiefPlanUpdateInput },
+  input: {
+    goalId: string;
+    threadId: string;
+    raw: ChiefPlanUpdateInput;
+    secrets: readonly string[];
+  },
 ): Promise<{ ok: true; revision: number; dispatched: number } | { ok: false; error: string }> {
   try {
+    // Free-text plan fields cross into durable storage, worker prompts and the
+    // owner's UI; redact before any of that, like goal summaries do.
+    const raw: ChiefPlanUpdateInput = {
+      ...input.raw,
+      steps: input.raw.steps.map((step) => ({
+        ...step,
+        title: redactSecrets(step.title, [...input.secrets]),
+        condition: redactSecrets(step.condition, [...input.secrets]),
+      })),
+    };
     const updated = await updateGoalPlan(
       deps.prisma,
       { scope: planToolScope(run, input.threadId), goalId: input.goalId },
-      input.raw,
+      raw,
     );
     const { dispatched } = await dispatchReadyGoalPlanSteps(deps, run, input.goalId);
     return { ok: true, revision: updated.plan?.revision ?? 0, dispatched };

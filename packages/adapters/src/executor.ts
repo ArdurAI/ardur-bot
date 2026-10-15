@@ -5846,7 +5846,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   ),
               },
               run,
-              { goalId: goalRoom.id, threadId: thread.id, raw: parsed.data },
+              { goalId: goalRoom.id, threadId: thread.id, raw: parsed.data, secrets: runSecrets },
             );
             if (!updated.ok) return finish(updated);
             return finish({
