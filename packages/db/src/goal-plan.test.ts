@@ -11,6 +11,7 @@ import {
   settleGoalPlanStep,
   updateGoalPlan,
 } from "./goal-plan.js";
+import { loadGoalPlan } from "./goals.js";
 
 const owner: Actor = {
   spaceId: "space-1",
@@ -748,4 +749,88 @@ describe("conflict error vocabulary", () => {
     expect(conflict.reason).toBe("dependency-cycle");
     expect(conflict.message).toContain("cycle");
   });
+});
+
+it.each(["id", "prerequisiteIds"])(
+  "rejects unsafe %s at the persistence boundary before writing",
+  async (field) => {
+    const fixture = planFixture({});
+    await expect(
+      updateGoalPlan(
+        fixture.prisma,
+        { actor: owner },
+        {
+          goalId: goal.id,
+          baseRevision: 3,
+          steps: [
+            stepInput(
+              "draft",
+              field === "id" ? { id: "unsafe_id" } : { prerequisiteIds: ["unsafe_id"] },
+            ),
+          ],
+        },
+      ),
+    ).rejects.toMatchObject({ name: "ZodError" });
+    expect(fixture.tx.goalPlanStep.create).not.toHaveBeenCalled();
+    expect(fixture.tx.event.create).not.toHaveBeenCalled();
+  },
+);
+
+it.each([
+  { condition: "Production deployment verified" },
+  { ownerId: "bot-chief" },
+  { ownerId: owner.userId, ownerIsUser: true },
+  { prerequisiteIds: ["base"] },
+  { title: "Different work" },
+])("requires reopening a done step before editing its definition: %j", async (change) => {
+  const done = stepRow({
+    clientId: "draft",
+    status: "done",
+    condition: "Draft exists",
+    outcome: { actorId: owner.userId, support: [], recordedAt: "2030-01-01T00:00:00.000Z" },
+  });
+  const fixture = planFixture({ steps: [stepRow({ clientId: "base", status: "done" }), done] });
+  const before = JSON.stringify(fixture.steps);
+  const changed = stepInput("draft", { condition: "Draft exists", ...change });
+  await expect(
+    updateGoalPlan(
+      fixture.prisma,
+      { actor: owner },
+      {
+        goalId: goal.id,
+        baseRevision: 3,
+        steps: [stepInput("base"), changed],
+      },
+    ),
+  ).rejects.toMatchObject({ reason: "step-settled" });
+  expect(JSON.stringify(fixture.steps)).toBe(before);
+  expect(fixture.tx.goalPlanStep.update).not.toHaveBeenCalled();
+  expect(fixture.tx.event.create).not.toHaveBeenCalled();
+  await settleGoalPlanStep(
+    fixture.prisma,
+    { actor: owner },
+    { goalId: goal.id, stepId: "draft", baseRevision: 3, action: "reopen" },
+  );
+  await updateGoalPlan(
+    fixture.prisma,
+    { actor: owner },
+    { goalId: goal.id, baseRevision: 4, steps: [stepInput("base"), changed] },
+  );
+  expect(done.status).toBe("pending");
+  expect(done.outcome).toBeNull();
+});
+
+it.each(["chief", "dispatch"])("uses saved position then row id for %s reads", async (consumer) => {
+  const fixture = planFixture({
+    steps: [
+      stepRow({ clientId: "a", position: 2 }),
+      stepRow({ clientId: "c", position: 0 }),
+      stepRow({ clientId: "b", position: 0 }),
+    ],
+  });
+  const ids =
+    consumer === "chief"
+      ? (await loadGoalPlan(fixture.prisma, goal.id))?.steps.map((step) => step.id)
+      : (await listReadyGoalPlanSteps(fixture.prisma, goal.id)).map((step) => step.clientId);
+  expect(ids).toEqual(["b", "c", "a"]);
 });

@@ -75,6 +75,10 @@ export async function dispatchReadyGoalPlanSteps(
       : undefined;
     const committed = await withTransactionRetry(() =>
       deps.prisma.$transaction(async (tx) => {
+        // Global order: bots (id order), group, coordinator thread, root task,
+        // then goal/plan writes. Admission reuses the thread/root locks below;
+        // task/run foreign keys must never acquire a new bot lock after them.
+        await tx.$queryRaw`SELECT id FROM bots WHERE id IN (${run.botId}, ${step.ownerId}) ORDER BY id FOR UPDATE`;
         try {
           await lockOwnedGroup(tx, run, goal.groupId);
         } catch (error) {
@@ -120,6 +124,7 @@ export async function dispatchReadyGoalPlanSteps(
           current.status !== "pending" ||
           current.dispatchRunId !== null ||
           current.revision !== step.revision ||
+          current.ownerId !== step.ownerId ||
           !current.prerequisiteIds.every((id) => statuses.get(id) === "done")
         )
           return { skipped: true } as const;
@@ -298,6 +303,16 @@ export async function updateProjectPlanFromRun(
   },
 ): Promise<{ ok: true; revision: number; dispatched: number } | { ok: false; error: string }> {
   try {
+    // Identifiers cannot be redacted without changing graph identity. Refuse
+    // before persistence, projection or a goal.assigned event can expose one.
+    const secrets = [...input.secrets];
+    if (
+      input.raw.steps.some((step) =>
+        [step.id, ...step.prerequisiteIds].some((id) => redactSecrets(id, secrets) !== id),
+      )
+    ) {
+      return { ok: false, error: "Plan identifiers must not contain secrets" };
+    }
     // Free-text plan fields cross into durable storage, worker prompts and the
     // owner's UI; redact before any of that, like goal summaries do.
     const raw: ChiefPlanUpdateInput = {

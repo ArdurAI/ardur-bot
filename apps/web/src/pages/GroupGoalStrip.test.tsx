@@ -141,3 +141,50 @@ it("shows the project plan next step first with owner, status and blockers", () 
   expect(html.indexOf("Review the draft")).toBeLessThan(html.indexOf("Approve the result"));
   expect(html.indexOf("Approve the result")).toBeLessThan(html.indexOf("Draft the report"));
 });
+
+it.each(["pending", "active"])("shows a pending step waiting on a %s prerequisite", (status) => {
+  const html = renderToStaticMarkup(
+    <GroupGoalStrip
+      goal={
+        {
+          status: "running",
+          usedTokens: 0,
+          tokenLimit: 600,
+          untilAt: "2030-01-01T00:00:00.000Z",
+          plan: {
+            revision: 2,
+            steps: [
+              {
+                id: "draft",
+                title: "Draft report",
+                ownerId: "writer",
+                status,
+                prerequisiteIds: [],
+              },
+              {
+                id: "done",
+                title: "Earlier work",
+                ownerId: "writer",
+                status: "done",
+                prerequisiteIds: [],
+              },
+              {
+                id: "review",
+                title: "Review report",
+                ownerId: "reviewer",
+                status: "pending",
+                prerequisiteIds: ["draft", "done"],
+              },
+            ],
+          },
+        } as never
+      }
+      onStop={vi.fn()}
+      onRefresh={vi.fn()}
+    />,
+  );
+  expect(html).toContain("Waiting for Draft report");
+  expect(html).not.toContain("Waiting for Draft report, Earlier work");
+  expect(html).toContain("Pending");
+  expect(html).not.toContain("Blocked");
+});

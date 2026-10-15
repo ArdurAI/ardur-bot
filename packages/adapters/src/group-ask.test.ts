@@ -101,7 +101,11 @@ function harness(
     seq: seq++,
   }));
   const tx = {
-    $queryRaw: vi.fn(async () => [{ id: "group" }]),
+    $queryRaw: vi.fn(async (query?: TemplateStringsArray) =>
+      query?.join("").includes("FROM bots")
+        ? members.map((bot) => ({ id: bot.id }))
+        : [{ id: "group" }],
+    ),
     spaceModelPreference: { findFirst: vi.fn(async () => null) },
     userModelCredential: { findFirst: vi.fn(async () => null) },
     delegationRoot: { findUnique: vi.fn(async () => null) },

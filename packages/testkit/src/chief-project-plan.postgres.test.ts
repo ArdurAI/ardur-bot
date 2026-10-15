@@ -5,6 +5,7 @@ import {
   GoalPlanConflict,
   getGoal,
   listReadyGoalPlanSteps,
+  loadGoalPlan,
   markGoalPlanStepDispatched,
   recordGoalPlanStepOutcome,
   settleGoalPlanStep,
@@ -368,6 +369,131 @@ describePostgres("Chief project plan (PostgreSQL)", () => {
     expect(swapped.plan?.steps.map((entry) => entry.id)).toEqual(["two", "one"]);
     const viewed = await getGoal(prisma, actor, room.groupId);
     expect(viewed?.plan?.steps.map((entry) => entry.id)).toEqual(["two", "one"]);
+    expect((await loadGoalPlan(prisma, room.goalId))?.steps.map((entry) => entry.id)).toEqual([
+      "two",
+      "one",
+    ]);
+    expect(
+      (await listReadyGoalPlanSteps(prisma, room.goalId)).map((entry) => entry.clientId),
+    ).toEqual(["two", "one"]);
+    // Tied positions use row id, never creation time or query-plan accident.
+    await prisma.goalPlanStep.updateMany({ where: { goalId: room.goalId }, data: { position: 0 } });
+    const expected = await prisma.goalPlanStep.findMany({
+      where: { goalId: room.goalId },
+      orderBy: { id: "asc" },
+    });
+    expect((await loadGoalPlan(prisma, room.goalId))?.steps.map((entry) => entry.id)).toEqual(
+      expected.map((entry) => entry.clientId),
+    );
+    expect((await listReadyGoalPlanSteps(prisma, room.goalId)).map((entry) => entry.id)).toEqual(
+      expected.map((entry) => entry.id),
+    );
+  });
+
+  it("refuses unsafe ids at the storage boundary without saving a plan or event", async () => {
+    const room = await runningGoal();
+    const eventsBefore = await prisma.event.count({ where: { threadId: room.threadId } });
+    for (const invalid of [step("unsafe_id"), step("safe", { prerequisiteIds: ["unsafe_id"] })]) {
+      await expect(
+        updateGoalPlan(
+          prisma,
+          { actor },
+          {
+            goalId: room.goalId,
+            baseRevision: 1,
+            steps: [invalid],
+          },
+        ),
+      ).rejects.toMatchObject({ name: "ZodError" });
+    }
+    expect(await prisma.goalPlanStep.count({ where: { goalId: room.goalId } })).toBe(0);
+    expect(await prisma.event.count({ where: { threadId: room.threadId } })).toBe(eventsBefore);
+  });
+
+  it("keeps completion proof bound to its definition until explicitly reopened", async () => {
+    const room = await runningGoal();
+    await updateGoalPlan(
+      prisma,
+      { actor },
+      {
+        goalId: room.goalId,
+        baseRevision: 1,
+        steps: [
+          step("base", { ownerId: chiefBotId }),
+          step("draft", { condition: "Draft exists" }),
+          step("review", { prerequisiteIds: ["draft"] }),
+        ],
+      },
+    );
+    await recordGoalPlanStepOutcome(
+      prisma,
+      { actor },
+      {
+        goalId: room.goalId,
+        stepId: "draft",
+        baseRevision: 2,
+        support: [],
+      },
+    );
+    const before = await prisma.goalPlanStep.findMany({
+      where: { goalId: room.goalId },
+      orderBy: { id: "asc" },
+    });
+    for (const change of [
+      { condition: "Production deployment verified" },
+      { ownerId: chiefBotId },
+      { prerequisiteIds: ["base"] },
+      { title: "Publish the report" },
+    ]) {
+      await expect(
+        updateGoalPlan(
+          prisma,
+          { actor },
+          {
+            goalId: room.goalId,
+            baseRevision: 3,
+            steps: [step("draft", { condition: "Draft exists", ...change })],
+          },
+        ),
+      ).rejects.toMatchObject({ reason: "step-settled" });
+    }
+    expect(
+      await prisma.goalPlanStep.findMany({
+        where: { goalId: room.goalId },
+        orderBy: { id: "asc" },
+      }),
+    ).toEqual(before);
+    expect((await loadGoalPlan(prisma, room.goalId))?.revision).toBe(3);
+    await settleGoalPlanStep(
+      prisma,
+      { actor },
+      {
+        goalId: room.goalId,
+        stepId: "draft",
+        baseRevision: 3,
+        action: "reopen",
+      },
+    );
+    const changed = await updateGoalPlan(
+      prisma,
+      { actor },
+      {
+        goalId: room.goalId,
+        baseRevision: 4,
+        steps: [
+          step("draft", { condition: "Production deployment verified" }),
+          step("review", { prerequisiteIds: ["draft"] }),
+        ],
+      },
+    );
+    expect(changed.plan?.steps.find((entry) => entry.id === "draft")).toMatchObject({
+      status: "pending",
+      outcome: null,
+      condition: "Production deployment verified",
+    });
+    expect(
+      (await listReadyGoalPlanSteps(prisma, room.goalId)).map((entry) => entry.clientId),
+    ).toEqual(["draft"]);
   });
 
   it("projects the plan on goal reads and freezes it with the goal", async () => {

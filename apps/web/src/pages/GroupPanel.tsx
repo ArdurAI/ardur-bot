@@ -842,7 +842,8 @@ export function GroupGoalStrip({
             </h4>
             <ul className="mb-2">
               {planSteps.map((step) => {
-                const blockers = step.status === "blocked" ? planBlockers(step) : [];
+                const blockers =
+                  step.status === "pending" || step.status === "blocked" ? planBlockers(step) : [];
                 return (
                   <li key={step.id} className="flex flex-wrap items-baseline gap-x-2">
                     <span className={step.status === "done" ? "line-through" : undefined}>

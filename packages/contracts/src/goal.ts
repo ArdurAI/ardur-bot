@@ -257,13 +257,15 @@ export const GoalPlanSchema = z.object({
 });
 export type GoalPlan = z.infer<typeof GoalPlanSchema>;
 
+export const GoalPlanStepIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/);
+
 export const GoalPlanStepInputSchema = z.object({
-  id: z.string().trim().min(1).max(200),
+  id: GoalPlanStepIdSchema,
   title: z.string().trim().min(1).max(300),
   ownerId: z.string().trim().min(1).max(200),
   ownerIsUser: z.boolean(),
   condition: z.string().trim().min(1).max(500),
-  prerequisiteIds: z.array(z.string().trim().min(1).max(200)).max(20).default([]),
+  prerequisiteIds: z.array(GoalPlanStepIdSchema).max(20).default([]),
 });
 export type GoalPlanStepInput = z.infer<typeof GoalPlanStepInputSchema>;
 
@@ -279,7 +281,7 @@ export type GoalPlanUpdateInput = z.infer<typeof GoalPlanUpdateInputSchema>;
 /** Records the outcome that finished a step. */
 export const GoalPlanStepOutcomeInputSchema = z.object({
   goalId: Id,
-  stepId: z.string().trim().min(1).max(200),
+  stepId: GoalPlanStepIdSchema,
   baseRevision: z.number().int().positive(),
   support: z.array(GoalConditionSupportSchema).max(20).default([]),
 });
@@ -291,7 +293,7 @@ export type GoalPlanStepAction = z.infer<typeof GoalPlanStepActionSchema>;
 /** Explicit, recorded owner/chief control of one step's status. */
 export const GoalPlanStepActionInputSchema = z.object({
   goalId: Id,
-  stepId: z.string().trim().min(1).max(200),
+  stepId: GoalPlanStepIdSchema,
   baseRevision: z.number().int().positive(),
   action: GoalPlanStepActionSchema,
 });

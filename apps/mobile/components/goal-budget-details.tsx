@@ -197,7 +197,10 @@ export function GoalBudgetDetails({ groupId }: { groupId: string }) {
             <View style={{ gap: 2 }}>
               <Text style={{ color: tokens.foreground }}>{t("Plan")}</Text>
               {planSteps.map((step) => {
-                const blockers = step.status === "blocked" ? planBlockerTitles(step) : [];
+                const blockers =
+                  step.status === "pending" || step.status === "blocked"
+                    ? planBlockerTitles(step)
+                    : [];
                 const outstanding =
                   step.status === "pending" ||
                   step.status === "active" ||

@@ -16,6 +16,7 @@ import {
 } from "@ardurbot/core";
 import {
   appendEventInTransaction,
+  assertGroupDelegationBotsLocked,
   createThreadMessageInTransaction,
   DELEGATION_ADMISSION_TRANSACTION,
   DelegationAdmissionError,
@@ -23,6 +24,7 @@ import {
   IsolationError,
   loadGroupAskResults,
   lockDelegationRootForRun,
+  lockGroupDelegationBots,
   lockOwnedGroup,
   peerTrafficPaused,
   recordGroupAskUpdateInTransaction,
@@ -173,6 +175,7 @@ export async function askGroupMembers(
   }
   const committed = await withTransactionRetry(() =>
     deps.prisma.$transaction(async (tx): Promise<Committed> => {
+      const lockedBots = await lockGroupDelegationBots(tx, run, groupId, run.botId);
       try {
         await lockOwnedGroup(tx, run, groupId);
       } catch (error) {
@@ -244,6 +247,7 @@ export async function askGroupMembers(
       for (const target of targets.filter((member) => already.has(member.id)))
         notAsked.push({ member: target.name, reason: "already asked in this turn" });
       const fresh = targets.filter((member) => !already.has(member.id));
+      assertGroupDelegationBotsLocked(lockedBots, [run.botId, ...fresh.map((member) => member.id)]);
       if (!fresh.length)
         return {
           error: members.some((member) => member.id !== run.botId)

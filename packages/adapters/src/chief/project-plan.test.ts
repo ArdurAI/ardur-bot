@@ -1,4 +1,5 @@
-import type { PrismaClient } from "@ardurbot/db";
+import type { Prisma, PrismaClient } from "@ardurbot/db";
+import { finalizeRun, loadGoal } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   dispatchReadyGoalPlanSteps,
@@ -290,6 +291,136 @@ describe("dispatch revalidation under concurrent plan edits", () => {
     expect(task.data.prompt).toContain("Step a");
   });
 
+  it("does not deadlock dispatch against worker finalization", async () => {
+    const barrier = () => {
+      let resolve!: () => void;
+      const promise = new Promise<void>((done) => {
+        resolve = done;
+      });
+      return { promise, resolve };
+    };
+    const dispatchPaused = barrier();
+    const finalizerBlocked = barrier();
+    const resumeDispatch = barrier();
+    const owners = new Map<string, string>();
+    const waiting = new Map<string, string>();
+    const released = new Map<string, ReturnType<typeof barrier>>();
+    const trace: string[] = [];
+    let paused = false;
+    const acquire = async (transaction: string, resource: string) => {
+      while (owners.has(resource) && owners.get(resource) !== transaction) {
+        const owner = owners.get(resource)!;
+        waiting.set(transaction, owner);
+        if (waiting.get(owner) === transaction) throw new Error("deadlock detected");
+        if (transaction === "finalizer") finalizerBlocked.resolve();
+        await released.get(owner)!.promise;
+        waiting.delete(transaction);
+      }
+      owners.set(resource, transaction);
+      trace.push(`${transaction}:${resource}`);
+      // Before the fix this is the thread; after it this is the worker bot.
+      if (
+        transaction === "dispatch" &&
+        !paused &&
+        (resource === "bot:bot-writer" || resource === "thread")
+      ) {
+        paused = true;
+        dispatchPaused.resolve();
+        await resumeDispatch.promise;
+      }
+    };
+    const raw =
+      (transaction: string) =>
+      async (sql: TemplateStringsArray, ...values: unknown[]) => {
+        const query = sql.join("");
+        if (query.includes("FROM bots")) {
+          const ids =
+            query.includes("SELECT") && query.includes("FROM tasks")
+              ? ["bot-chief"]
+              : values.filter(
+                  (value): value is string => typeof value === "string" && value.startsWith("bot-"),
+                );
+          for (const id of [...new Set(ids)].sort()) await acquire(transaction, `bot:${id}`);
+        } else if (query.includes("FROM threads")) await acquire(transaction, "thread");
+        else if (query.includes("FROM tasks")) await acquire(transaction, "root-task");
+        else if (query.includes("chat_groups")) await acquire(transaction, "group");
+        return [{ id: goal.groupId }];
+      };
+    const transaction = <T>(
+      name: string,
+      tx: Prisma.TransactionClient,
+      work: (tx: Prisma.TransactionClient) => Promise<T>,
+    ) => {
+      released.set(name, barrier());
+      return work(tx).finally(() => {
+        for (const [resource, owner] of owners) if (owner === name) owners.delete(resource);
+        waiting.delete(name);
+        released.get(name)!.resolve();
+      });
+    };
+    const ready = stepRow({ clientId: "draft" });
+    const fixture = dispatchFixture({ outside: [ready], inside: [ready] });
+    Object.assign(fixture.tx, { $queryRaw: vi.fn(raw("dispatch")) });
+    const createTask = fixture.tx.task.create.getMockImplementation()!;
+    fixture.tx.task.create.mockImplementation(async (args) => {
+      // PostgreSQL's task.botId foreign key needs a bot key-share lock.
+      await acquire("dispatch", `bot:${String(args.data.botId)}`);
+      return createTask(args);
+    });
+    fixture.prisma.$transaction = ((work: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+      transaction(
+        "dispatch",
+        fixture.tx as unknown as Prisma.TransactionClient,
+        work,
+      )) as PrismaClient["$transaction"];
+    prepareDelegation.mockResolvedValue({ ok: true, record: { id: "delegation-1" }, runData: {} });
+    const dispatch = dispatchReadyGoalPlanSteps(dispatchDeps(fixture.prisma), chiefRun, goal.id);
+    const dispatched = expect(dispatch).resolves.toEqual({ dispatched: 1 });
+    await dispatchPaused.promise;
+    const finalizerTx = {
+      $queryRaw: raw("finalizer"),
+      delegationRoot: { findUnique: async () => ({ coordinatorThreadId: goal.threadId }) },
+      run: {
+        findUnique: async () => ({
+          delegationRootTaskId: goal.rootTaskId,
+          status: "running",
+          threadId: goal.threadId,
+          startedAt: now,
+          originDeviceGrantId: null,
+          remoteRootTaskId: null,
+          delegationId: null,
+          replySeq: null,
+        }),
+        // A fenced-out completion still takes the real finalization locks.
+        updateMany: vi.fn(async () => ({ count: 0 })),
+      },
+    };
+    const finalizerDb = {
+      $transaction: (work: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+        transaction("finalizer", finalizerTx as unknown as Prisma.TransactionClient, work),
+    } as unknown as PrismaClient;
+    const finalizing = finalizeRun(finalizerDb, {
+      spaceId: goal.spaceId,
+      threadId: goal.threadId,
+      botId: "bot-writer",
+      runId: "prior-worker",
+      taskId: "prior-task",
+      attemptId: "prior-attempt",
+      leaseOwner: "fixture-lease",
+      leaseFence: 1,
+      outcome: "completed",
+      blocks: [],
+    });
+    const finalized = expect(finalizing).resolves.toBe(false);
+    await finalizerBlocked.promise;
+    resumeDispatch.resolve();
+    await Promise.all([dispatched, finalized]);
+    expect(finalizerTx.run.updateMany).toHaveBeenCalledOnce();
+    expect(fixture.tx.task.create).toHaveBeenCalledOnce();
+    expect(trace.indexOf("dispatch:bot:bot-chief")).toBeLessThan(trace.indexOf("dispatch:group"));
+    expect(trace.indexOf("dispatch:bot:bot-writer")).toBeLessThan(trace.indexOf("dispatch:thread"));
+  });
+
   it("does not dispatch a step whose prerequisite became unfinished before the transaction", async () => {
     // Readiness saw the prerequisite done; the locked re-read sees it pending.
     const base = stepRow({ clientId: "base", status: "done" });
@@ -370,3 +501,39 @@ describe("plan update secret redaction", () => {
     );
   });
 });
+
+it.each(["id", "prerequisiteIds"])(
+  "refuses a known secret in %s before storage or dispatch",
+  async (field) => {
+    const fixture = planFixture();
+    const deps = dispatchDeps(fixture.prisma);
+    const result = await updateProjectPlanFromRun(deps, chiefRun, {
+      goalId: goal.id,
+      threadId: goal.threadId,
+      secrets: [secret],
+      raw: {
+        baseRevision: 3,
+        steps: [
+          {
+            id: secret,
+            title: "Draft",
+            ownerId: "bot-writer",
+            ownerIsUser: false,
+            condition: "Saved",
+            prerequisiteIds: [],
+            ...(field === "prerequisiteIds" ? { id: "draft", prerequisiteIds: [secret] } : {}),
+          },
+        ],
+      },
+    });
+    expect(result).toEqual({ ok: false, error: "Plan identifiers must not contain secrets" });
+    expect(fixture.steps).toEqual([]);
+    expect(fixture.tx.goalPlanStep.create).not.toHaveBeenCalled();
+    expect(fixture.tx.event.create).not.toHaveBeenCalled();
+    expect(fixture.tx.task.create).not.toHaveBeenCalled();
+    expect(deps.events.notify).not.toHaveBeenCalled();
+    expect(deps.jobs.enqueue).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(JSON.stringify(await loadGoal(fixture.prisma, { id: goal.id }))).not.toContain(secret);
+  },
+);

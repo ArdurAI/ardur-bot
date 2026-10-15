@@ -527,6 +527,13 @@ test("group-goals: start a goal in a room and stop it", async ({ page }) => {
   await expect.poll(() => state.goal?.status, { timeout: 3_000 }).toBe("running");
   await expect(page.getByText("Goal: Working", { exact: false })).toBeVisible();
   await expect(panel).toHaveAttribute("data-panel", "closed");
+  await page
+    .locator("details")
+    .filter({ has: page.locator("summary", { hasText: "Goal:" }) })
+    .locator("summary")
+    .click();
+  await expect(page.getByText("Waiting for Draft the release plan", { exact: true })).toBeVisible();
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible();
   await capture(page, "docs-group-goals-progress");
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect.poll(() => state.goal?.status, { timeout: 3_000 }).toBe("stopped");

@@ -4,6 +4,7 @@ import {
   GoalAcceptInputSchema,
   GoalConditionReviewInputSchema,
   GoalConditionSupportSchema,
+  GoalPlanStepInputSchema,
   GoalRejectInputSchema,
   GoalStartInputSchema,
   GoalSubmitInputSchema,
@@ -129,5 +130,29 @@ describe("condition support revision formats", () => {
         note: "fixture-secret-7k2",
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("plan step identifier boundary", () => {
+  const step = {
+    id: "draft-1",
+    title: "Draft",
+    ownerId: "bot-1",
+    ownerIsUser: false,
+    condition: "Saved",
+  };
+  it.each(["", "Draft", "has_space", "has space", "-draft", "a".repeat(41), " draft ", "draft\n"])(
+    "refuses non-slug identifier %j in both fields",
+    (id) => {
+      expect(GoalPlanStepInputSchema.safeParse({ ...step, id }).success).toBe(false);
+      expect(GoalPlanStepInputSchema.safeParse({ ...step, prerequisiteIds: [id] }).success).toBe(
+        false,
+      );
+    },
+  );
+  it.each(["a", "0", "draft-1", "a".repeat(40)])("accepts strict slug %s", (id) => {
+    expect(GoalPlanStepInputSchema.safeParse({ ...step, id, prerequisiteIds: [id] }).success).toBe(
+      true,
+    );
   });
 });

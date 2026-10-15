@@ -416,11 +416,12 @@ export async function messageBot(
           }))
         )
           return { ok: false as const, error: "Team messages are paused." };
+        // Both sender and recipient foreign keys are used below. Bots precede
+        // the optional goal group and all coordinator/recipient thread locks.
+        await tx.$queryRaw`SELECT id FROM bots WHERE id IN (${run.botId}, ${target.id}) AND "spaceId" = ${run.spaceId} AND "userId" = ${run.userId} ORDER BY id FOR UPDATE`;
         if (goal) {
           await tx.$queryRaw`SELECT id FROM chat_groups WHERE id = ${goal.groupId} AND "spaceId" = ${run.spaceId} AND "userId" = ${run.userId} FOR UPDATE`;
         }
-        // Owner sends, run claiming, and archive take the recipient bot before its thread.
-        await tx.$queryRaw`SELECT id FROM bots WHERE id = ${target.id} AND "spaceId" = ${run.spaceId} AND "userId" = ${run.userId} FOR UPDATE`;
         const rootTaskId = goal?.rootTaskId ?? parentRun?.delegationRootTaskId ?? parentRun?.taskId;
         const root = rootTaskId
           ? await tx.delegationRoot.findUnique({

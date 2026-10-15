@@ -12,6 +12,7 @@ import {
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   appendEventInTransaction,
+  assertGroupDelegationBotsLocked,
   bindChiefAssignment,
   createThreadMessageInTransaction,
   DELEGATION_ADMISSION_TRANSACTION,
@@ -19,6 +20,7 @@ import {
   IsolationError,
   loadChiefMemberFacts,
   lockDelegationRootForRun,
+  lockGroupDelegationBots,
   lockOwnedGroup,
   touchGroupUpdatedAt,
   validateChiefDispatch,
@@ -89,6 +91,7 @@ export async function handoffToGroupBot(
     : undefined;
   const committed = await withTransactionRetry(() =>
     deps.prisma.$transaction(async (tx) => {
+      const lockedBots = await lockGroupDelegationBots(tx, run, groupId, run.botId);
       try {
         await lockOwnedGroup(tx, run, groupId);
       } catch (error) {
@@ -146,6 +149,7 @@ export async function handoffToGroupBot(
       if (!group.members.some((member) => member.bot.id === targetId)) {
         return { error: "handoff target is not a group member" } as const;
       }
+      assertGroupDelegationBotsLocked(lockedBots, [run.botId, targetId]);
       const chiefChoice = await validateChiefDispatch(tx, run, groupId, targetId);
       if ("error" in chiefChoice) return chiefChoice;
       const goal =

@@ -239,7 +239,7 @@ export async function loadGoalPlan(
   if (!goal) return null;
   const rows = await prisma.goalPlanStep.findMany({
     where: { goalId: goal.id },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ position: "asc" }, { id: "asc" }],
   });
   if (!rows.length) return null;
   return {
@@ -277,7 +277,8 @@ export async function reconcileGoalExhaustion(prisma: PrismaClient, goalId: stri
       });
       const reason = goalExhaustionReason(goal, root, new Date());
       if (!reason) return null;
-      // Cancellation locks coordinator thread, then root task, before the terminal state commits.
+      await lockGoalReview(tx, goal.threadId, goal.rootTaskId);
+      // Cancellation reuses the coordinator thread/root task locks.
       await requestCancelInTransaction(
         tx,
         { spaceId: goal.spaceId, userId: goal.userId },
@@ -392,7 +393,9 @@ export async function startGoal(prisma: PrismaClient, actor: Actor, raw: GoalSta
         include: { thread: true, members: { include: { bot: true } } },
       });
       if (!group?.thread || !group.coordinatorBotId) throw new IsolationError();
+      await tx.$queryRaw`SELECT id FROM bots WHERE id = ${group.coordinatorBotId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM chat_groups WHERE id = ${group.id} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${group.thread.id} FOR UPDATE`;
       const coordinator = group.members.find(
         (member) => member.botId === group.coordinatorBotId && !member.bot.archivedAt,
       );
@@ -504,8 +507,7 @@ export async function stopGoal(prisma: PrismaClient, actor: Actor, goalId: strin
   }
   if (goal.status === "running") {
     await prisma.$transaction(async (tx) => {
-      // Keep the coordinator thread ahead of goal/event writes as in wake and exhaustion.
-      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${goal.threadId} FOR UPDATE`;
+      await lockGoalReview(tx, goal.threadId, goal.rootTaskId);
       const changed = await tx.teamGoal.updateMany({
         where: { id: goal.id, status: "running" },
         data: { status: "stopped", stoppedAt: new Date() },
@@ -542,9 +544,7 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
           spaceId: candidateGoal.spaceId,
           userId: candidateGoal.userId,
         });
-      // Canonical order: coordinator thread, then root task. Finalization uses the same order.
-      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${candidateGoal.threadId} FOR UPDATE`;
-      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${initial.rootTaskId} FOR UPDATE`;
+      await lockGoalReview(tx, candidateGoal.threadId, initial.rootTaskId);
       const row = await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } });
       const goal = await tx.teamGoal.findUnique({ where: { rootTaskId: row.rootTaskId } });
       if (
@@ -698,6 +698,10 @@ export async function lockGoalReview(
   threadId: string,
   rootTaskId: string,
 ) {
+  // Goal/plan writes take the coordinator bot before the thread/root task,
+  // then goal/revision/step rows. Event and wake foreign keys reference this
+  // bot too. Callers that also lock a group or worker must lock bots first.
+  await tx.$queryRaw`SELECT id FROM bots WHERE id = (SELECT "botId" FROM tasks WHERE id = ${rootTaskId}) FOR UPDATE`;
   await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
   await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${rootTaskId} FOR UPDATE`;
 }

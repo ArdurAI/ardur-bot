@@ -585,7 +585,7 @@ describe("goal owner review", () => {
   });
 
   it.each(["accept", "reject"] as const)(
-    "locks thread then root before %s reads the current state",
+    "locks coordinator bot then thread then root before %s reads the current state",
     async (operation) => {
       const fixture = reviewFixture();
       const revision = await fixture.submit();
@@ -607,15 +607,20 @@ describe("goal owner review", () => {
       await (operation === "accept" ? acceptGoal : rejectGoal)(fixture.prisma, owner, input);
       expect(fixture.tx.$queryRaw).toHaveBeenNthCalledWith(
         1,
+        ['SELECT id FROM bots WHERE id = (SELECT "botId" FROM tasks WHERE id = ', ") FOR UPDATE"],
+        fixture.goal.rootTaskId,
+      );
+      expect(fixture.tx.$queryRaw).toHaveBeenNthCalledWith(
+        2,
         ["SELECT id FROM threads WHERE id = ", " FOR UPDATE"],
         fixture.goal.threadId,
       );
       expect(fixture.tx.$queryRaw).toHaveBeenNthCalledWith(
-        2,
+        3,
         ["SELECT id FROM tasks WHERE id = ", " FOR UPDATE"],
         fixture.goal.rootTaskId,
       );
-      expect(fixture.tx.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
+      expect(fixture.tx.$queryRaw.mock.invocationCallOrder[2]).toBeLessThan(
         fixture.tx.teamGoal.findUniqueOrThrow.mock.invocationCallOrder[0]!,
       );
     },

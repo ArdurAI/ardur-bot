@@ -219,6 +219,23 @@ async function commitPlanUpdate(
     new Map(existing.map((row) => [row.clientId, row.prerequisiteIds])),
   );
 
+  // Validate the entire update before writing any row. Completion supports the
+  // saved definition, including its title; explicit reopen clears that proof.
+  for (const step of input.steps) {
+    const prior = byClientId.get(step.id);
+    if (
+      prior?.status === "done" &&
+      (prior.title !== step.title ||
+        prior.condition !== step.condition ||
+        prior.ownerId !== step.ownerId ||
+        prior.ownerIsUser !== step.ownerIsUser ||
+        prior.prerequisiteIds.length !== step.prerequisiteIds.length ||
+        prior.prerequisiteIds.some((id, index) => id !== step.prerequisiteIds[index]))
+    ) {
+      throw new GoalPlanConflict("step-settled");
+    }
+  }
+
   for (const [index, step] of input.steps.entries()) {
     const prior = byClientId.get(step.id);
     const data = {
@@ -281,7 +298,10 @@ export async function listReadyGoalPlanSteps(
 ): Promise<PlanStepRow[]> {
   const goal = await tx.teamGoal.findFirst({ where: { id: goalId } });
   if (goal?.status !== "running") return [];
-  const rows = await tx.goalPlanStep.findMany({ where: { goalId: goal.id } });
+  const rows = await tx.goalPlanStep.findMany({
+    where: { goalId: goal.id },
+    orderBy: [{ position: "asc" }, { id: "asc" }],
+  });
   const statuses = new Map(rows.map((row) => [row.clientId, row.status]));
   return rows.filter(
     (row) =>
@@ -391,6 +411,9 @@ async function queueGoalPlanWake(prisma: PrismaClient, goalId: string, revision:
   });
   if (!group) return;
   await prisma.$transaction(async (tx) => {
+    // Match plan edits and goal rework/completion wakes: bot, thread, root,
+    // then the new task/run and event rows.
+    await lockGoalReview(tx, goal.threadId, goal.rootTaskId);
     const task = await tx.task.create({
       data: {
         spaceId: goal.spaceId,

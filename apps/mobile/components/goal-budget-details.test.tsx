@@ -201,3 +201,38 @@ it("marks only the settling delivery busy for accessibility", async () => {
   });
   expect(settlingRow.getAttribute("aria-busy")).toBe("false");
 });
+
+it.each(["pending", "active"])(
+  "shows a pending phone step waiting on a %s prerequisite",
+  async (status) => {
+    rpc.mockResolvedValue({
+      ...pausedGoal,
+      status: "running",
+      plan: {
+        revision: 2,
+        steps: [
+          { id: "draft", title: "Draft report", ownerId: "writer", status, prerequisiteIds: [] },
+          {
+            id: "done",
+            title: "Earlier work",
+            ownerId: "writer",
+            status: "done",
+            prerequisiteIds: [],
+          },
+          {
+            id: "review",
+            title: "Review report",
+            ownerId: "reviewer",
+            status: "pending",
+            prerequisiteIds: ["draft", "done"],
+          },
+        ],
+      },
+    });
+    const node = await renderExpanded();
+    expect(node.textContent).toContain("Waiting for Draft report");
+    expect(node.textContent).not.toContain("Waiting for Draft report, Earlier work");
+    expect(node.textContent).toContain("Pending");
+    expect(node.textContent).not.toContain("Blocked");
+  },
+);

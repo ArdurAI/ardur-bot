@@ -36,9 +36,11 @@ function harness(
     userModelCredential: { findFirst: vi.fn(async () => null) },
     chiefPlan: { findFirst: vi.fn(async () => null) },
     delegation: { update: vi.fn(async () => ({})) },
-    $queryRaw: vi.fn(async (_query?: TemplateStringsArray, ..._values: unknown[]) => [
-      { id: "group-1" },
-    ]),
+    $queryRaw: vi.fn(async (query?: TemplateStringsArray, ..._values: unknown[]) =>
+      query?.join("").includes("FROM bots")
+        ? ["bot-a", "bot-b", "bot-c"].map((id) => ({ id }))
+        : [{ id: "group-1" }],
+    ),
     chatGroup: {
       findFirst: vi.fn(async (_args?: unknown) => ({
         id: "group-1",
@@ -534,4 +536,20 @@ it("passes a task card through the group admission boundary", async () => {
     expect.objectContaining({ card, kind: "group-handoff" }),
     undefined,
   );
+});
+
+it("retries a newly eligible recipient before taking its bot lock after the group", async () => {
+  const { tx, deps } = harness([]);
+  tx.$queryRaw.mockImplementationOnce(async () => [{ id: "bot-a" }]);
+  const result = await handoffToGroupBot(deps as never, run, "group-1", {
+    bot_id: "bot-b",
+    message: "Review",
+  });
+  expect(result).toMatchObject({ ok: true, botId: "bot-b" });
+  expect(tx.task.create).toHaveBeenCalledOnce();
+  const locks = tx.$queryRaw.mock.calls.map(([sql]) => sql?.join(""));
+  expect(locks[0]).toContain("FROM bots");
+  expect(locks[1]).toContain("FROM chat_groups");
+  expect(locks[2]).toContain("FROM bots");
+  expect(locks[3]).toContain("FROM chat_groups");
 });

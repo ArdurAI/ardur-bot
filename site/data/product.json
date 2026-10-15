@@ -1759,7 +1759,7 @@
               "Working"
             ],
             "screenshotId": "docs-group-goals-progress",
-            "expected": "The room shows the working goal.",
+            "expected": "The expanded goal shows a pending step and the unfinished prerequisite it is waiting for.",
             "availableSince": "0.1.0-alpha.2"
           },
           {
@@ -1780,7 +1780,7 @@
           "Stopping a goal ends new coordinator work; it does not undo completed actions.",
           "A linked board item is commented when the result is submitted and closed only when the owner accepts it.",
           "Each reviewed condition can name the records that support it: an artifact revision, a tool-result record, or a run record. A bot may propose support; only the owner's review records pass or fail.",
-          "The chief proposes the ordered plan; the owner can edit it, cancel or reopen steps, and mark their own steps done. Ready steps are handed out to their bot owners under the goal's budget, and a step is finished only by a recorded outcome."
+          "The chief proposes the ordered plan; the owner can edit it, cancel or reopen steps, and mark their own steps done. Ready steps are handed out to their bot owners under the goal's budget, and a step is finished only by a recorded outcome. Reopen a finished step before changing its definition. Pending steps show which unfinished prerequisites they are waiting for on web, desktop and phone."
         ],
         "troubleshooting": [
           {
@@ -1985,7 +1985,7 @@
       {
         "id": "docs-group-goals-progress",
         "file": "docs/docs-group-goals-progress.png",
-        "alt": "Start goal: The room shows the working goal.",
+        "alt": "Start goal: The expanded goal shows a pending step and the unfinished prerequisite it is waiting for.",
         "width": 1280,
         "height": 800,
         "crop": {

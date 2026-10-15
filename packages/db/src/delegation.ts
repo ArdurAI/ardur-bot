@@ -234,8 +234,11 @@ export async function ensureDelegationRootBudget(
   });
 }
 
-/** Canonical order: bot/group, coordinator thread, recipient thread, then root task.
- * Message submission takes bot before thread; finalization and thread clearing follow it.
+/**
+ * Caller order: all participating bots by id, group if needed, coordinator
+ * thread, recipient threads, root task, then goal/plan/delegation rows.
+ * Admission does not lock a new bot after this point: callers creating worker
+ * tasks/runs must already hold their bot locks, including foreign-key locks.
  */
 export async function lockDelegationRoot(tx: Prisma.TransactionClient, rootTaskId: string) {
   const root = await tx.delegationRoot.findUniqueOrThrow({
