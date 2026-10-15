@@ -78,6 +78,8 @@ function planFixture(options: {
   steps?: StepRow[];
   goalOverrides?: Record<string, unknown>;
   members?: { botId: string }[];
+  /** A live group so owner actions queue the coordinator wake. */
+  wakeGroup?: boolean;
 }) {
   const steps = options.steps ?? [];
   const currentGoal = {
@@ -145,10 +147,24 @@ function planFixture(options: {
     chatGroupMember: {
       findMany: vi.fn(async () => options.members ?? [memberBot, { botId: "bot-chief" }]),
     },
-    chatGroup: { findFirst: vi.fn(async () => null) },
+    chatGroup: {
+      findFirst: vi.fn(async () => (options.wakeGroup ? { id: goal.groupId } : null)),
+    },
+    run: {
+      findFirst: vi.fn(async () => state.supportRun),
+      create: vi.fn(async (args: { data: Record<string, unknown> }) => ({
+        id: "wake-run",
+        ...args.data,
+      })),
+    },
+    task: {
+      create: vi.fn(async (args: { data: Record<string, unknown> }) => ({
+        id: "wake-task",
+        ...args.data,
+      })),
+    },
     delegationRoot: { findFirst: vi.fn(async () => null) },
     usageRecord: { findFirst: vi.fn(async () => null) },
-    run: { findFirst: vi.fn(async () => state.supportRun) },
     goalBoardDelivery: { findMany: vi.fn(async () => []) },
     goalSettlement: { findUnique: vi.fn(async () => null) },
     goalSettlementDiscrepancy: { aggregate: vi.fn(async () => ({ _sum: {}, _count: 0 })) },
@@ -563,6 +579,74 @@ describe("step cancellation and reopening", () => {
       { goalId: goal.id, stepId: "next", baseRevision: 3, action: "reopen" },
     );
     expect(row.status).toBe("blocked");
+  });
+});
+
+describe("owner step actions wake the coordinator", () => {
+  it("queues the coordinator wake after the owner records a step outcome", async () => {
+    const row = stepRow({ clientId: "mine", ownerId: owner.userId, ownerIsUser: true });
+    const fixture = planFixture({ steps: [row], wakeGroup: true });
+    await recordGoalPlanStepOutcome(
+      fixture.prisma,
+      { actor: owner },
+      { goalId: goal.id, stepId: "mine", baseRevision: 3, support: [] },
+    );
+    const wake = vi.mocked(fixture.tx.run.create).mock.calls[0]?.[0] as {
+      data: { clientNonce: string; trigger: string };
+    };
+    expect(wake.data.clientNonce).toBe(`goal-plan:${goal.id}:4`);
+    expect(wake.data.trigger).toBe("follow_up");
+  });
+
+  it("queues the coordinator wake after the owner cancels or reopens a step", async () => {
+    const row = stepRow({ clientId: "active-step", status: "active", dispatchRunId: "run-1" });
+    const fixture = planFixture({ steps: [row], wakeGroup: true });
+    fixture.state.supportRun = { id: "run-1", status: "failed" };
+    await settleGoalPlanStep(
+      fixture.prisma,
+      { actor: owner },
+      { goalId: goal.id, stepId: "active-step", baseRevision: 3, action: "cancel" },
+    );
+    expect(
+      (vi.mocked(fixture.tx.run.create).mock.calls[0]?.[0] as { data: { clientNonce: string } })
+        .data.clientNonce,
+    ).toBe(`goal-plan:${goal.id}:4`);
+    vi.mocked(fixture.tx.run.create).mockClear();
+    await settleGoalPlanStep(
+      fixture.prisma,
+      { actor: owner },
+      { goalId: goal.id, stepId: "active-step", baseRevision: 4, action: "reopen" },
+    );
+    expect(
+      (vi.mocked(fixture.tx.run.create).mock.calls[0]?.[0] as { data: { clientNonce: string } })
+        .data.clientNonce,
+    ).toBe(`goal-plan:${goal.id}:5`);
+  });
+
+  it("does not queue a wake for the chief's own step actions", async () => {
+    const row = stepRow({ clientId: "active-step", status: "active", dispatchRunId: "run-1" });
+    const fixture = planFixture({ steps: [row], wakeGroup: true });
+    fixture.state.supportRun = {
+      id: "run-1",
+      spaceId: owner.spaceId,
+      userId: owner.userId,
+      goalId: goal.id,
+      delegationRootTaskId: goal.rootTaskId,
+    };
+    await recordGoalPlanStepOutcome(
+      fixture.prisma,
+      {
+        scope: {
+          spaceId: owner.spaceId,
+          userId: owner.userId,
+          coordinatorBotId: "bot-chief",
+          threadId: goal.threadId,
+        },
+        goalId: goal.id,
+      },
+      { stepId: "active-step", baseRevision: 3, support: [{ kind: "run", recordId: "run-1", revision: null }] },
+    );
+    expect(fixture.tx.run.create).not.toHaveBeenCalled();
   });
 });
 

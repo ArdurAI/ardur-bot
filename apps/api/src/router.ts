@@ -664,8 +664,28 @@ function hermesLocalInstallOffer(
   return undefined;
 }
 
-async function goalReviewCall<T>(action: () => Promise<T>): Promise<T> {
-  try {
+/** Enqueues the coordinator wake a plan change queued (same wake for every plan RPC). */
+async function enqueueGoalPlanWake(
+  deps: Pick<RouterDeps, "prisma" | "jobs">,
+  spaceId: string,
+  goal: { id: string; plan?: { revision: number; steps: unknown[] } | null },
+) {
+  const wake = await deps.prisma.run.findUnique({
+    where: {
+      spaceId_clientNonce: {
+        spaceId,
+        clientNonce: `goal-plan:${goal.id}:${goal.plan?.revision ?? 0}`,
+      },
+    },
+    select: { id: true, status: true },
+  });
+  if (wake?.status === "queued")
+    await deps.jobs.enqueue(runContinueJob(wake.id)).catch((error) => {
+      getLogger().error("goal plan wake enqueue", error);
+    });
+}
+
+async function goalReviewCall<T>(action: () => Promise<T>): Promise<T> {  try {
     return await action();
   } catch (error) {
     if (error instanceof IsolationError) throw new ORPCError("FORBIDDEN");
@@ -6635,34 +6655,26 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         const goal = await goalReviewCall(() =>
           updateGoalPlan(deps.prisma, { actor: context.actor }, input),
         );
-        const wake = await deps.prisma.run.findUnique({
-          where: {
-            spaceId_clientNonce: {
-              spaceId: context.actor.spaceId,
-              clientNonce: `goal-plan:${goal.id}:${goal.plan?.revision ?? 0}`,
-            },
-          },
-          select: { id: true, status: true },
-        });
-        if (wake?.status === "queued")
-          await deps.jobs.enqueue(runContinueJob(wake.id)).catch((error) => {
-            getLogger().error("goal plan wake enqueue", error);
-          });
+        await enqueueGoalPlanWake(deps, context.actor.spaceId, goal);
         return goal;
       }),
-      planStep: authed.goals.planStep.handler(({ context, input }) => {
+      planStep: authed.goals.planStep.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
-        return goalReviewCall(() =>
+        const goal = await goalReviewCall(() =>
           settleGoalPlanStep(deps.prisma, { actor: context.actor }, input),
         );
+        await enqueueGoalPlanWake(deps, context.actor.spaceId, goal);
+        return goal;
       }),
-      planOutcome: authed.goals.planOutcome.handler(({ context, input }) => {
+      planOutcome: authed.goals.planOutcome.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
-        return goalReviewCall(() =>
+        const goal = await goalReviewCall(() =>
           recordGoalPlanStepOutcome(deps.prisma, { actor: context.actor }, input),
         );
+        await enqueueGoalPlanWake(deps, context.actor.spaceId, goal);
+        return goal;
       }),
       start: authed.goals.start.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)

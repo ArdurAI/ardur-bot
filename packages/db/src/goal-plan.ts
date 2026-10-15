@@ -433,6 +433,7 @@ export async function recordGoalPlanStepOutcome(
     "actor" in authority
       ? await loadPlanGoalForOwner(prisma, authority.actor, goalId)
       : await loadPlanGoalForCoordinator(prisma, goalId, authority.scope);
+  let revision = 0;
   await withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
       await lockGoalReview(tx, goal.threadId, goal.rootTaskId);
@@ -442,7 +443,7 @@ export async function recordGoalPlanStepOutcome(
         throw new GoalPlanConflict("step-settled");
       if (!byOwner && input.support.length === 0) throw new GoalPlanConflict("missing-support");
       await validateGoalConditionSupport(tx, current, input.support);
-      const revision = current.planRevision + 1;
+      revision = current.planRevision + 1;
       await tx.goalPlanStep.update({
         where: { id: step.id },
         data: {
@@ -464,6 +465,8 @@ export async function recordGoalPlanStepOutcome(
       });
     }),
   );
+  // An owner edit has no running coordinator turn to hand steps out; wake one.
+  if (byOwner && revision) await queueGoalPlanWake(prisma, goal.id, revision);
   return reloadGoal(prisma, goal.id);
 }
 
@@ -486,6 +489,7 @@ export async function settleGoalPlanStep(
     "actor" in authority
       ? await loadPlanGoalForOwner(prisma, authority.actor, goalId)
       : await loadPlanGoalForCoordinator(prisma, goalId, authority.scope);
+  let revision = 0;
   await withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
       await lockGoalReview(tx, goal.threadId, goal.rootTaskId);
@@ -516,7 +520,7 @@ export async function settleGoalPlanStep(
         select: { clientId: true, status: true },
       });
       const statuses = new Map(rows.map((row) => [row.clientId, row.status]));
-      const revision = current.planRevision + 1;
+      revision = current.planRevision + 1;
       const reopened =
         input.action === "reopen"
           ? deriveStatus("pending", statuses, step.prerequisiteIds)
@@ -546,5 +550,7 @@ export async function settleGoalPlanStep(
       });
     }),
   );
+  // An owner edit has no running coordinator turn to hand steps out; wake one.
+  if (byOwner && revision) await queueGoalPlanWake(prisma, goal.id, revision);
   return reloadGoal(prisma, goal.id);
 }
