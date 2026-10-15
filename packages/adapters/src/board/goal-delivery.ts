@@ -59,6 +59,15 @@ export function boardFailureNeedsOwner(failure: string) {
   return failure === "Board item missing" || failure === "Board access lost";
 }
 
+/**
+ * The Completed-before-Accepted ordering rule treats a completed row the owner
+ * settled themselves ("handled") exactly like a delivered one; only an
+ * undelivered, unhandled completed row still blocks the acceptance.
+ */
+export function goalBoardPriorSettled(state: string) {
+  return state === "delivered" || state === "handled";
+}
+
 type DeliveryDeps = {
   prisma: PrismaClient;
   dataDir?: string;
@@ -114,7 +123,7 @@ export async function deliverGoalBoardRow(
         },
       },
     });
-    if (prior && prior.state !== "delivered") return;
+    if (prior && !goalBoardPriorSettled(prior.state)) return;
   }
   if (usesHostBridge() && !deps.ownerRun) return;
   const deadline = Date.now() + WORK_MS;
@@ -293,7 +302,7 @@ async function deliveryGate(prisma: PrismaClient, row: GoalBoardDeliveryRow) {
         },
       },
     });
-    if (prior && prior.state !== "delivered") return { kind: "wait" as const };
+    if (prior && !goalBoardPriorSettled(prior.state)) return { kind: "wait" as const };
   }
   return { kind: "ready" as const, goal };
 }

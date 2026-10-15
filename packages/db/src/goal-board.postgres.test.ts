@@ -326,6 +326,40 @@ describePostgres("Goal board delivery outbox (PostgreSQL)", () => {
     await expect(settle("retry")).rejects.toMatchObject({ reason: "not-awaiting" });
   });
 
+  it("accepts a revision whose completed delivery the owner handled", async () => {
+    const room = await group();
+    const goal = await linkedGoal(room);
+    const { revision, row } = await pausedDelivery(goal.id);
+    await settleGoalBoardDelivery(prisma, actor, {
+      goalId: goal.id,
+      deliveryId: row.id,
+      action: "handle",
+    });
+    const completed = await prisma.goalBoardDelivery.findUniqueOrThrow({ where: { id: row.id } });
+    expect(completed.state).toBe("handled");
+    await prisma.goalRevision.update({
+      where: { id: revision.id },
+      data: {
+        conditions: [
+          {
+            id: "cond-final",
+            description: "goal.final-owner-review",
+            status: "pass",
+            actorId: userId,
+            reason: null,
+            evidenceId: null,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      },
+    });
+    await acceptGoal(prisma, actor, { goalId: goal.id, revisionId: revision.id });
+    const accepted = await prisma.goalBoardDelivery.findFirstOrThrow({
+      where: { goalId: goal.id, transition: "accepted" },
+    });
+    expect(accepted).toMatchObject({ revisionId: revision.id, state: "pending" });
+  });
+
   it("refuses delivery settle from a non-owner and leaves the row untouched", async () => {
     const room = await group();
     const goal = await linkedGoal(room);

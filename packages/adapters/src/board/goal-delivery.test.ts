@@ -355,6 +355,25 @@ it("waits without writing when the completed delivery for the same revision is s
   expect(f.delivery.attempts).toBe(0);
 });
 
+it("delivers the acceptance once the owner handled the completed delivery", async () => {
+  const f = harness("accepted");
+  // The owner settled the completed board update themselves, so both lookups
+  // (pre-claim and delivery gate) see the handled completed row.
+  vi.mocked(f.prisma.goalBoardDelivery.findUnique).mockImplementation((async ({
+    where,
+  }: {
+    where: Record<string, unknown>;
+  }) => {
+    if (where.id) return where.id === "delivery" ? f.delivery : null;
+    const key = where.goalId_revisionId_transition as { transition?: string } | undefined;
+    if (key?.transition === "completed") return { id: "completed-row", state: "handled" };
+    return f.delivery;
+  }) as never);
+  await deliverGoalBoardRow({ prisma: f.prisma, dataDir: "/fixture/app" }, f.delivery);
+  expect(f.provider.deliverKeyed).toHaveBeenCalledWith(expect.objectContaining({ close: true }));
+  expect(f.delivery).toMatchObject({ state: "delivered", closeReceipt: "closed" });
+});
+
 it("pauses a receipt discrepancy for owner review instead of leaving it pending", async () => {
   const recorded = JSON.parse(
     readFileSync(new URL("./fixtures/responses.json", import.meta.url), "utf8"),
