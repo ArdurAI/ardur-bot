@@ -1710,7 +1710,7 @@
         "id": "group-goals",
         "aliases": [],
         "title": "Start goal",
-        "summary": "Start bounded work in a group room, watch its status, and stop it.",
+        "summary": "Start bounded work in a group room, follow the chief's ordered project plan, watch its status, and stop it.",
         "area": "team-work",
         "order": 20,
         "status": "published",
@@ -1779,7 +1779,8 @@
           "Only an authorized owner with a group coordinator can start this flow.",
           "Stopping a goal ends new coordinator work; it does not undo completed actions.",
           "A linked board item is commented when the result is submitted and closed only when the owner accepts it.",
-          "Each reviewed condition can name the records that support it: an artifact revision, a tool-result record, or a run record. A bot may propose support; only the owner's review records pass or fail."
+          "Each reviewed condition can name the records that support it: an artifact revision, a tool-result record, or a run record. A bot may propose support; only the owner's review records pass or fail.",
+          "The chief proposes the ordered plan; the owner can edit it, cancel or reopen steps, and mark their own steps done. Ready steps are handed out to their bot owners under the goal's budget, and a step is finished only by a recorded outcome."
         ],
         "troubleshooting": [
           {
