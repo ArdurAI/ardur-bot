@@ -12,6 +12,7 @@ const decisions = vi.hoisted(() => ({
   reject: vi.fn(),
   reviewCondition: vi.fn(),
   revision: vi.fn(),
+  boardDelivery: vi.fn(),
 }));
 const supportCalls = vi.hoisted(() => ({
   runSummary: vi.fn(),
@@ -91,6 +92,7 @@ beforeEach(() => {
   decisions.accept.mockResolvedValue({});
   decisions.reject.mockResolvedValue({});
   decisions.reviewCondition.mockResolvedValue({});
+  decisions.boardDelivery.mockResolvedValue({});
   node = document.createElement("div");
   document.body.append(node);
   root = createRoot(node);
@@ -434,4 +436,56 @@ it("shows the named accepted result and keeps owner decision controls disabled",
   expect(node.textContent).not.toContain("Accept result");
   expect(node.textContent).not.toContain("Reject result");
   expect(node.querySelectorAll("button")).toHaveLength(0);
+});
+
+const pausedBoardGoal = {
+  ...goal,
+  boardWorkspaceId: "workspace",
+  boardItemId: "board-a",
+  boardDelivery: "paused",
+  boardDeliveryActions: [{ id: "delivery-1", transition: "completed", state: "paused" }],
+} as Goal;
+
+it("lets the owner retry or handle a paused board delivery", async () => {
+  const onRefresh = vi.fn(async () => undefined);
+  await act(async () =>
+    root.render(<GroupGoalStrip goal={pausedBoardGoal} onStop={vi.fn()} onRefresh={onRefresh} />),
+  );
+  expect(node.textContent).toContain("Retry board update");
+  expect(node.textContent).toContain("Mark board update handled");
+  await act(async () => button("Retry board update").click());
+  expect(decisions.boardDelivery).toHaveBeenCalledWith({
+    goalId: goal.id,
+    deliveryId: "delivery-1",
+    action: "retry",
+  });
+  expect(onRefresh).toHaveBeenCalledTimes(1);
+  await act(async () => button("Mark board update handled").click());
+  expect(decisions.boardDelivery).toHaveBeenLastCalledWith({
+    goalId: goal.id,
+    deliveryId: "delivery-1",
+    action: "handle",
+  });
+  expect(onRefresh).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  ["revision-changed", 1],
+  ["not-awaiting", 1],
+  [null, 0],
+] as const)("resolves a board delivery conflict (%s) by refreshing", async (reason, refresh) => {
+  decisions.boardDelivery.mockRejectedValue(
+    reason ? new ORPCError("CONFLICT", { data: { reason } }) : new Error("private diagnostic"),
+  );
+  const onRefresh = vi.fn(async () => undefined);
+  await act(async () =>
+    root.render(<GroupGoalStrip goal={pausedBoardGoal} onStop={vi.fn()} onRefresh={onRefresh} />),
+  );
+  await act(async () => button("Retry board update").click());
+  expect(onRefresh).toHaveBeenCalledTimes(refresh);
+  if (reason) expect(node.querySelector('[role="alert"]')).toBeNull();
+  else
+    expect(node.querySelector('[role="alert"]')?.textContent).toBe(
+      "Could not update the board. Try again.",
+    );
 });

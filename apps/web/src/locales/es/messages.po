@@ -1503,6 +1503,7 @@ msgstr "Estado del tablero"
 
 #: src/pages/board/Board.tsx
 #: src/pages/GoalBoardLink.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Board update pending"
 msgstr "Actualización del tablero pendiente"
 
@@ -3480,6 +3481,10 @@ msgstr "No se pudo actualizar la reacción"
 #: src/pages/GroupPanel.tsx
 msgid "Could not update team messages"
 msgstr "No se pudieron actualizar los mensajes del equipo"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update the board. Try again."
+msgstr "No se pudo actualizar el tablero. Inténtalo de nuevo."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check its settings and try again."
@@ -5790,6 +5795,10 @@ msgstr "Marcar como leído"
 msgid "Mark as Unread"
 msgstr "Marcar como no leído"
 
+#: src/pages/GroupPanel.tsx
+msgid "Mark board update handled"
+msgstr "Marcar actualización del tablero como gestionada"
+
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"
 msgstr ""
@@ -8036,6 +8045,10 @@ msgstr "Reintentar"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Retry {0}"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Retry board update"
+msgstr "Reintentar actualización del tablero"
 
 #: src/App.tsx
 #: src/pages/PeerMessagesOverlay.tsx

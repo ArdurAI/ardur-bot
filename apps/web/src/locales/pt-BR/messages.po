@@ -1503,6 +1503,7 @@ msgstr "Status do quadro"
 
 #: src/pages/board/Board.tsx
 #: src/pages/GoalBoardLink.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Board update pending"
 msgstr "Atualização do quadro pendente"
 
@@ -3480,6 +3481,10 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "Could not update team messages"
 msgstr "Não foi possível atualizar as mensagens da equipe"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update the board. Try again."
+msgstr "Não foi possível atualizar o quadro. Tente novamente."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check its settings and try again."
@@ -5790,6 +5795,10 @@ msgstr "Marcar como Lido"
 msgid "Mark as Unread"
 msgstr "Marcar como Não Lida"
 
+#: src/pages/GroupPanel.tsx
+msgid "Mark board update handled"
+msgstr "Marcar atualização do quadro como resolvida"
+
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"
 msgstr ""
@@ -8036,6 +8045,10 @@ msgstr "Tentar novamente"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Retry {0}"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Retry board update"
+msgstr "Tentar atualização do quadro novamente"
 
 #: src/App.tsx
 #: src/pages/PeerMessagesOverlay.tsx

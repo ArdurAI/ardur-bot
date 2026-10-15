@@ -1503,6 +1503,7 @@ msgstr "Состояние доски"
 
 #: src/pages/board/Board.tsx
 #: src/pages/GoalBoardLink.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Board update pending"
 msgstr "Обновление доски ожидается"
 
@@ -3480,6 +3481,10 @@ msgstr "Не удалось обновить реакцию"
 #: src/pages/GroupPanel.tsx
 msgid "Could not update team messages"
 msgstr "Не удалось обновить сообщения команды"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update the board. Try again."
+msgstr "Не удалось обновить доску. Попробуйте снова."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check its settings and try again."
@@ -5790,6 +5795,10 @@ msgstr "Отметить как прочитанное"
 msgid "Mark as Unread"
 msgstr "Отметить как непрочитанное"
 
+#: src/pages/GroupPanel.tsx
+msgid "Mark board update handled"
+msgstr "Отметить обновление доски обработанным"
+
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"
 msgstr ""
@@ -8036,6 +8045,10 @@ msgstr "Повторить"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Retry {0}"
 msgstr "Повторить: {0}"
+
+#: src/pages/GroupPanel.tsx
+msgid "Retry board update"
+msgstr "Повторить обновление доски"
 
 #: src/App.tsx
 #: src/pages/PeerMessagesOverlay.tsx

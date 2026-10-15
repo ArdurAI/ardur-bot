@@ -331,6 +331,30 @@ it("does not comment through a provider that cannot deduplicate", async () => {
   expect(f.delivery.state).toBe("pending");
 });
 
+it("waits without writing when the completed delivery for the same revision is still undelivered", async () => {
+  const f = harness("accepted");
+  // The pre-claim check sees no prior row; by the time the gate reads it, the
+  // completed delivery exists but has not delivered yet.
+  let priorLookups = 0;
+  vi.mocked(f.prisma.goalBoardDelivery.findUnique).mockImplementation((async ({
+    where,
+  }: {
+    where: Record<string, unknown>;
+  }) => {
+    if (where.id) return where.id === "delivery" ? f.delivery : null;
+    const key = where.goalId_revisionId_transition as { transition?: string } | undefined;
+    if (key?.transition === "completed") {
+      priorLookups += 1;
+      return priorLookups === 1 ? null : { id: "completed-row", state: "pending" };
+    }
+    return f.delivery;
+  }) as never);
+  await deliverGoalBoardRow({ prisma: f.prisma, dataDir: "/fixture/app" }, f.delivery);
+  expect(f.provider.deliverKeyed).not.toHaveBeenCalled();
+  expect(f.delivery).toMatchObject({ state: "pending", claimToken: null, claimExpiresAt: null });
+  expect(f.delivery.attempts).toBe(0);
+});
+
 it("pauses a receipt discrepancy for owner review instead of leaving it pending", async () => {
   const recorded = JSON.parse(
     readFileSync(new URL("./fixtures/responses.json", import.meta.url), "utf8"),

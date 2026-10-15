@@ -2,7 +2,9 @@ import type {
   Actor,
   Goal,
   GoalAcceptInput,
+  GoalBoardDeliveryActionInput,
   GoalBoardDeliveryState,
+  GoalBoardTransition,
   GoalConditionReviewInput,
   GoalConditionSupport,
   GoalLinkInput,
@@ -20,6 +22,7 @@ import {
   GOAL_FREEZE_CANCELLED,
   GOAL_MAX_DEPTH,
   GOAL_MAX_HOPS,
+  GoalBoardDeliveryActionInputSchema,
   GoalConditionReviewInputSchema,
   GoalConditionSchema,
   GoalLinkInputSchema,
@@ -56,6 +59,7 @@ type GoalRow = Prisma.TeamGoalGetPayload<{ include: { revisions: true } }> &
   ReturnType<typeof goalBudget> & {
     settlement: GoalSettlementRow | null;
     boardDelivery: GoalBoardDeliveryState | null;
+    boardDeliveryActions: Goal["boardDeliveryActions"];
   };
 
 function boardDeliveryState(rows: { state: string }[]): GoalBoardDeliveryState | null {
@@ -63,7 +67,18 @@ function boardDeliveryState(rows: { state: string }[]): GoalBoardDeliveryState |
   if (rows.some((row) => row.state === "paused")) return "paused";
   if (rows.some((row) => row.state === "pending")) return "pending";
   if (rows.some((row) => row.state === "delivered")) return "delivered";
+  // Handled rows are owner-closed without a delivery; they surface no state.
   return null;
+}
+
+function boardDeliveryActions(rows: { id: string; state: string; transition: string }[]) {
+  return rows
+    .filter((row) => row.state === "paused" || row.state === "needs-owner")
+    .map((row) => ({
+      id: row.id,
+      transition: row.transition as GoalBoardTransition,
+      state: row.state as "paused" | "needs-owner",
+    }));
 }
 
 function asRevision(row: Prisma.GoalRevisionGetPayload<object>) {
@@ -112,6 +127,7 @@ function asGoal(row: GoalRow): Goal {
     boardWorkspaceId: row.boardWorkspaceId,
     boardItemId: row.boardItemId,
     boardDelivery: row.boardDelivery,
+    boardDeliveryActions: row.boardDeliveryActions,
   };
 }
 
@@ -150,7 +166,7 @@ async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) 
         });
         const deliveries = await tx.goalBoardDelivery.findMany({
           where: { goalId: row.id, spaceId: row.spaceId, userId: row.userId },
-          select: { state: true },
+          select: { id: true, state: true, transition: true },
         });
         const settlement = await tx.goalSettlement.findUnique({ where: { goalId: row.id } });
         const late = settlement
@@ -172,6 +188,7 @@ async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) 
                 }
               : null,
           boardDelivery: boardDeliveryState(deliveries),
+          boardDeliveryActions: boardDeliveryActions(deliveries),
         });
       },
       { isolationLevel: "RepeatableRead" },
@@ -1116,6 +1133,16 @@ export class GoalReviewConflict extends Error {
   }
 }
 
+export class GoalBoardDeliveryConflict extends Error {
+  constructor(public readonly reason: "revision-changed" | "not-awaiting") {
+    super(
+      reason === "revision-changed"
+        ? "Revision is not current"
+        : "Board delivery is not awaiting the owner",
+    );
+  }
+}
+
 function conditionsPass(value: unknown) {
   const parsed = GoalConditionSchema.array().safeParse(value);
   return (
@@ -1559,6 +1586,61 @@ export async function linkGoal(prisma: PrismaClient, actor: Actor, raw: GoalLink
   );
   const loaded = await loadGoal(prisma, {
     id: saved,
+    spaceId: actor.spaceId,
+    userId: actor.userId,
+  });
+  if (!loaded) throw new IsolationError();
+  return loaded;
+}
+
+/**
+ * Owner recovery for a paused board delivery. "retry" re-queues the row so the
+ * worker delivers it again (a repeated mismatch pauses it again; each retry is an
+ * owner decision, so it cannot loop on its own). "handle" closes the row without
+ * delivering. Both are once-only: a settled row refuses every later call.
+ */
+export async function settleGoalBoardDelivery(
+  prisma: PrismaClient,
+  actor: Actor,
+  raw: GoalBoardDeliveryActionInput,
+) {
+  if (!actor.isDeploymentOwner) throw new IsolationError();
+  const input = GoalBoardDeliveryActionInputSchema.parse(raw);
+  const goalId = await withTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const goal = await tx.teamGoal.findFirst({
+        where: { id: input.goalId, spaceId: actor.spaceId, userId: actor.userId },
+      });
+      if (!goal) throw new IsolationError();
+      await lockGoalReview(tx, goal.threadId, goal.rootTaskId);
+      const row = await tx.goalBoardDelivery.findFirst({
+        where: { id: input.deliveryId, goalId: goal.id },
+      });
+      if (!row || (row.state !== "paused" && row.state !== "needs-owner"))
+        throw new GoalBoardDeliveryConflict("not-awaiting");
+      if (input.action === "retry") {
+        const revision = await tx.goalRevision.findFirst({
+          where: { goalId: goal.id },
+          orderBy: { attempts: "desc" },
+        });
+        if (!revision || revision.id !== row.revisionId)
+          throw new GoalBoardDeliveryConflict("revision-changed");
+      }
+      const claimed = await tx.goalBoardDelivery.updateMany({
+        where: { id: row.id, state: { in: ["paused", "needs-owner"] }, claimToken: null },
+        data: {
+          state: input.action === "retry" ? "pending" : "handled",
+          failure: null,
+          retryAt: null,
+          claimExpiresAt: null,
+        },
+      });
+      if (!claimed.count) throw new GoalBoardDeliveryConflict("not-awaiting");
+      return goal.id;
+    }),
+  );
+  const loaded = await loadGoal(prisma, {
+    id: goalId,
     spaceId: actor.spaceId,
     userId: actor.userId,
   });

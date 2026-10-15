@@ -87,6 +87,20 @@ export type GoalBoardDeliveryState = z.infer<typeof GoalBoardDeliveryStateSchema
 export const GoalBoardTransitionSchema = z.enum(["completed", "accepted"]);
 export type GoalBoardTransition = z.infer<typeof GoalBoardTransitionSchema>;
 
+/**
+ * The owner reviewed a paused board delivery: "retry" re-queues it, "handle"
+ * closes it without delivering. Both are once-only for a delivery row.
+ */
+export const GoalBoardDeliveryActionSchema = z.enum(["retry", "handle"]);
+export type GoalBoardDeliveryAction = z.infer<typeof GoalBoardDeliveryActionSchema>;
+
+export const GoalBoardDeliveryActionInputSchema = z.object({
+  goalId: Id,
+  deliveryId: Id,
+  action: GoalBoardDeliveryActionSchema,
+});
+export type GoalBoardDeliveryActionInput = z.infer<typeof GoalBoardDeliveryActionInputSchema>;
+
 export function goalResultPath(groupId: string, goalId: string, revisionId: string) {
   return `/app/g/${encodeURIComponent(groupId)}?goal=${encodeURIComponent(goalId)}&revision=${encodeURIComponent(revisionId)}`;
 }
@@ -265,6 +279,16 @@ export const GoalSchema = z.object({
   boardWorkspaceId: Id.nullable().optional(),
   boardItemId: BoardItemIdSchema.nullable().optional(),
   boardDelivery: GoalBoardDeliveryStateSchema.nullable().optional(),
+  /** Delivery rows paused or needing the owner, with the action each one allows. */
+  boardDeliveryActions: z
+    .array(
+      z.object({
+        id: Id,
+        transition: GoalBoardTransitionSchema,
+        state: z.enum(["paused", "needs-owner"]),
+      }),
+    )
+    .optional(),
 });
 export type Goal = z.infer<typeof GoalSchema>;
 
@@ -324,6 +348,9 @@ export const GoalRevisionViewSchema = z.object({
 });
 export type GoalRevisionView = z.infer<typeof GoalRevisionViewSchema>;
 
+/** Named so the app contract can reference it without exceeding inference limits. */
+export type GoalsContract = typeof goalsContract;
+
 export const goalsContract = {
   start: oc.input(GoalStartInputSchema).output(GoalSchema),
   get: oc.input(z.object({ groupId: Id })).output(GoalSchema.nullable()),
@@ -337,6 +364,7 @@ export const goalsContract = {
   reject: oc.input(GoalRejectInputSchema).output(GoalVerdictSchema),
   reviewCondition: oc.input(GoalConditionReviewInputSchema).output(GoalRevisionSchema),
   link: oc.input(GoalLinkInputSchema).output(GoalSchema),
+  boardDelivery: oc.input(GoalBoardDeliveryActionInputSchema).output(GoalSchema),
   boardResult: oc
     .input(z.object({ workspaceId: Id, itemId: BoardItemIdSchema }))
     .output(GoalBoardResultSchema.nullable()),

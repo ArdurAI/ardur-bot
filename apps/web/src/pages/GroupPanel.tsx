@@ -2,6 +2,7 @@ import type {
   Bot,
   BotCommunicationPolicy,
   Goal,
+  GoalBoardDeliveryAction,
   GoalCondition,
   Group,
   GroupMember,
@@ -534,6 +535,7 @@ export function GroupGoalStrip({
   const { t } = useLingui();
   const [stopping, setStopping] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [boardSettling, setBoardSettling] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   // Checked support-record keys per condition, overriding the attested-by-default
   // set only while the owner is deciding; keyed by revision so rework starts clean.
@@ -628,6 +630,25 @@ export function GroupGoalStrip({
     } finally {
       reviewPending.current = false;
       setReviewing(false);
+    }
+  }
+  async function settleBoardDelivery(deliveryId: string, action: GoalBoardDeliveryAction) {
+    if (reviewPending.current || boardSettling) return;
+    reviewPending.current = true;
+    setBoardSettling(deliveryId);
+    setError(null);
+    try {
+      await rpc.goals.boardDelivery({ goalId: goal.id, deliveryId, action });
+      await onRefresh();
+    } catch (cause) {
+      const reason = cause instanceof ORPCError ? cause.data?.reason : undefined;
+      // A conflict means the delivery moved under this view; a refresh shows the truth.
+      if (reason === "revision-changed" || reason === "not-awaiting")
+        await onRefresh().catch(() => undefined);
+      else setError(t`Could not update the board. Try again.`);
+    } finally {
+      reviewPending.current = false;
+      setBoardSettling(null);
     }
   }
   const status =
@@ -757,6 +778,27 @@ export function GroupGoalStrip({
             <GoalBoardLink goal={goal} />
           </Suspense>
         ) : null}
+        {goal.boardDeliveryActions?.map((delivery) => (
+          <p key={delivery.id} className="flex flex-wrap items-center gap-2 pb-2">
+            <Trans>Board update pending</Trans>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={boardSettling !== null}
+              onClick={() => void settleBoardDelivery(delivery.id, "retry")}
+            >
+              <Trans>Retry board update</Trans>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={boardSettling !== null}
+              onClick={() => void settleBoardDelivery(delivery.id, "handle")}
+            >
+              <Trans>Mark board update handled</Trans>
+            </Button>
+          </p>
+        ))}
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 py-2">
           <dt>
             <Trans>Used</Trans>

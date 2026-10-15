@@ -1503,6 +1503,7 @@ msgstr "보드 상태"
 
 #: src/pages/board/Board.tsx
 #: src/pages/GoalBoardLink.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Board update pending"
 msgstr "보드 업데이트 대기 중"
 
@@ -3480,6 +3481,10 @@ msgstr "반응을 업데이트할 수 없습니다"
 #: src/pages/GroupPanel.tsx
 msgid "Could not update team messages"
 msgstr "팀 메시지를 업데이트할 수 없음"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update the board. Try again."
+msgstr "보드를 업데이트하지 못했습니다. 다시 시도하세요."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check its settings and try again."
@@ -5790,6 +5795,10 @@ msgstr "읽음으로 표시"
 msgid "Mark as Unread"
 msgstr "읽지 않음으로 표시"
 
+#: src/pages/GroupPanel.tsx
+msgid "Mark board update handled"
+msgstr "보드 업데이트 처리 완료로 표시"
+
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"
 msgstr ""
@@ -8036,6 +8045,10 @@ msgstr "다시 시도"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Retry {0}"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Retry board update"
+msgstr "보드 업데이트 다시 시도"
 
 #: src/App.tsx
 #: src/pages/PeerMessagesOverlay.tsx

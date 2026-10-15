@@ -187,6 +187,7 @@ import {
   findSpaceMemoryConfig,
   findUserModelCredentials,
   formatMessagingLinkCode,
+  GoalBoardDeliveryConflict,
   GoalConditionSupportError,
   GoalReviewConflict,
   getBotCommunicationPolicy,
@@ -219,6 +220,7 @@ import {
   selectSpaceModelPreference,
   selectSpaceVoicePreference,
   setBotCommunicationPaused,
+  settleGoalBoardDelivery,
   startGoal,
   stopGoal,
   submitGoal,
@@ -665,6 +667,8 @@ async function goalReviewCall<T>(action: () => Promise<T>): Promise<T> {
     if (error instanceof IsolationError) throw new ORPCError("FORBIDDEN");
     if (error instanceof GoalConditionSupportError)
       throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
+    if (error instanceof GoalBoardDeliveryConflict)
+      throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
     if (error instanceof GoalReviewConflict)
       throw new ORPCError("CONFLICT", { data: { reason: error.reason } });
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
@@ -693,7 +697,10 @@ async function goalLinkOrRefuse(
   } catch (error) {
     if (error instanceof IsolationError) throw new ORPCError("FORBIDDEN");
     if (error instanceof BoardError)
-      throw new ORPCError("BAD_REQUEST", { message: "Could not link that board item." });
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Could not link that board item.",
+        data: { reason: "board-link" },
+      });
     throw error;
   }
 }
@@ -6677,6 +6684,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           boardWorkspaceId: link?.workspaceId ?? null,
           boardItemId: link?.itemId ?? null,
         });
+      }),
+      boardDelivery: authed.goals.boardDelivery.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const goal = await goalReviewCall(() =>
+          settleGoalBoardDelivery(deps.prisma, context.actor, input),
+        );
+        scheduleGoalBoard(deps);
+        return goal;
       }),
       boardResult: authed.goals.boardResult.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)

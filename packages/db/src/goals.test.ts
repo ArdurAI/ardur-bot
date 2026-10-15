@@ -10,10 +10,12 @@ import {
   getGoal,
   goalExhaustionReason,
   isGoalRunEffectFrozen,
+  linkGoal,
   proposeGoalConditionSupport,
   reconcileGoalExhaustion,
   rejectGoal,
   reviewGoalCondition,
+  settleGoalBoardDelivery,
   startGoal,
   submitGoal,
   submitGoalFromCoordinator,
@@ -1613,5 +1615,328 @@ describe("goal freeze at resume and replay", () => {
 
     goalStatus = "running";
     await expect(isGoalRunEffectFrozen(prisma, input)).resolves.toBe(false);
+  });
+});
+
+function boardLinkFixture() {
+  const goal = {
+    id: "goal-1",
+    spaceId: owner.spaceId,
+    userId: owner.userId,
+    groupId: "group-1",
+    threadId: "thread-1",
+    coordinatorBotId: "bot-1",
+    rootTaskId: "root-1",
+    objective: "Review",
+    doneWhen: [],
+    status: "completed",
+    tokenLimit: 100,
+    perWorkerTokens: 10,
+    maxConcurrent: 1,
+    maxDescendants: 1,
+    untilAt: new Date("2030-01-02T00:00:00.000Z"),
+    createdAt: now,
+    stoppedAt: null,
+    boardWorkspaceId: null as string | null,
+    boardItemId: null as string | null,
+  };
+  const updates: Array<{ boardWorkspaceId: string | null; boardItemId: string | null }> = [];
+  const deliveries: Array<{ id: string; state: string; transition: string }> = [];
+  const tx = {
+    teamGoal: {
+      findFirst: vi.fn(async () => ({ ...goal, revisions: [] })),
+      update: vi.fn(
+        async ({
+          data,
+        }: {
+          data: { boardWorkspaceId: string | null; boardItemId: string | null };
+        }) => {
+          updates.push(data);
+          goal.boardWorkspaceId = data.boardWorkspaceId;
+          goal.boardItemId = data.boardItemId;
+          return { ...goal };
+        },
+      ),
+    },
+    boardWorkspace: {
+      findFirst: vi.fn(async ({ where }: { where: { id?: string } }) =>
+        where.id === "workspace" ? { id: "workspace" } : null,
+      ),
+    },
+    goalBoardDelivery: {
+      count: vi.fn(async () => deliveries.length),
+      findMany: vi.fn(async () => deliveries),
+    },
+    delegationRoot: { findFirst: vi.fn(async () => null) },
+    usageRecord: { findFirst: vi.fn(async () => null) },
+    run: { findFirst: vi.fn(async () => null) },
+    goalSettlement: { findUnique: vi.fn(async () => null) },
+  };
+  const prisma = {
+    $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+  } as unknown as PrismaClient;
+  return { prisma, tx, goal, updates, deliveries };
+}
+
+describe("goal board link", () => {
+  it("stores an owner link and clears it, projecting both on the goal", async () => {
+    const fixture = boardLinkFixture();
+    const linked = await linkGoal(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      boardWorkspaceId: "workspace",
+      boardItemId: "board-a",
+    });
+    expect(linked.boardWorkspaceId).toBe("workspace");
+    expect(linked.boardItemId).toBe("board-a");
+    expect(fixture.updates).toEqual([{ boardWorkspaceId: "workspace", boardItemId: "board-a" }]);
+    const cleared = await linkGoal(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      boardWorkspaceId: null,
+      boardItemId: null,
+    });
+    expect(cleared.boardWorkspaceId).toBeNull();
+    expect(cleared.boardItemId).toBeNull();
+    expect(fixture.updates).toHaveLength(2);
+  });
+
+  it("refuses a non-owner, a foreign workspace, a frozen goal and a goal with deliveries", async () => {
+    const fixture = boardLinkFixture();
+    await expect(
+      linkGoal(
+        fixture.prisma,
+        { ...owner, isDeploymentOwner: false },
+        {
+          goalId: fixture.goal.id,
+          boardWorkspaceId: "workspace",
+          boardItemId: "board-a",
+        },
+      ),
+    ).rejects.toThrow();
+    await expect(
+      linkGoal(fixture.prisma, owner, {
+        goalId: fixture.goal.id,
+        boardWorkspaceId: "foreign",
+        boardItemId: "board-a",
+      }),
+    ).rejects.toThrow();
+    fixture.goal.status = "accepted";
+    await expect(
+      linkGoal(fixture.prisma, owner, {
+        goalId: fixture.goal.id,
+        boardWorkspaceId: "workspace",
+        boardItemId: "board-a",
+      }),
+    ).rejects.toThrow();
+    fixture.goal.status = "completed";
+    fixture.deliveries.push({ id: "delivery-1", state: "pending", transition: "completed" });
+    await expect(
+      linkGoal(fixture.prisma, owner, {
+        goalId: fixture.goal.id,
+        boardWorkspaceId: "workspace",
+        boardItemId: "board-a",
+      }),
+    ).rejects.toThrow();
+    expect(fixture.updates).toEqual([]);
+  });
+
+  it("refuses a half link at the contract boundary", async () => {
+    const fixture = boardLinkFixture();
+    await expect(
+      linkGoal(fixture.prisma, owner, {
+        goalId: fixture.goal.id,
+        boardWorkspaceId: "workspace",
+        boardItemId: null,
+      }),
+    ).rejects.toThrow();
+    expect(fixture.updates).toEqual([]);
+  });
+});
+
+function deliverySettleFixture(
+  options: {
+    state?: string;
+    revisionId?: string;
+    claimToken?: string | null;
+    revision?: { id: string } | null;
+  } = {},
+) {
+  const delivery = {
+    id: "delivery-1",
+    goalId: "goal-1",
+    revisionId: options.revisionId ?? "revision-1",
+    transition: "completed",
+    state: options.state ?? "paused",
+    claimToken: options.claimToken ?? null,
+  };
+  const goal = {
+    id: "goal-1",
+    spaceId: owner.spaceId,
+    userId: owner.userId,
+    groupId: "group-1",
+    threadId: "thread-1",
+    coordinatorBotId: "bot-1",
+    rootTaskId: "root-1",
+    objective: "Review",
+    doneWhen: [],
+    status: "completed",
+    tokenLimit: 100,
+    perWorkerTokens: 10,
+    maxConcurrent: 1,
+    maxDescendants: 1,
+    untilAt: new Date("2030-01-02T00:00:00.000Z"),
+    createdAt: now,
+    stoppedAt: null,
+    boardWorkspaceId: "workspace",
+    boardItemId: "board-a",
+  };
+  const tx = {
+    $queryRaw: vi.fn(async () => []),
+    teamGoal: {
+      findFirst: vi.fn(
+        async ({ where }: { where?: { userId?: string; spaceId?: string } } = {}) => {
+          if (where?.userId && where.userId !== goal.userId) return null;
+          if (where?.spaceId && where.spaceId !== goal.spaceId) return null;
+          return { ...goal, revisions: [] };
+        },
+      ),
+    },
+    goalBoardDelivery: {
+      findFirst: vi.fn(async () => delivery),
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: {
+            id?: string;
+            claimToken?: string | null;
+            state?: { in: string[] };
+          };
+          data: Record<string, unknown>;
+        }) => {
+          if (where.id !== delivery.id) return { count: 0 };
+          if (where.claimToken === null && delivery.claimToken !== null) return { count: 0 };
+          if (where.state && !where.state.in.includes(delivery.state)) return { count: 0 };
+          Object.assign(delivery, data);
+          return { count: 1 };
+        },
+      ),
+      findMany: vi.fn(async () => [{ ...delivery }]),
+    },
+    goalRevision: {
+      findFirst: vi.fn(async () =>
+        options.revision === undefined ? { id: "revision-1" } : options.revision,
+      ),
+    },
+    delegationRoot: { findFirst: vi.fn(async () => null) },
+    usageRecord: { findFirst: vi.fn(async () => null) },
+    run: { findFirst: vi.fn(async () => null) },
+    goalSettlement: { findUnique: vi.fn(async () => null) },
+  };
+  const prisma = {
+    $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+  } as unknown as PrismaClient;
+  return { prisma, tx, goal, delivery };
+}
+
+describe("goal board delivery settle", () => {
+  it("re-queues a paused delivery for the owner retry", async () => {
+    const fixture = deliverySettleFixture();
+    const settled = await settleGoalBoardDelivery(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      deliveryId: fixture.delivery.id,
+      action: "retry",
+    });
+    expect(fixture.delivery.state).toBe("pending");
+    expect(settled.boardDelivery).toBe("pending");
+    expect(settled.boardDeliveryActions).toEqual([]);
+  });
+
+  it("closes a needs-owner delivery as handled without delivering", async () => {
+    const fixture = deliverySettleFixture({ state: "needs-owner" });
+    const settled = await settleGoalBoardDelivery(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      deliveryId: fixture.delivery.id,
+      action: "handle",
+    });
+    expect(fixture.delivery.state).toBe("handled");
+    expect(settled.boardDelivery).toBeNull();
+    expect(settled.boardDeliveryActions).toEqual([]);
+  });
+
+  it("refuses a retry for a superseded revision but allows handling it", async () => {
+    const fixture = deliverySettleFixture({ revisionId: "revision-old" });
+    await expect(
+      settleGoalBoardDelivery(fixture.prisma, owner, {
+        goalId: fixture.goal.id,
+        deliveryId: fixture.delivery.id,
+        action: "retry",
+      }),
+    ).rejects.toMatchObject({ reason: "revision-changed" });
+    await expect(
+      settleGoalBoardDelivery(fixture.prisma, owner, {
+        goalId: fixture.goal.id,
+        deliveryId: fixture.delivery.id,
+        action: "handle",
+      }),
+    ).resolves.toMatchObject({ id: fixture.goal.id });
+    expect(fixture.delivery.state).toBe("handled");
+  });
+
+  it("applies once only: settled, delivered and claimed rows refuse", async () => {
+    const fixture = deliverySettleFixture();
+    await settleGoalBoardDelivery(fixture.prisma, owner, {
+      goalId: fixture.goal.id,
+      deliveryId: fixture.delivery.id,
+      action: "handle",
+    });
+    await expect(
+      settleGoalBoardDelivery(fixture.prisma, owner, {
+        goalId: fixture.goal.id,
+        deliveryId: fixture.delivery.id,
+        action: "handle",
+      }),
+    ).rejects.toMatchObject({ reason: "not-awaiting" });
+    await expect(
+      settleGoalBoardDelivery(fixture.prisma, owner, {
+        goalId: fixture.goal.id,
+        deliveryId: fixture.delivery.id,
+        action: "retry",
+      }),
+    ).rejects.toMatchObject({ reason: "not-awaiting" });
+
+    const delivered = deliverySettleFixture({ state: "delivered" });
+    await expect(
+      settleGoalBoardDelivery(delivered.prisma, owner, {
+        goalId: delivered.goal.id,
+        deliveryId: delivered.delivery.id,
+        action: "retry",
+      }),
+    ).rejects.toMatchObject({ reason: "not-awaiting" });
+
+    const claimed = deliverySettleFixture({ claimToken: "token" });
+    await expect(
+      settleGoalBoardDelivery(claimed.prisma, owner, {
+        goalId: claimed.goal.id,
+        deliveryId: claimed.delivery.id,
+        action: "handle",
+      }),
+    ).rejects.toMatchObject({ reason: "not-awaiting" });
+  });
+
+  it("refuses a non-owner and a goal outside the actor scope", async () => {
+    const fixture = deliverySettleFixture();
+    const input = {
+      goalId: fixture.goal.id,
+      deliveryId: fixture.delivery.id,
+      action: "handle" as const,
+    };
+    await expect(
+      settleGoalBoardDelivery(fixture.prisma, { ...owner, isDeploymentOwner: false }, input),
+    ).rejects.toThrow();
+    await expect(
+      settleGoalBoardDelivery(fixture.prisma, { ...owner, userId: "other-user" }, input),
+    ).rejects.toThrow();
+    expect(fixture.delivery.state).toBe("paused");
   });
 });

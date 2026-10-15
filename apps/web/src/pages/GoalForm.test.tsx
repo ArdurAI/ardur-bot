@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { ORPCError } from "@orpc/client";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -53,3 +54,54 @@ it("opens the goal form with the owner controls and a bounded default", async ()
   expect(objective.value).toBe("Draft objective");
   await act(async () => root.unmount());
 });
+
+async function typeObjective(element: HTMLElement, value: string) {
+  const objective = element.querySelector<HTMLInputElement>("input:not([type])")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      objective,
+      value,
+    );
+    objective.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+it.each([
+  [
+    "board-link",
+    new ORPCError("BAD_REQUEST", {
+      message: "localized server text the client must not match",
+      data: { reason: "board-link" },
+    }),
+    "Could not link that board item.",
+  ],
+  [
+    "other",
+    new ORPCError("BAD_REQUEST", { message: "deadline in the past" }),
+    "Could not start goal. Check the deadline and try again.",
+  ],
+  [
+    "generic",
+    new Error("private diagnostic"),
+    "Could not start goal. Check the deadline and try again.",
+  ],
+] as const)(
+  "matches the server error by code (%s), not its text",
+  async (_kind, failure, shown) => {
+    const element = document.createElement("div");
+    document.body.append(element);
+    const root = createRoot(element);
+    const onStart = vi.fn().mockRejectedValue(failure);
+    await act(async () => root.render(<StartGoalForm groupId="group" onStart={onStart} />));
+    await typeObjective(element, "Draft objective");
+    await act(async () => {
+      [...element.querySelectorAll("button")]
+        .find((button) => button.textContent === "Start goal")!
+        .click();
+    });
+    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(element.querySelector('[role="alert"]')?.textContent).toBe(shown);
+    expect(element.textContent).not.toContain("private diagnostic");
+    await act(async () => root.unmount());
+  },
+);

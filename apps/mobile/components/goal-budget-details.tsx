@@ -20,6 +20,7 @@ export function GoalBudgetDetails({ groupId }: { groupId: string }) {
   const router = useRouter();
   const [goal, setGoal] = useState<Goal | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [settling, setSettling] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -41,6 +42,19 @@ export function GoalBudgetDetails({ groupId }: { groupId: string }) {
     };
   }, [groupId, expanded]);
   if (!goal || goal.groupId !== groupId) return null;
+  const settle = async (deliveryId: string, action: "retry" | "handle") => {
+    if (settling) return;
+    setSettling(deliveryId);
+    try {
+      await rpc<Goal>("goals/boardDelivery", { goalId: goal.id, deliveryId, action });
+      setGoal(await rpc<Goal | null>("goals/get", { groupId }));
+    } catch {
+      // The poll refreshes the card; a moved delivery simply clears its actions.
+      setGoal(await rpc<Goal | null>("goals/get", { groupId }).catch(() => null));
+    } finally {
+      setSettling(null);
+    }
+  };
   const value = (count: number | null) => count?.toLocaleString() ?? t("Unknown");
   return (
     <View style={{ marginTop: 16, gap: 8 }}>
@@ -121,6 +135,26 @@ export function GoalBudgetDetails({ groupId }: { groupId: string }) {
           {goal.boardDelivery && goal.boardDelivery !== "delivered" ? (
             <Text style={{ color: tokens.mutedForeground }}>{t("Board update pending")}</Text>
           ) : null}
+          {goal.boardDeliveryActions?.map((delivery) => (
+            <View key={delivery.id} style={{ flexDirection: "row", gap: 16 }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ busy: settling === delivery.transition }}
+                disabled={settling !== null}
+                onPress={() => void settle(delivery.id, "retry")}
+              >
+                <Text style={{ color: tokens.foreground }}>{t("Retry board update")}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ busy: settling === delivery.transition }}
+                disabled={settling !== null}
+                onPress={() => void settle(delivery.id, "handle")}
+              >
+                <Text style={{ color: tokens.foreground }}>{t("Mark board update handled")}</Text>
+              </Pressable>
+            </View>
+          ))}
         </View>
       ) : null}
     </View>

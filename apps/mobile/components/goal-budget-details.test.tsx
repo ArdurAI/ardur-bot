@@ -63,3 +63,41 @@ it("opens the linked board item", async () => {
     params: { view: "board", workspace: "workspace", item: "board-a" },
   });
 });
+
+it("retries a paused board delivery from the goal card", async () => {
+  const goal = {
+    id: "goal-1",
+    groupId: "group",
+    usedTokens: 1,
+    reservedTokens: 0,
+    availableTokens: 1,
+    usageComplete: true,
+    boardWorkspaceId: "workspace",
+    boardItemId: "board-a",
+    boardDelivery: "paused",
+    boardDeliveryActions: [{ id: "delivery-1", transition: "completed", state: "paused" }],
+  };
+  rpc.mockImplementation(async (proc: string) => (proc === "goals/boardDelivery" ? goal : goal));
+  const node = document.createElement("div");
+  document.body.append(node);
+  const root = createRoot(node);
+  roots.push(root);
+  await act(async () => {
+    root.render(createElement(GoalBudgetDetails, { groupId: "group" }));
+  });
+  await act(async () => {
+    node.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  const retry = [...node.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("Retry board update"),
+  );
+  expect(retry).toBeTruthy();
+  await act(async () => {
+    retry?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  expect(rpc).toHaveBeenCalledWith("goals/boardDelivery", {
+    goalId: "goal-1",
+    deliveryId: "delivery-1",
+    action: "retry",
+  });
+});

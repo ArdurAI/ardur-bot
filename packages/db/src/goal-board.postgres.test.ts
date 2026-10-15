@@ -2,7 +2,14 @@ import type { Actor } from "@ardurbot/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
-import { acceptGoal, linkGoal, rejectGoal, startGoal, submitGoal } from "./goals.js";
+import {
+  acceptGoal,
+  linkGoal,
+  rejectGoal,
+  settleGoalBoardDelivery,
+  startGoal,
+  submitGoal,
+} from "./goals.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describePostgres =
@@ -68,6 +75,67 @@ describePostgres("Goal board delivery outbox (PostgreSQL)", () => {
     const thread = await prisma.thread.create({ data: { spaceId, userId, groupId: created.id } });
     await prisma.chatGroupMember.create({ data: { groupId: created.id, botId } });
     return { groupId: created.id, threadId: thread.id };
+  }
+
+  async function linkedGoal(room: { groupId: string; threadId: string }) {
+    const rootTask = await prisma.task.create({
+      data: {
+        spaceId,
+        userId,
+        botId,
+        threadId: room.threadId,
+        prompt: "Fixture",
+        status: "completed",
+      },
+    });
+    const goal = await prisma.teamGoal.create({
+      data: {
+        spaceId,
+        userId,
+        groupId: room.groupId,
+        threadId: room.threadId,
+        coordinatorBotId: botId,
+        rootTaskId: rootTask.id,
+        objective: "Review fixture",
+        status: "running",
+        tokenLimit: 100,
+        perWorkerTokens: 10,
+        maxConcurrent: 1,
+        maxDescendants: 1,
+        untilAt: new Date(Date.now() + 60_000),
+        boardWorkspaceId: workspaceId,
+        boardItemId: "board-a",
+      },
+    });
+    await prisma.delegationRoot.create({
+      data: {
+        rootTaskId: rootTask.id,
+        spaceId,
+        userId,
+        coordinatorBotId: botId,
+        coordinatorThreadId: room.threadId,
+        tokenLimit: 100,
+        deadlineAt: goal.untilAt,
+      },
+    });
+    return goal;
+  }
+
+  async function pausedDelivery(goalId: string) {
+    const revision = await submitGoal(prisma, actor, {
+      goalId,
+      summary: "Ready",
+      artifacts: [],
+      reports: [],
+    });
+    const row = await prisma.goalBoardDelivery.findFirstOrThrow({
+      where: { goalId, transition: "completed" },
+    });
+    await prisma.goalBoardDelivery.update({
+      where: { id: row.id },
+      data: { state: "paused", failure: "Board update pending" },
+    });
+    return { revision, row };
   }
 
   it("stores one owner link and refuses a workspace from another space", async () => {
@@ -224,5 +292,92 @@ describePostgres("Goal board delivery outbox (PostgreSQL)", () => {
     ]);
     expect(rows.filter((item) => item.transition === "accepted")).toHaveLength(1);
     expect(rows.find((item) => item.transition === "accepted")?.revisionId).toBe(next.id);
+  });
+
+  it("lets the owner retry or handle a paused delivery, once only", async () => {
+    const room = await group();
+    const goal = await linkedGoal(room);
+    const { row } = await pausedDelivery(goal.id);
+    const settle = (action: "retry" | "handle") =>
+      settleGoalBoardDelivery(prisma, actor, {
+        goalId: goal.id,
+        deliveryId: row.id,
+        action,
+      });
+
+    const retried = await settle("retry");
+    const afterRetry = await prisma.goalBoardDelivery.findUniqueOrThrow({ where: { id: row.id } });
+    expect(afterRetry).toMatchObject({ state: "pending", failure: null, retryAt: null });
+    expect(retried.boardDelivery).toBe("pending");
+    expect(retried.boardDeliveryActions).toEqual([]);
+
+    await prisma.goalBoardDelivery.update({
+      where: { id: row.id },
+      data: { state: "needs-owner", failure: "Board access lost" },
+    });
+    const handled = await settle("handle");
+    const afterHandle = await prisma.goalBoardDelivery.findUniqueOrThrow({
+      where: { id: row.id },
+    });
+    expect(afterHandle.state).toBe("handled");
+    expect(handled.boardDelivery).toBeNull();
+    expect(handled.boardDeliveryActions).toEqual([]);
+    await expect(settle("handle")).rejects.toMatchObject({ reason: "not-awaiting" });
+    await expect(settle("retry")).rejects.toMatchObject({ reason: "not-awaiting" });
+  });
+
+  it("refuses delivery settle from a non-owner and leaves the row untouched", async () => {
+    const room = await group();
+    const goal = await linkedGoal(room);
+    const { row } = await pausedDelivery(goal.id);
+    await expect(
+      settleGoalBoardDelivery(
+        prisma,
+        { ...actor, isDeploymentOwner: false },
+        {
+          goalId: goal.id,
+          deliveryId: row.id,
+          action: "handle",
+        },
+      ),
+    ).rejects.toThrow();
+    const after = await prisma.goalBoardDelivery.findUniqueOrThrow({ where: { id: row.id } });
+    expect(after.state).toBe("paused");
+  });
+
+  it("refuses to retry a superseded revision but lets the owner handle it", async () => {
+    const room = await group();
+    const goal = await linkedGoal(room);
+    const first = await pausedDelivery(goal.id);
+    await rejectGoal(prisma, actor, {
+      goalId: goal.id,
+      revisionId: first.revision.id,
+      reworkNotes: "Not yet",
+    });
+    // The newer submission queues its own completed row; the old one stays paused.
+    await submitGoal(prisma, actor, {
+      goalId: goal.id,
+      summary: "Ready again",
+      artifacts: [],
+      reports: [],
+    });
+    await expect(
+      settleGoalBoardDelivery(prisma, actor, {
+        goalId: goal.id,
+        deliveryId: first.row.id,
+        action: "retry",
+      }),
+    ).rejects.toMatchObject({ reason: "revision-changed" });
+    const handled = await settleGoalBoardDelivery(prisma, actor, {
+      goalId: goal.id,
+      deliveryId: first.row.id,
+      action: "handle",
+    });
+    const after = await prisma.goalBoardDelivery.findUniqueOrThrow({
+      where: { id: first.row.id },
+    });
+    expect(after.state).toBe("handled");
+    // The newer delivery is still queued, so the goal keeps a pending board state.
+    expect(handled.boardDelivery).toBe("pending");
   });
 });

@@ -1,6 +1,7 @@
 import { GOAL_DEFAULT_TOKEN_LIMIT } from "@ardurbot/contracts";
 import { Button, Input, Textarea } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { ORPCError } from "@orpc/client";
 import { useId, useState } from "react";
 import { FeatureDocsLink } from "../components/FeatureDocsLink";
 
@@ -55,7 +56,7 @@ export function StartGoalForm({
       });
     } catch (error) {
       setError(
-        error instanceof Error && error.message === "Could not link that board item."
+        error instanceof ORPCError && error.data?.reason === "board-link"
           ? t`Could not link that board item.`
           : t`Could not start goal. Check the deadline and try again.`,
       );

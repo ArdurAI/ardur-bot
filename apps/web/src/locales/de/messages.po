@@ -1503,6 +1503,7 @@ msgstr "Board-Status"
 
 #: src/pages/board/Board.tsx
 #: src/pages/GoalBoardLink.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Board update pending"
 msgstr "Board-Aktualisierung ausstehend"
 
@@ -3480,6 +3481,10 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "Could not update team messages"
 msgstr "Teamnachrichten konnten nicht aktualisiert werden"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update the board. Try again."
+msgstr "Board konnte nicht aktualisiert werden. Versuche es erneut."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check its settings and try again."
@@ -5790,6 +5795,10 @@ msgstr "Als gelesen markieren"
 msgid "Mark as Unread"
 msgstr "Als ungelesen markieren"
 
+#: src/pages/GroupPanel.tsx
+msgid "Mark board update handled"
+msgstr "Board-Aktualisierung als erledigt markieren"
+
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"
 msgstr ""
@@ -8036,6 +8045,10 @@ msgstr "Erneut versuchen"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Retry {0}"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Retry board update"
+msgstr "Board-Aktualisierung wiederholen"
 
 #: src/App.tsx
 #: src/pages/PeerMessagesOverlay.tsx

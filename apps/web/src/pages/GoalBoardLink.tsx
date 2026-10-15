@@ -11,7 +11,9 @@ export function GoalBoardLink({ goal }: { goal: Goal }) {
       <a href={boardItemPath(goal.boardWorkspaceId, goal.boardItemId)}>
         <Trans>Open board item</Trans>
       </a>
-      {goal.boardDelivery && goal.boardDelivery !== "delivered" ? (
+      {goal.boardDelivery &&
+      goal.boardDelivery !== "delivered" &&
+      !goal.boardDeliveryActions?.length ? (
         <>
           {" "}
           · <Trans>Board update pending</Trans>

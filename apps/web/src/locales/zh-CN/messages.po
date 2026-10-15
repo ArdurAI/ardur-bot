@@ -1503,6 +1503,7 @@ msgstr "看板状态"
 
 #: src/pages/board/Board.tsx
 #: src/pages/GoalBoardLink.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Board update pending"
 msgstr "看板更新待处理"
 
@@ -3480,6 +3481,10 @@ msgstr "无法更新反应"
 #: src/pages/GroupPanel.tsx
 msgid "Could not update team messages"
 msgstr "无法更新团队消息"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update the board. Try again."
+msgstr "无法更新看板，请重试。"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check its settings and try again."
@@ -5790,6 +5795,10 @@ msgstr "标为已读"
 msgid "Mark as Unread"
 msgstr "标为未读"
 
+#: src/pages/GroupPanel.tsx
+msgid "Mark board update handled"
+msgstr "标记看板更新已处理"
+
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"
 msgstr ""
@@ -8036,6 +8045,10 @@ msgstr "重试"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Retry {0}"
 msgstr "重试 {0}"
+
+#: src/pages/GroupPanel.tsx
+msgid "Retry board update"
+msgstr "重试看板更新"
 
 #: src/App.tsx
 #: src/pages/PeerMessagesOverlay.tsx

@@ -949,6 +949,19 @@ export function ShellPage({
   const autoSpokenBotId = useRef<string | null>(null);
 
   const inGroup = Boolean(groupId);
+  // The live strip for this group; also the fallback when a result link is stale.
+  const liveGoalStrip =
+    inGroup && goal && groupId && goal.groupId === groupId ? (
+      <GroupGoalStrip
+        goal={goal}
+        onRefresh={async () => {
+          setGoal(await rpc.goals.get({ groupId: goal.groupId }));
+        }}
+        onStop={async () => {
+          setGoal(await rpc.goals.stop({ goalId: goal.id }));
+        }}
+      />
+    ) : null;
   const active =
     team || board || dashboard || inGroup
       ? undefined
@@ -3985,19 +3998,12 @@ export function ShellPage({
                 groupId={groupId}
                 goalId={searchParams.get("goal")!}
                 revisionId={searchParams.get("revision")!}
+                fallback={liveGoalStrip}
               />
             </Suspense>
-          ) : inGroup && goal && goal.groupId === groupId ? (
-            <GroupGoalStrip
-              goal={goal}
-              onRefresh={async () => {
-                setGoal(await rpc.goals.get({ groupId: goal.groupId }));
-              }}
-              onStop={async () => {
-                setGoal(await rpc.goals.stop({ goalId: goal.id }));
-              }}
-            />
-          ) : null}
+          ) : (
+            liveGoalStrip
+          )}
           {bootstrapMe?.isDeploymentOwner
             ? currentRuns.map((run) =>
                 run.status === "waiting_input" && run.placement?.status === "pending" ? (

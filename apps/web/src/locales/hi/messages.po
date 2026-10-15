@@ -1503,6 +1503,7 @@ msgstr "बोर्ड की स्थिति"
 
 #: src/pages/board/Board.tsx
 #: src/pages/GoalBoardLink.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Board update pending"
 msgstr "बोर्ड अपडेट लंबित"
 
@@ -3480,6 +3481,10 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "Could not update team messages"
 msgstr "टीम संदेश अपडेट नहीं हो सके"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update the board. Try again."
+msgstr "बोर्ड अपडेट नहीं हो सका। फिर कोशिश करें।"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check its settings and try again."
@@ -5790,6 +5795,10 @@ msgstr "पढ़ा हुआ चिह्नित करें"
 msgid "Mark as Unread"
 msgstr "अपठित चिह्नित करें"
 
+#: src/pages/GroupPanel.tsx
+msgid "Mark board update handled"
+msgstr "बोर्ड अपडेट को संभाला गया चिह्नित करें"
+
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"
 msgstr ""
@@ -8036,6 +8045,10 @@ msgstr "फिर से कोशिश करें"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Retry {0}"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Retry board update"
+msgstr "बोर्ड अपडेट फिर से चलाएँ"
 
 #: src/App.tsx
 #: src/pages/PeerMessagesOverlay.tsx

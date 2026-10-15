@@ -120,7 +120,7 @@ import {
   FleetUpdateResultSchema,
   PlacementSettingsSchema,
 } from "./fleet.js";
-import { goalsContract } from "./goal.js";
+import { type GoalsContract, goalsContract } from "./goal.js";
 import { HostStatusSchema } from "./host-bridge.js";
 import {
   IDE_FILE_BYTES,
@@ -1604,7 +1604,7 @@ export const appContract = {
       .input(ProtectedLocationsPatchInputSchema)
       .output(ProtectedLocationViewsSchema),
   },
-  goals: goalsContract,
+  goals: goalsContract as GoalsContract,
   botComms: botCommsContract,
   team: teamContract,
   comparisons: comparisonsContract,

@@ -1618,6 +1618,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Board item": "Пункт доски",
   "Open board item": "Открыть пункт доски",
   "Board update pending": "Обновление доски ожидается",
+  "Retry board update": "Повторить обновление доски",
+  "Mark board update handled": "Отметить обновление доски обработанным",
   "Could not review result. Try again.": "Не удалось проверить результат. Попробуйте снова.",
   "{runs} run": "{runs} запуск",
   "By bot": "По ботам",

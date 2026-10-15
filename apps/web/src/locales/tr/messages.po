@@ -1503,6 +1503,7 @@ msgstr "Pano durumu"
 
 #: src/pages/board/Board.tsx
 #: src/pages/GoalBoardLink.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Board update pending"
 msgstr "Pano güncellemesi bekleniyor"
 
@@ -3480,6 +3481,10 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "Could not update team messages"
 msgstr "Ekip mesajları güncellenemedi"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update the board. Try again."
+msgstr "Pano güncellenemedi. Tekrar deneyin."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check its settings and try again."
@@ -5790,6 +5795,10 @@ msgstr "Okundu olarak işaretle"
 msgid "Mark as Unread"
 msgstr "Okunmadı olarak işaretle"
 
+#: src/pages/GroupPanel.tsx
+msgid "Mark board update handled"
+msgstr "Pano güncellemesini çözüldü olarak işaretle"
+
 #: src/lib/thinking-level-options.ts
 msgid "max — slowest, most careful"
 msgstr ""
@@ -8036,6 +8045,10 @@ msgstr "Yeniden dene"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Retry {0}"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Retry board update"
+msgstr "Pano güncellemesini yeniden dene"
 
 #: src/App.tsx
 #: src/pages/PeerMessagesOverlay.tsx
