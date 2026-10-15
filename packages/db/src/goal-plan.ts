@@ -87,12 +87,11 @@ function deriveStatus(
   return blocked ? "blocked" : "pending";
 }
 
-/** Depth-first cycle detection over the plan-local prerequisite graph. */
-export function planHasCycle(steps: readonly GoalPlanStepInput[]): boolean {
-  const ids = new Set(steps.map((step) => step.id));
+function graphHasCycle(entries: readonly { id: string; prerequisiteIds: readonly string[] }[]) {
+  const ids = new Set(entries.map((entry) => entry.id));
   const visiting = new Set<string>();
   const done = new Set<string>();
-  const byId = new Map(steps.map((step) => [step.id, step]));
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
   const visit = (id: string): boolean => {
     if (done.has(id)) return false;
     if (visiting.has(id)) return true;
@@ -104,8 +103,13 @@ export function planHasCycle(steps: readonly GoalPlanStepInput[]): boolean {
     done.add(id);
     return false;
   };
-  for (const step of steps) if (visit(step.id)) return true;
+  for (const entry of entries) if (visit(entry.id)) return true;
   return false;
+}
+
+/** Depth-first cycle detection over the plan-local prerequisite graph. */
+export function planHasCycle(steps: readonly GoalPlanStepInput[]): boolean {
+  return graphHasCycle(steps);
 }
 
 async function validatePlanOwners(
@@ -127,18 +131,32 @@ async function validatePlanOwners(
   }
 }
 
-function validatePlanShape(steps: readonly GoalPlanStepInput[]) {
+function validatePlanShape(
+  steps: readonly GoalPlanStepInput[],
+  existing: ReadonlyMap<string, readonly string[]>,
+) {
   const ids = new Set<string>();
   for (const step of steps) {
     if (ids.has(step.id)) throw new GoalPlanConflict("prerequisite-missing");
     ids.add(step.id);
   }
+  // A prerequisite may name any step in the plan: one being edited now or a
+  // carried one that keeps its recorded state.
+  const known = new Set([...ids, ...existing.keys()]);
   for (const step of steps) {
     for (const prerequisite of step.prerequisiteIds) {
-      if (!ids.has(prerequisite)) throw new GoalPlanConflict("prerequisite-missing");
+      if (!known.has(prerequisite)) throw new GoalPlanConflict("prerequisite-missing");
     }
   }
-  if (planHasCycle(steps)) throw new GoalPlanConflict("dependency-cycle");
+  // Cycles are checked on the merged graph: submitted steps with their new
+  // prerequisites, carried steps with the prerequisites they keep.
+  const merged = [
+    ...steps.map((step) => ({ id: step.id, prerequisiteIds: step.prerequisiteIds })),
+    ...[...existing.entries()]
+      .filter(([id]) => !ids.has(id))
+      .map(([id, prerequisiteIds]) => ({ id, prerequisiteIds })),
+  ];
+  if (graphHasCycle(merged)) throw new GoalPlanConflict("dependency-cycle");
 }
 
 /**
@@ -155,11 +173,14 @@ async function commitPlanUpdate(
   assertPlanRunning(goal);
   if (goal.planRevision !== input.baseRevision) throw new GoalPlanConflict("revision-changed");
   await validatePlanOwners(tx, goal, input.steps);
-  validatePlanShape(input.steps);
 
   const existing = await tx.goalPlanStep.findMany({ where: { goalId: goal.id } });
   const byClientId = new Map(existing.map((row) => [row.clientId, row]));
   const revision = goal.planRevision + 1;
+  validatePlanShape(
+    input.steps,
+    new Map(existing.map((row) => [row.clientId, row.prerequisiteIds])),
+  );
 
   const priorStatuses = new Map<string, string>();
   for (const row of existing) priorStatuses.set(row.clientId, row.status);

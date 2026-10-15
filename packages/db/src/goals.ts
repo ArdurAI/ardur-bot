@@ -138,6 +138,7 @@ function asGoal(row: GoalRow): Goal {
     boardItemId: row.boardItemId,
     boardDelivery: row.boardDelivery,
     boardDeliveryActions: row.boardDeliveryActions,
+    plan: row.plan,
   };
 }
 
