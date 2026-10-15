@@ -496,6 +496,42 @@ describePostgres("Chief project plan (PostgreSQL)", () => {
     ).toEqual(["draft"]);
   });
 
+  it("accepts an unchanged done step after the secret list grows past its stored text", async () => {
+    const room = await runningGoal();
+    const secret = "fixture-secret-9f3";
+    // Stored before the chief's run knew the secret, so the durable title
+    // keeps it in clear.
+    await updateGoalPlan(
+      prisma,
+      { actor },
+      {
+        goalId: room.goalId,
+        baseRevision: 1,
+        steps: [step("draft", { title: `Ship with ${secret}`, condition: "Draft exists" })],
+      },
+    );
+    await recordGoalPlanStepOutcome(
+      prisma,
+      { actor },
+      { goalId: room.goalId, stepId: "draft", baseRevision: 2, support: [] },
+    );
+    const chief = { scope: scope(room.threadId), goalId: room.goalId, secrets: [secret] };
+    const carried = await updateGoalPlan(prisma, chief, {
+      baseRevision: 3,
+      steps: [step("draft", { title: "Ship with [redacted]", condition: "Draft exists" })],
+    });
+    expect(carried.plan?.steps.find((entry) => entry.id === "draft")).toMatchObject({
+      status: "done",
+      title: "Ship with [redacted]",
+    });
+    await expect(
+      updateGoalPlan(prisma, chief, {
+        baseRevision: 4,
+        steps: [step("draft", { title: "Ship with [redacted]", condition: "Published" })],
+      }),
+    ).rejects.toMatchObject({ reason: "step-settled" });
+  });
+
   it("projects the plan on goal reads and freezes it with the goal", async () => {
     const room = await runningGoal();
     await updateGoalPlan(

@@ -16,6 +16,7 @@ import {
   GoalPlanStepOutcomeInputSchema,
   GoalPlanUpdateInputSchema,
 } from "@ardurbot/contracts";
+import { redactSecrets } from "@ardurbot/core";
 import type { Prisma, PrismaClient, TeamGoal } from "./client.js";
 import { Prisma as PrismaNS } from "./client.js";
 import { appendEventInTransaction } from "./events.js";
@@ -33,6 +34,7 @@ export class GoalPlanConflict extends Error {
       | "dependency-cycle"
       | "unknown-step"
       | "step-settled"
+      | "step-not-settled"
       | "step-in-flight"
       | "missing-support",
   ) {
@@ -51,9 +53,11 @@ export class GoalPlanConflict extends Error {
                   ? "The step is not in this plan"
                   : reason === "step-settled"
                     ? "The step is already done or cancelled"
-                    : reason === "step-in-flight"
-                      ? "The step is still being worked on; its run has not finished"
-                      : "Finishing a step needs at least one record of the goal's work",
+                    : reason === "step-not-settled"
+                      ? "The step is still pending or blocked; only a done, cancelled, or in-flight step can be reopened"
+                      : reason === "step-in-flight"
+                        ? "The step is still being worked on; its run has not finished"
+                        : "Finishing a step needs at least one record of the goal's work",
     );
   }
 }
@@ -206,6 +210,7 @@ async function commitPlanUpdate(
   tx: Prisma.TransactionClient,
   goal: TeamGoal,
   input: Pick<GoalPlanUpdateInput, "baseRevision" | "steps">,
+  secrets?: readonly string[],
 ): Promise<number> {
   assertPlanRunning(goal);
   if (goal.planRevision !== input.baseRevision) throw new GoalPlanConflict("revision-changed");
@@ -221,12 +226,19 @@ async function commitPlanUpdate(
 
   // Validate the entire update before writing any row. Completion supports the
   // saved definition, including its title; explicit reopen clears that proof.
+  // The stored free text was redacted with the secrets known when it was
+  // written, so compare both sides under the caller's current list: a step
+  // stored before a secret became known must not be refused as redefined.
+  const sameDefinitionText = (stored: string, submitted: string) =>
+    secrets
+      ? redactSecrets(stored, [...secrets]) === redactSecrets(submitted, [...secrets])
+      : stored === submitted;
   for (const step of input.steps) {
     const prior = byClientId.get(step.id);
     if (
       prior?.status === "done" &&
-      (prior.title !== step.title ||
-        prior.condition !== step.condition ||
+      (!sameDefinitionText(prior.title, step.title) ||
+        !sameDefinitionText(prior.condition, step.condition) ||
         prior.ownerId !== step.ownerId ||
         prior.ownerIsUser !== step.ownerIsUser ||
         prior.prerequisiteIds.length !== step.prerequisiteIds.length ||
@@ -371,7 +383,9 @@ async function reloadGoal(prisma: PrismaClient, goalId: string) {
 /** Owner or chief replaces the plan; every change names the revision it was based on. */
 export async function updateGoalPlan(
   prisma: PrismaClient,
-  authority: { actor: Actor } | ({ scope: CoordinatorScope } & { goalId: string }),
+  authority:
+    | { actor: Actor }
+    | ({ scope: CoordinatorScope } & { goalId: string; secrets?: readonly string[] }),
   raw: GoalPlanUpdateInput | ChiefPlanUpdateInput,
 ) {
   const byOwner = "actor" in authority;
@@ -383,11 +397,12 @@ export async function updateGoalPlan(
     "actor" in authority
       ? await loadPlanGoalForOwner(prisma, authority.actor, goalId)
       : await loadPlanGoalForCoordinator(prisma, goalId, authority.scope);
+  const secrets = "actor" in authority ? undefined : authority.secrets;
   const revision = await withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
       await lockGoalReview(tx, goal.threadId, goal.rootTaskId);
       const current = await tx.teamGoal.findUniqueOrThrow({ where: { id: goal.id } });
-      return commitPlanUpdate(tx, current, input);
+      return commitPlanUpdate(tx, current, input, secrets);
     }),
   );
   // An owner edit has no running coordinator turn to hand steps out; wake one.
@@ -554,7 +569,9 @@ export async function settleGoalPlanStep(
         step.status !== "cancelled" &&
         step.status !== "active"
       ) {
-        throw new GoalPlanConflict("step-settled");
+        // Reopening only makes sense for a settled or in-flight step; a
+        // pending or blocked one is still outstanding work.
+        throw new GoalPlanConflict("step-not-settled");
       }
       // Reopening must never make the same work eligible for a second worker
       // while the first dispatch is still in flight.

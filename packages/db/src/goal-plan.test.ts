@@ -600,6 +600,48 @@ describe("step cancellation and reopening", () => {
     expect(listed).toEqual([]);
   });
 
+  it("refuses to reopen a pending or blocked step with a refusal that names its state", async () => {
+    const pendingRow = stepRow({ clientId: "waiting" });
+    const blockedRow = stepRow({ clientId: "stuck", status: "blocked" });
+    const fixture = planFixture({ steps: [pendingRow, blockedRow] });
+    await expect(
+      settleGoalPlanStep(
+        fixture.prisma,
+        { actor: owner },
+        { goalId: goal.id, stepId: "waiting", baseRevision: 3, action: "reopen" },
+      ),
+    ).rejects.toMatchObject({ reason: "step-not-settled" });
+    await expect(
+      settleGoalPlanStep(
+        fixture.prisma,
+        { actor: owner },
+        { goalId: goal.id, stepId: "stuck", baseRevision: 3, action: "reopen" },
+      ),
+    ).rejects.toMatchObject({
+      reason: "step-not-settled",
+      message: expect.stringContaining("pending or blocked"),
+    });
+    expect(pendingRow.status).toBe("pending");
+    expect(blockedRow.status).toBe("blocked");
+    // The settled-step refusal keeps its own reason and wording.
+    const doneRow = stepRow({
+      clientId: "finished",
+      status: "done",
+      outcome: { actorId: owner.userId, support: [], recordedAt: "2030-01-01T00:00:00.000Z" },
+    });
+    const settledFixture = planFixture({ steps: [doneRow] });
+    await expect(
+      settleGoalPlanStep(
+        settledFixture.prisma,
+        { actor: owner },
+        { goalId: goal.id, stepId: "finished", baseRevision: 3, action: "cancel" },
+      ),
+    ).rejects.toMatchObject({
+      reason: "step-settled",
+      message: expect.stringContaining("done or cancelled"),
+    });
+  });
+
   it("reopens a step whose dispatch already settled", async () => {
     const row = stepRow({ clientId: "active-step", status: "active", dispatchRunId: "run-1" });
     const fixture = planFixture({ steps: [row] });
@@ -749,6 +791,48 @@ describe("conflict error vocabulary", () => {
     expect(conflict.reason).toBe("dependency-cycle");
     expect(conflict.message).toContain("cycle");
   });
+});
+
+it("compares a done step's definition under the current secret list, not the write-time one", async () => {
+  // The step was stored before the secret was known, so its durable text is
+  // unredacted; the chief now resubmits the same definition and the adapter
+  // redacts it with the grown list before this guard sees it.
+  const done = stepRow({
+    clientId: "draft",
+    status: "done",
+    title: "Ship with fixture-secret-9f3",
+    condition: "Draft exists",
+    outcome: { actorId: owner.userId, support: [], recordedAt: "2030-01-01T00:00:00.000Z" },
+  });
+  const fixture = planFixture({ steps: [done] });
+  const authority = {
+    scope: {
+      spaceId: owner.spaceId,
+      userId: owner.userId,
+      coordinatorBotId: "bot-chief",
+      threadId: goal.threadId,
+    },
+    goalId: goal.id,
+    secrets: ["fixture-secret-9f3"],
+  };
+  const unchanged = stepInput("draft", {
+    title: "Ship with [redacted]",
+    condition: "Draft exists",
+  });
+  await updateGoalPlan(fixture.prisma, authority, {
+    baseRevision: 3,
+    steps: [unchanged],
+  });
+  expect(fixture.steps[0]?.status).toBe("done");
+  expect(fixture.steps[0]?.title).toBe("Ship with [redacted]");
+  // A real definition change is still refused.
+  await expect(
+    updateGoalPlan(fixture.prisma, authority, {
+      baseRevision: 4,
+      steps: [stepInput("draft", { title: "Ship with [redacted]", condition: "Published" })],
+    }),
+  ).rejects.toMatchObject({ reason: "step-settled" });
+  expect(fixture.steps[0]?.condition).toBe("Draft exists");
 });
 
 it.each(["id", "prerequisiteIds"])(
