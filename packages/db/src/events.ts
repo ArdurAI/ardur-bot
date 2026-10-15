@@ -890,6 +890,7 @@ async function commitAnswerRunInput(
         });
     }
   }
+  // Global lock order: bots, then threads, then runs/tasks.
   // Credential storage takes the bot row lock. Take it before the thread, matching
   // run/brief admission and clear/finalize, so a fast card answer cannot deadlock
   // with maintenance of the paused run. Composer text answers have no secret writer.

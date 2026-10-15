@@ -1,7 +1,10 @@
 import type { AgentHomeStore, JobPublisher, SandboxProvider } from "@ardurbot/adapter-kit";
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
-import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
+import type { Prisma, PrismaClient, ThreadEvents } from "@ardurbot/db";
+import { answerRunInput } from "@ardurbot/db";
 import { afterEach, expect, it, vi } from "vitest";
+import { createRunSecretWriter } from "../run-secret.js";
+import { EncryptedSecretStore } from "../secrets.js";
 import type { FleetCatalog } from "./catalog.js";
 
 const replace = vi.hoisted(() => vi.fn(async () => ({})));
@@ -120,6 +123,178 @@ function fixture(approved = false) {
   };
 }
 afterEach(() => vi.clearAllMocks());
+
+function barrier() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+it.each(["bot", "peer"])(
+  "commits a placement move during a credential answer for %s without deadlocking",
+  async (answerBotId) => {
+    const f = fixture(true);
+    // The final update clears every bot, including archived owners of the computer.
+    f.computer.bots.push({ ...f.computer.bots[0]!, id: "peer", archivedAt: new Date() } as never);
+    const firstPlacementLock = barrier();
+    const answerBlocked = barrier();
+    const resumePlacement = barrier();
+    const owners = new Map<string, string>();
+    const waiting = new Map<string, string>();
+    const released = new Map<string, ReturnType<typeof barrier>>();
+    const placementLocks: string[] = [];
+    let placementHasLock = false;
+    let answerStatus = "waiting_input";
+    const saved = vi.fn();
+    const placementRunUpdate = vi.fn(async (_input: unknown) => ({ count: 1 }));
+    const destination = {
+      name: "example_api",
+      origin: "https://api.example.test",
+      auth: { type: "bearer" },
+    };
+
+    // Model exclusive row locks, reentrant acquisition and the two-transaction wait cycle.
+    const acquire = async (transaction: string, resource: string) => {
+      while (owners.has(resource) && owners.get(resource) !== transaction) {
+        const owner = owners.get(resource)!;
+        waiting.set(transaction, owner);
+        if (waiting.get(owner) === transaction) throw new Error("deadlock detected");
+        if (transaction === "answer") answerBlocked.resolve();
+        await released.get(owner)!.promise;
+        waiting.delete(transaction);
+      }
+      owners.set(resource, transaction);
+    };
+    const transaction = async <T>(
+      name: string,
+      work: (tx: Prisma.TransactionClient) => Promise<T>,
+    ) => {
+      released.set(name, barrier());
+      const tx = {
+        ...f.prisma,
+        $queryRaw: async (sql: TemplateStringsArray, ...values: unknown[]) => {
+          const query = sql.join("");
+          if (query.includes("FROM bots")) {
+            if (name === "placement") {
+              expect(query).toBe(
+                'SELECT id FROM bots WHERE "computerId" =  ORDER BY id FOR UPDATE',
+              );
+              expect(values).toEqual([f.computer.id]);
+              for (const bot of [...f.computer.bots].sort((a, b) => a.id.localeCompare(b.id))) {
+                placementLocks.push(`bot:${bot.id}`);
+                await acquire(name, `bot:${bot.id}`);
+              }
+            } else {
+              await acquire(name, `bot:${answerBotId}`);
+            }
+          } else {
+            expect(query).toBe("SELECT id FROM threads WHERE id =  FOR UPDATE");
+            expect(values).toEqual([f.run.threadId]);
+            if (name === "placement") placementLocks.push(`thread:${f.run.threadId}`);
+            await acquire(name, `thread:${f.run.threadId}`);
+          }
+          // Pause after all rows in placement's first statement have been locked.
+          if (name === "placement" && !placementHasLock) {
+            placementHasLock = true;
+            firstPlacementLock.resolve();
+            await resumePlacement.promise;
+          }
+          return [];
+        },
+        bot: {
+          ...f.prisma.bot,
+          updateMany: async (input: unknown) => {
+            // UPDATE itself takes row locks even when the explicit pre-lock is missing.
+            for (const bot of f.computer.bots) await acquire(name, `bot:${bot.id}`);
+            return f.prisma.bot.updateMany(input);
+          },
+        },
+        run: {
+          ...f.prisma.run,
+          findUnique: async () => ({ status: answerStatus, threadId: f.run.threadId }),
+          findFirst: async () =>
+            answerStatus === "waiting_input" ? { botId: answerBotId, userId: "owner" } : null,
+          updateMany: async (input: unknown) => {
+            if (name === "placement") return placementRunUpdate(input);
+            answerStatus = "queued";
+            return { count: 1 };
+          },
+        },
+        message: {
+          findFirst: async () => ({
+            id: "credential-message",
+            blocks: [{ kind: "ask", text: "API key", input: "secret", credential: destination }],
+          }),
+          update: async () => ({}),
+        },
+        botSecret: { findFirst: async () => null, count: async () => 0, create: saved },
+        externalEffect: { updateMany: async () => ({ count: 1 }) },
+        thread: {
+          findUniqueOrThrow: async () => ({ groupId: null }),
+          update: async () => ({ nextEventSeq: 1 }),
+        },
+        event: { create: async () => ({ threadId: f.run.threadId, seq: 1 }) },
+      };
+      try {
+        return await work(tx as unknown as Prisma.TransactionClient);
+      } finally {
+        for (const [resource, owner] of owners) if (owner === name) owners.delete(resource);
+        waiting.delete(name);
+        released.get(name)!.resolve();
+      }
+    };
+    let transactions = 0;
+    f.prisma.$transaction = async (work) => {
+      // The preparation transaction finishes before the simulated computer replacement.
+      if (++transactions === 1) return work(f.prisma);
+      return transaction("placement", work);
+    };
+    const placement = placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal);
+    const moved = expect(placement).resolves.toBe(true);
+    await firstPlacementLock.promise;
+    const answer = answerRunInput(
+      {
+        $transaction: (work: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+          transaction("answer", work),
+      } as PrismaClient,
+      {
+        runId: "credential-run",
+        threadId: f.run.threadId,
+        spaceId: f.run.spaceId,
+        messageId: "credential-message",
+        answeredByUserId: "owner",
+        answer: "fake-api-key",
+      },
+      undefined,
+      createRunSecretWriter(new EncryptedSecretStore("test-only-encryption-key")),
+    );
+    // Attach both failure handlers before releasing either side of the forced overlap.
+    const answered = expect(answer).resolves.toBe(true);
+    await answerBlocked.promise;
+    resumePlacement.resolve();
+    await Promise.all([moved, answered]);
+    expect(placementLocks).toEqual(["bot:bot", "bot:peer", "thread:thread"]);
+    expect(saved).toHaveBeenCalledOnce();
+    expect(answerStatus).toBe("queued");
+    expect(f.prisma.bot.updateMany).toHaveBeenCalledWith({
+      where: { computerId: f.computer.id },
+      data: { pendingPlacement: expect.anything() },
+    });
+    expect(placementRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { placement: expect.objectContaining({ status: "moved" }) },
+      }),
+    );
+    expect(f.prisma.computerUpdate.update).toHaveBeenCalledWith({
+      where: { id: "move" },
+      data: { status: "completed" },
+    });
+    expect(f.deps.events.notify).toHaveBeenCalledWith(f.run.threadId, 1);
+  },
+);
+
 it("does not move a network-isolated computer to a target that cannot enforce its policy", async () => {
   const f = fixture(true);
   f.computer.networkEgress = false;

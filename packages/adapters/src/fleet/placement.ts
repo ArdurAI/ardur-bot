@@ -295,6 +295,8 @@ export async function placeRunComputer(
       destination,
     );
     const committed = await deps.prisma.$transaction(async (tx) => {
+      // Global lock order: bots, then threads, then runs/tasks.
+      await tx.$queryRaw`SELECT id FROM bots WHERE "computerId" = ${computer.id} ORDER BY id FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${run.threadId} FOR UPDATE`;
       const moved = await tx.run.updateMany({
         where: ownedRun,
