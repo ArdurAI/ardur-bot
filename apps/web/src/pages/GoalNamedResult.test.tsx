@@ -45,7 +45,8 @@ afterEach(async () => {
 
 it("shows the revision a result link names, not the newest result", async () => {
   revision.mockResolvedValue({
-    current: false,
+    // A link naming the revision the goal is on now resolves as current.
+    current: true,
     goal: {
       id: "goal-old",
       groupId: "group-1",
@@ -90,7 +91,9 @@ it("falls back to the live goal strip when the named result link is stale", asyn
   expect(node.textContent).toContain("Live goal strip");
 });
 
-it("falls back when the named revision is not the goal's current one", async () => {
+it("falls back to the live goal strip when the named revision is historical", async () => {
+  // The server answers with the requested historical revision in
+  // currentRevision and reports freshness separately as current: false.
   revision.mockResolvedValue({
     current: false,
     goal: {
@@ -101,7 +104,7 @@ it("falls back when the named revision is not the goal's current one", async () 
       untilAt: "2030-01-01T00:00:00.000Z",
       usedTokens: 1,
       usageComplete: true,
-      currentRevision: { id: "rev-current", summary: "Newest", conditions: [] },
+      currentRevision: { id: "rev-old", summary: "Recorded result", conditions: [] },
     },
   });
   await act(async () => {
@@ -115,5 +118,5 @@ it("falls back when the named revision is not the goal's current one", async () 
     );
   });
   expect(node.textContent).toContain("Live goal strip");
-  expect(node.textContent).not.toContain("Newest");
+  expect(node.textContent).not.toContain("Recorded result");
 });

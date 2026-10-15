@@ -37,7 +37,7 @@ export function GoalNamedResult({
     };
   }, [groupId, goalId, revisionId]);
   if (view === undefined) return null;
-  if (!view?.goal.currentRevision || view.goal.currentRevision.id !== revisionId) return fallback;
+  if (!view?.goal.currentRevision || !view.current) return fallback;
   const shown = view;
   return (
     <GroupGoalStrip
