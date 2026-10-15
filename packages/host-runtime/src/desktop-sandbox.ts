@@ -53,6 +53,7 @@ import {
   openChildDirectoryViaDirectoryFdWin32,
   openExistingChildViaDirectoryFdWin32,
   pathFromDirectoryFd,
+  resolveWin32FinalPath,
   win32NtRelativeAvailable,
 } from "./desktop-sandbox-win32-path.js";
 import { hostCapacity } from "./fleet/capacity.js";
@@ -569,10 +570,10 @@ export class DesktopSandboxProvider implements SandboxProvider {
       root = match;
       relative = path.relative(root, requested);
     }
-    if (fileRoot === undefined) root = await realpath(root);
+    root = await workspaceRealpath(root);
     const guarded = (await this.guardrail()).paths;
     // Check before creating missing parents, as well as after realpath resolution.
-    this.assertNotGuarded(guarded, path.resolve(await realpath(root), relative));
+    this.assertNotGuarded(guarded, path.resolve(root, relative));
     try {
       const target = await localWorkspaceTarget(
         root,
@@ -684,7 +685,7 @@ async function localWorkspaceTarget(
   const candidate = path.resolve(home, normalized);
   if (!isAllowedDesktopPath(candidate, [home]))
     throw new Error("Path escapes the computer workspace");
-  const resolvedHome = canonicalHome ?? (await realpath(home));
+  const resolvedHome = canonicalHome ?? (await workspaceRealpath(home));
   if (!mustExist) {
     // Walk/create parents from a held directory fd so a junction swap cannot
     // redirect mkdir outside the workspace between validation and creation.
@@ -781,7 +782,7 @@ async function localWorkspaceTarget(
       await parentHandle.close().catch(() => undefined);
     }
   }
-  const resolved = await realpath(candidate);
+  const resolved = await workspaceRealpath(candidate);
   if (!isAllowedDesktopPath(resolved, [resolvedHome]))
     throw new Error("Path escapes the computer workspace");
   return resolved;
@@ -795,7 +796,7 @@ async function openContainedWorkspaceFile(home: string, target: string, mode: nu
     throw new Error("Path escapes the computer workspace");
   }
 
-  const parentReal = await realpath(parentPath);
+  const parentReal = await workspaceRealpath(parentPath);
   if (!isAllowedDesktopPath(parentReal, [resolvedHome])) {
     throw new Error("Path escapes the computer workspace");
   }
@@ -828,11 +829,7 @@ async function openContainedWorkspaceFile(home: string, target: string, mode: nu
         created = true;
         await handle.chmod(mode).catch(() => undefined);
       }
-      try {
-        openedPath = pathFromDirectoryFd(handle.fd);
-      } catch {
-        openedPath = path.join(containedParent, name);
-      }
+      openedPath = pathFromDirectoryFd(handle.fd);
     } else {
       // Prefer directory-fd relative opens so a parent path swap cannot redirect creates.
       const viaDirFd = childPathViaDirFd(parentHandle.fd, name);
@@ -917,7 +914,7 @@ async function assertContainedDirectoryHandle(
     if (named?.isSymbolicLink() || !isAllowedDesktopPath(resolved, [resolvedHome])) {
       throw new Error("Path escapes the computer workspace");
     }
-    const fully = await realpath(resolved);
+    const fully = await workspaceRealpath(resolved);
     if (!isAllowedDesktopPath(fully, [resolvedHome])) {
       throw new Error("Path escapes the computer workspace");
     }
@@ -964,7 +961,7 @@ async function assertContainedFileHandle(
     ) {
       throw new Error("Path escapes the computer workspace");
     }
-    const fully = await realpath(resolved);
+    const fully = await workspaceRealpath(resolved);
     if (!isAllowedDesktopPath(fully, [resolvedHome])) {
       throw new Error("Path escapes the computer workspace");
     }
@@ -1023,15 +1020,12 @@ function childPathViaDirFd(fd: number, name: string) {
 
 async function realpathFromFd(fd: number) {
   if (process.platform === "linux") return realpath(`/proc/self/fd/${fd}`);
-  if (process.platform === "win32") {
-    try {
-      return pathFromDirectoryFd(fd);
-    } catch {
-      // Hosts that only pretend to be win32 (unit tests) lack the Win32 APIs.
-      return undefined;
-    }
-  }
+  if (win32NtRelativeAvailable()) return pathFromDirectoryFd(fd);
   return undefined;
+}
+
+async function workspaceRealpath(target: string) {
+  return win32NtRelativeAvailable() ? resolveWin32FinalPath(target) : realpath(target);
 }
 
 function hasErrorCode(error: unknown, code: string): error is NodeJS.ErrnoException {

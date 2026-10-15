@@ -1,15 +1,17 @@
 import {
   close as closeCb,
   closeSync,
+  constants,
   fchmod as fchmodCb,
   fstat as fstatCb,
   ftruncate as ftruncateCb,
   writeFile as writeFileCb,
 } from "node:fs";
+import { open } from "node:fs/promises";
 import { promisify } from "node:util";
 /** The subset of the native FFI API used by the contained Windows writer. */
 export interface Win32NativeApi {
-  load(name: string): { func(prototype: string): KoffiFunction };
+  load(name: string | null): { func(prototype: string): KoffiFunction };
   struct(name: string, members: Record<string, string>): unknown;
   sizeof(type: unknown): number;
 }
@@ -45,7 +47,6 @@ const SYNCHRONIZE = 0x00100000;
 const FILE_SHARE_ALL = 0x00000007;
 const FILE_ATTRIBUTE_NORMAL = 0x00000080;
 const FILE_ATTRIBUTE_DIRECTORY = 0x00000010;
-const O_RDWR_BINARY = 0x8002;
 /** NTSTATUS 0xC0000035 as signed int32 */
 const STATUS_OBJECT_NAME_COLLISION = -1073741771;
 /** NTSTATUS 0xC0000034 as signed int32 */
@@ -89,7 +90,9 @@ function nt(): NtFns {
   if (!koffi) throw new Error("Native directory handles unavailable.");
   const ntdll = koffi.load("ntdll.dll");
   const kernel32 = koffi.load("kernel32.dll");
-  const msvcrt = koffi.load("msvcrt.dll");
+  // Use the running Node/libuv's descriptor table, including statically linked
+  // runtimes. Loading a CRT DLL creates a separate, incompatible fd table.
+  const runtime = koffi.load(null);
 
   koffi.struct("UNICODE_STRING", {
     Length: "uint16_t",
@@ -116,8 +119,8 @@ function nt(): NtFns {
     RtlInitUnicodeString: ntdll.func(
       "void __stdcall RtlInitUnicodeString(_Out_ UNICODE_STRING *DestinationString, void *SourceString)",
     ),
-    getOsFhandle: msvcrt.func("intptr_t __cdecl _get_osfhandle(int fd)"),
-    openOsFhandle: msvcrt.func("int __cdecl _open_osfhandle(intptr_t handle, int flags)"),
+    getOsFhandle: runtime.func("intptr_t __cdecl uv_get_osfhandle(int fd)"),
+    openOsFhandle: runtime.func("int __cdecl uv_open_osfhandle(intptr_t handle)"),
     CloseHandle: kernel32.func("int __stdcall CloseHandle(void *hObject)"),
     GetFinalPathNameByHandleW: kernel32.func(
       "uint32_t __stdcall GetFinalPathNameByHandleW(void *hFile, void *lpszFilePath, uint32_t cchFilePath, uint32_t dwFlags)",
@@ -136,6 +139,25 @@ export function pathFromDirectoryFd(fd: number): string {
   return pathFromWindowsHandle(nt().getOsFhandle(fd) as number | bigint);
 }
 
+/** Resolve pathnames with the same final-name API as held parent/file handles. */
+export async function resolveWin32FinalPath(
+  target: string,
+  primitives: {
+    openPath(target: string): Promise<{ fd: number; close(): Promise<void> }>;
+    pathFromFd(fd: number): string;
+  } = {
+    openPath: (value) => open(value, constants.O_RDONLY),
+    pathFromFd: pathFromDirectoryFd,
+  },
+) {
+  const handle = await primitives.openPath(target);
+  try {
+    return primitives.pathFromFd(handle.fd);
+  } finally {
+    await handle.close();
+  }
+}
+
 export function pathFromWindowsHandle(handle: number | bigint): string {
   const api = nt();
   if (handle === -1n || handle === -1) escapeWorkspace();
@@ -146,7 +168,7 @@ export function pathFromWindowsHandle(handle: number | bigint): string {
 
   const buf = Buffer.alloc((size + 1) * 2);
   const written = api.GetFinalPathNameByHandleW(handle, buf, size + 1, flags) as number;
-  if (written === 0) escapeWorkspace();
+  if (written === 0 || written > size) escapeWorkspace();
 
   let resolved = buf.toString("utf16le", 0, written * 2);
   if (resolved.startsWith("\\\\?\\UNC\\"))
@@ -203,7 +225,7 @@ function ntCreateRelative(
 
   const handle = handleOut[0];
   if (handle == null) escapeWorkspace();
-  const fd = api.openOsFhandle(handle as number | bigint, O_RDWR_BINARY) as number;
+  const fd = api.openOsFhandle(handle as number | bigint) as number;
   if (fd < 0) {
     api.CloseHandle(handle as number | bigint);
     escapeWorkspace();
