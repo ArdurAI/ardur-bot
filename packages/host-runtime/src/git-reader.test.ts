@@ -153,8 +153,16 @@ it("detects a same-size edit whose mtime equals the index mtime", async () => {
   git(["add", "race.txt"]);
   git(["commit", "-q", "-m", "base"]);
   const index = path.join(home, ".git", "index");
-  await forceRacyGitEdit(home, "race.txt", "new\n");
+  // A fresh copy can still fall in the same second as the original index,
+  // leaving Git's racy-clean check active even without timestamp preservation.
+  // Use an older whole second so only preserving the timestamp detects the edit.
+  await utimes(index, 1_700_000_000, 1_700_000_000);
   const timestamp = await stat(index);
+  const originalSize = (await stat(file)).size;
+  await forceRacyGitEdit(home, "race.txt", "new\n");
+  const edited = await stat(file);
+  expect(edited.size).toBe(originalSize);
+  expect(edited.mtimeMs).toBe(timestamp.mtimeMs);
   const before = await readFile(index);
 
   expect(await observe(provider, computer)).toMatchObject({
