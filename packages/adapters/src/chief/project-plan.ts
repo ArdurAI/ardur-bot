@@ -14,6 +14,7 @@ import {
   IsolationError,
   listReadyGoalPlanSteps,
   lockDelegationRootForRun,
+  lockGoalReview,
   lockOwnedGroup,
   markGoalPlanStepDispatched,
   recordGoalPlanStepOutcome,
@@ -65,8 +66,6 @@ export async function dispatchReadyGoalPlanSteps(
   const ready = await listReadyGoalPlanSteps(deps.prisma, goal.id);
   let dispatched = 0;
   for (const step of ready) {
-    const admissionKey = `goal-plan-step:${step.id}:${step.revision}`;
-    const prompt = goalPlanStepPrompt(step);
     const preparedTarget = deps.resolveDelegationPin
       ? await resolveDelegationTarget(
           deps.prisma,
@@ -82,7 +81,10 @@ export async function dispatchReadyGoalPlanSteps(
           if (error instanceof IsolationError) return { skipped: true } as const;
           throw error;
         }
-        const [group, activeSource, current] = await Promise.all([
+        // Plan edits take the same goal locks before rewriting steps, so the
+        // re-read below sees the current plan and never a half-applied edit.
+        await lockGoalReview(tx, goal.threadId, goal.rootTaskId);
+        const [group, activeSource, current, planRows] = await Promise.all([
           tx.chatGroup.findFirst({
             where: { id: goal.groupId, archivedAt: null, thread: { id: run.threadId } },
             include: {
@@ -105,13 +107,25 @@ export async function dispatchReadyGoalPlanSteps(
             select: { id: true },
           }),
           tx.goalPlanStep.findFirst({ where: { id: step.id } }),
+          tx.goalPlanStep.findMany({ where: { goalId: goal.id } }),
         ]);
         if (!group || !activeSource || !current) return { skipped: true } as const;
         const member = group.members.find((entry) => entry.bot.id === current.ownerId);
-        // Only a still-pending, still-owner-valid step may be handed out; a
-        // plan edit that cancelled it while we queued wins the row lock first.
-        if (!member || current.status !== "pending" || current.dispatchRunId !== null)
+        const statuses = new Map(planRows.map((row) => [row.clientId, row.status]));
+        // Revalidate the step as locked now: a plan edit that moved its revision,
+        // changed its owner, or left a prerequisite unfinished wins the race and
+        // the step is not dispatched; the next sweep reconsiders it.
+        if (
+          !member ||
+          current.status !== "pending" ||
+          current.dispatchRunId !== null ||
+          current.revision !== step.revision ||
+          !current.prerequisiteIds.every((id) => statuses.get(id) === "done")
+        )
           return { skipped: true } as const;
+        // Target, prompt and nonce all derive from the re-read row.
+        const admissionKey = `goal-plan-step:${current.id}:${current.revision}`;
+        const prompt = goalPlanStepPrompt(current);
 
         // Recovery: the handoff committed but the marker did not. The nonce
         // names the step and revision, so replay binds the recorded run.
@@ -149,7 +163,7 @@ export async function dispatchReadyGoalPlanSteps(
           await lockDelegationRootForRun(tx, run.id);
           lockedTarget = await resolveDelegationTarget(
             tx,
-            { ...run, actingBotId: step.ownerId, targetThreadId: run.threadId },
+            { ...run, actingBotId: current.ownerId, targetThreadId: run.threadId },
             deps.resolveDelegationPin,
           );
         }
@@ -158,7 +172,7 @@ export async function dispatchReadyGoalPlanSteps(
           {
             ...run,
             parentRunId: run.id,
-            actingBotId: step.ownerId,
+            actingBotId: current.ownerId,
             actingName: member.bot.name,
             kind: "group-handoff",
             admissionKey,
@@ -177,8 +191,8 @@ export async function dispatchReadyGoalPlanSteps(
             {
               kind: "handoff",
               fromBotId: run.botId,
-              toBotId: step.ownerId,
-              text: step.title,
+              toBotId: current.ownerId,
+              text: current.title,
               hop: nextBotMessageHop(undefined),
             },
           ],
@@ -190,7 +204,7 @@ export async function dispatchReadyGoalPlanSteps(
         const task = await tx.task.create({
           data: {
             spaceId: run.spaceId,
-            botId: step.ownerId,
+            botId: current.ownerId,
             threadId: run.threadId,
             userId: run.userId,
             prompt,
@@ -202,7 +216,7 @@ export async function dispatchReadyGoalPlanSteps(
             ...admitted.runData,
             spaceId: run.spaceId,
             userId: run.userId,
-            botId: step.ownerId,
+            botId: current.ownerId,
             threadId: run.threadId,
             taskId: task.id,
             status: "queued",
@@ -230,8 +244,8 @@ export async function dispatchReadyGoalPlanSteps(
           payload: {
             goalId: goal.id,
             delegationId: admitted.record.id,
-            botId: step.ownerId,
-            stepId: step.clientId,
+            botId: current.ownerId,
+            stepId: current.clientId,
             deliveryKey: admissionKey,
           },
         });

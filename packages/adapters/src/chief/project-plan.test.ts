@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@ardurbot/db";
-import { goalPlanStepPrompt, updateProjectPlanFromRun } from "./project-plan.js";
+import { dispatchReadyGoalPlanSteps, goalPlanStepPrompt, updateProjectPlanFromRun } from "./project-plan.js";
+
+const prepareDelegation = vi.hoisted(() => vi.fn());
+vi.mock("../delegation.js", () => ({
+  prepareDelegation: (...args: unknown[]) => prepareDelegation(...args),
+  resolveDelegationTarget: vi.fn(),
+  delegationFailure: (error: unknown) => {
+    throw error;
+  },
+}));
 
 const secret = "fixture-secret-9f3";
 const now = new Date("2030-01-01T00:00:00.000Z");
@@ -159,6 +168,158 @@ const dispatchDeps = (prisma: PrismaClient) => ({
   prisma,
   events: { notify: vi.fn(async () => undefined) },
   jobs: { enqueue: vi.fn(async () => undefined) },
+});
+
+describe("dispatch revalidation under concurrent plan edits", () => {
+  function dispatchFixture(options: { outside: StepRow[]; inside: StepRow[] }) {
+    const tx = {
+      $queryRaw: vi.fn(async () => [{ id: goal.groupId }]),
+      thread: {
+        update: vi.fn(async () => ({ nextEventSeq: 2, nextMessageSeq: 2 })),
+      },
+      event: { create: vi.fn(async () => ({ seq: 1 })) },
+      chatGroup: {
+        findFirst: vi.fn(async () => ({
+          id: goal.groupId,
+          members: [
+            { bot: { id: "bot-writer", name: "Writer" } },
+            { bot: { id: "bot-other", name: "Other" } },
+            { bot: { id: "bot-chief", name: "Chief" } },
+          ],
+        })),
+        update: vi.fn(async () => ({ id: goal.groupId })),
+      },
+      run: {
+        findFirst: vi.fn(async () => ({ id: chiefRun.id })),
+        findUnique: vi.fn(async () => ({
+          threadId: goal.threadId,
+          status: "running",
+          startedAt: now,
+          originDeviceGrantId: null,
+          remoteRootTaskId: null,
+          delegationId: null,
+          delegationRootTaskId: goal.rootTaskId,
+          replySeq: null,
+        })),
+        update: vi.fn(async () => ({ id: chiefRun.id })),
+        create: vi.fn(async (args: { data: Record<string, unknown> }) => ({
+          id: "run-worker",
+          ...args.data,
+        })),
+      },
+      goalPlanStep: {
+        findMany: vi.fn(async () => options.inside),
+        findFirst: vi.fn(async (args: { where: { id?: string; clientId?: string } }) =>
+          options.inside.find(
+            (row) => row.id === args.where.id || row.clientId === args.where.clientId,
+          ),
+        ),
+        updateMany: vi.fn(
+          async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+            const row = options.inside.find((entry) => entry.id === args.where.id);
+            if (!row || row.dispatchRunId !== null) return { count: 0 };
+            Object.assign(row, args.data);
+            return { count: 1 };
+          },
+        ),
+      },
+      message: {
+        findUnique: vi.fn(async () => null),
+        create: vi.fn(async (args: { data: Record<string, unknown> }) => ({
+          id: "message-1",
+          ...args.data,
+        })),
+      },
+      task: {
+        create: vi.fn(async (args: { data: Record<string, unknown> }) => ({
+          id: "task-worker",
+          ...args.data,
+        })),
+      },
+      delegation: {
+        findFirst: vi.fn(async () => null),
+        update: vi.fn(async () => ({ id: "delegation-1" })),
+      },
+    };
+    const prisma = {
+      teamGoal: {
+        findFirst: vi.fn(async () => ({
+          ...goal,
+          status: "running",
+          planRevision: goal.planRevision,
+        })),
+      },
+      goalPlanStep: { findMany: vi.fn(async () => options.outside) },
+      $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+    };
+    return {
+      tx,
+      prisma: prisma as unknown as PrismaClient,
+    };
+  }
+
+  it("dispatches a ready step to the re-read owner with the re-read prompt", async () => {
+    const ready = stepRow({ clientId: "a" });
+    const fixture = dispatchFixture({ outside: [ready], inside: [ready] });
+    prepareDelegation.mockResolvedValue({
+      ok: true,
+      record: { id: "delegation-1" },
+      runData: {},
+    });
+    const result = await dispatchReadyGoalPlanSteps(
+      dispatchDeps(fixture.prisma),
+      chiefRun,
+      goal.id,
+    );
+    expect(result.dispatched).toBe(1);
+    expect(prepareDelegation).toHaveBeenCalledTimes(1);
+    const task = vi.mocked(fixture.tx.task.create).mock.calls[0]?.[0] as {
+      data: { botId: string; prompt: string };
+    };
+    expect(task.data.botId).toBe("bot-writer");
+    expect(task.data.prompt).toContain("Step a");
+  });
+
+  it("does not dispatch a step whose prerequisite became unfinished before the transaction", async () => {
+    // Readiness saw the prerequisite done; the locked re-read sees it pending.
+    const base = stepRow({ clientId: "base", status: "done" });
+    const waitingOutside = stepRow({
+      clientId: "next",
+      prerequisiteIds: ["base"],
+      revision: 4,
+    });
+    const baseInside = stepRow({ clientId: "base", status: "pending", revision: 4 });
+    const waitingInside = stepRow({
+      clientId: "next",
+      prerequisiteIds: ["base"],
+      revision: 4,
+    });
+    const fixture = dispatchFixture({ outside: [base, waitingOutside], inside: [baseInside, waitingInside] });
+    const result = await dispatchReadyGoalPlanSteps(
+      dispatchDeps(fixture.prisma),
+      chiefRun,
+      goal.id,
+    );
+    expect(result.dispatched).toBe(0);
+    expect(fixture.tx.task.create).not.toHaveBeenCalled();
+    expect(fixture.tx.run.create).not.toHaveBeenCalled();
+  });
+
+  it("does not send a step to a superseded owner after an ownership change", async () => {
+    // Readiness saw bot-writer; the locked re-read shows the plan moved the
+    // step to bot-other. Nothing may go to the old owner.
+    const stale = stepRow({ clientId: "a", ownerId: "bot-writer" });
+    const moved = stepRow({ clientId: "a", ownerId: "bot-other", revision: 4 });
+    const fixture = dispatchFixture({ outside: [stale], inside: [moved] });
+    const result = await dispatchReadyGoalPlanSteps(
+      dispatchDeps(fixture.prisma),
+      chiefRun,
+      goal.id,
+    );
+    expect(result.dispatched).toBe(0);
+    expect(fixture.tx.task.create).not.toHaveBeenCalled();
+    expect(fixture.tx.run.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("plan update secret redaction", () => {
