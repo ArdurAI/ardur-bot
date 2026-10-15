@@ -75,6 +75,9 @@ export function windowsTerminalJob(native: Win32NativeApi): WindowsTerminalJob {
       const accounting = Buffer.alloc(48);
       if (!query(job, 1, accounting, accounting.length, null))
         throw new Error("Terminal job lookup failed.");
+      // JOBOBJECT_BASIC_ACCOUNTING_INFORMATION (winnt.h): four LARGE_INTEGER times
+      // (0-31), TotalPageFaultCount (32), TotalProcesses (36, lifetime count),
+      // ActiveProcesses (40, live members), TotalTerminatedProcesses (44).
       return accounting.readUInt32LE(40);
     },
     close() {
