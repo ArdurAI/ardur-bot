@@ -582,6 +582,47 @@ describe("step cancellation and reopening", () => {
   });
 });
 
+describe("dependent statuses after step transitions", () => {
+  it("blocks dependents when their prerequisite is cancelled", async () => {
+    const base = stepRow({ clientId: "base" });
+    const next = stepRow({ clientId: "next", prerequisiteIds: ["base"] });
+    const fixture = planFixture({ steps: [base, next] });
+    await settleGoalPlanStep(
+      fixture.prisma,
+      { actor: owner },
+      { goalId: goal.id, stepId: "base", baseRevision: 3, action: "cancel" },
+    );
+    expect(fixture.steps.find((row) => row.clientId === "base")?.status).toBe("cancelled");
+    expect(fixture.steps.find((row) => row.clientId === "next")?.status).toBe("blocked");
+  });
+
+  it("unblocks a dependent when its prerequisite's outcome is recorded", async () => {
+    const base = stepRow({ clientId: "base", ownerId: owner.userId, ownerIsUser: true });
+    const next = stepRow({ clientId: "next", prerequisiteIds: ["base"], status: "blocked" });
+    const fixture = planFixture({ steps: [base, next] });
+    await recordGoalPlanStepOutcome(
+      fixture.prisma,
+      { actor: owner },
+      { goalId: goal.id, stepId: "base", baseRevision: 3, support: [] },
+    );
+    expect(fixture.steps.find((row) => row.clientId === "base")?.status).toBe("done");
+    expect(fixture.steps.find((row) => row.clientId === "next")?.status).toBe("pending");
+  });
+
+  it("unblocks dependents when a cancelled prerequisite is reopened", async () => {
+    const base = stepRow({ clientId: "base", status: "cancelled" });
+    const next = stepRow({ clientId: "next", prerequisiteIds: ["base"], status: "blocked" });
+    const fixture = planFixture({ steps: [base, next] });
+    await settleGoalPlanStep(
+      fixture.prisma,
+      { actor: owner },
+      { goalId: goal.id, stepId: "base", baseRevision: 3, action: "reopen" },
+    );
+    expect(fixture.steps.find((row) => row.clientId === "base")?.status).toBe("pending");
+    expect(fixture.steps.find((row) => row.clientId === "next")?.status).toBe("pending");
+  });
+});
+
 describe("owner step actions wake the coordinator", () => {
   it("queues the coordinator wake after the owner records a step outcome", async () => {
     const row = stepRow({ clientId: "mine", ownerId: owner.userId, ownerIsUser: true });

@@ -168,6 +168,35 @@ function validatePlanShape(
 }
 
 /**
+ * Re-derives pending/blocked statuses from the rows as they stand now.
+ * Every transition (whole-plan update, outcome, cancel, reopen) runs this in
+ * the same transaction so dependency-derived statuses never stay stale.
+ */
+async function recomputePlanStepStatuses(
+  tx: Pick<Prisma.TransactionClient, "goalPlanStep">,
+  goalId: string,
+  revision: number,
+) {
+  const rows = await tx.goalPlanStep.findMany({ where: { goalId } });
+  const statuses = new Map(rows.map((row) => [row.clientId, row.status]));
+  let settled = false;
+  while (!settled) {
+    settled = true;
+    for (const row of rows) {
+      const next = deriveStatus(row.status, statuses, row.prerequisiteIds);
+      if (next === row.status) continue;
+      statuses.set(row.clientId, next);
+      (row as { status: string }).status = next;
+      settled = false;
+      await tx.goalPlanStep.update({
+        where: { id: row.id },
+        data: { status: next, revision },
+      });
+    }
+  }
+}
+
+/**
  * Replaces the plan's shape under the goal's row locks. A previously known
  * step missing from the new list is cancelled (recorded, never deleted);
  * a listed step keeps its recorded outcome and dispatch. Returns the new
@@ -190,15 +219,8 @@ async function commitPlanUpdate(
     new Map(existing.map((row) => [row.clientId, row.prerequisiteIds])),
   );
 
-  const priorStatuses = new Map<string, string>();
-  for (const row of existing) priorStatuses.set(row.clientId, row.status);
-  for (const step of input.steps) {
-    if (!priorStatuses.has(step.id)) priorStatuses.set(step.id, "pending");
-  }
-
   for (const step of input.steps) {
     const prior = byClientId.get(step.id);
-    const status = deriveStatus(prior?.status ?? "pending", priorStatuses, step.prerequisiteIds);
     const data = {
       revision,
       title: step.title,
@@ -206,7 +228,8 @@ async function commitPlanUpdate(
       ownerIsUser: step.ownerIsUser,
       condition: step.condition,
       prerequisiteIds: [...step.prerequisiteIds],
-      status,
+      // Dependency-derived statuses are recomputed once every row is written.
+      status: prior?.status ?? "pending",
     };
     if (prior) {
       await tx.goalPlanStep.update({ where: { id: prior.id }, data });
@@ -223,6 +246,7 @@ async function commitPlanUpdate(
       data: { revision, status: "cancelled" },
     });
   }
+  await recomputePlanStepStatuses(tx, goal.id, revision);
   const bumped = await tx.teamGoal.updateMany({
     where: { id: goal.id, planRevision: input.baseRevision },
     data: { planRevision: revision },
@@ -456,6 +480,7 @@ export async function recordGoalPlanStepOutcome(
         where: { id: current.id },
         data: { planRevision: revision },
       });
+      await recomputePlanStepStatuses(tx, current.id, revision);
       await appendEventInTransaction(tx, {
         spaceId: current.spaceId,
         threadId: current.threadId,
@@ -541,6 +566,7 @@ export async function settleGoalPlanStep(
         },
       });
       await tx.teamGoal.update({ where: { id: current.id }, data: { planRevision: revision } });
+      await recomputePlanStepStatuses(tx, current.id, revision);
       await appendEventInTransaction(tx, {
         spaceId: current.spaceId,
         threadId: current.threadId,
