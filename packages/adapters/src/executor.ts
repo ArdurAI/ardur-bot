@@ -39,6 +39,9 @@ import {
   BotSecretName,
   BotSecretSubmission,
   CapabilityPreferencesSchema,
+  ChiefPlanStepActionInputSchema,
+  ChiefPlanStepOutcomeInputSchema,
+  ChiefPlanUpdateInputSchema,
   ContextBudgetsSchema,
   computerCapabilities,
   computerProfileNote,
@@ -48,9 +51,6 @@ import {
   DelegationSnapshotSchema,
   isAttachmentImageMimeType,
   ListBotsInputSchema,
-  ChiefPlanStepActionInputSchema,
-  ChiefPlanStepOutcomeInputSchema,
-  ChiefPlanUpdateInputSchema,
   mcpCredentialConflict,
   OLLAMA_NO_IMAGES,
   OPENAI_COMPATIBLE_PROVIDER_ID,
@@ -257,13 +257,13 @@ import {
   browserSnapshotFromTool,
 } from "./browser-tools.js";
 import { agentConnectionTools, builtinAgentTools } from "./builtin-tools.js";
-import { finishGoalFromRun } from "./chief/report-goal-done.js";
 import {
   dispatchReadyGoalPlanSteps,
   recordPlanStepOutcomeFromRun,
   settlePlanStepFromRun,
   updateProjectPlanFromRun,
 } from "./chief/project-plan.js";
+import { finishGoalFromRun } from "./chief/report-goal-done.js";
 import { chiefActivityFeed } from "./chief-activity.js";
 import {
   chiefVerificationRead,
@@ -5861,7 +5861,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
               return finish({ error: "record_plan_step_outcome requires an active group goal" });
             const parsed = ChiefPlanStepOutcomeInputSchema.safeParse(args);
             if (!parsed.success)
-              return finish({ error: "record_plan_step_outcome needs stepId, baseRevision and support" });
+              return finish({
+                error: "record_plan_step_outcome needs stepId, baseRevision and support",
+              });
             const recorded = await recordPlanStepOutcomeFromRun(
               {
                 ...deps,

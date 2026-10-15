@@ -1,8 +1,9 @@
 import type { Actor } from "@ardurbot/contracts";
+import type { PrismaClient } from "@ardurbot/db";
 import {
   createDb,
-  getGoal,
   GoalPlanConflict,
+  getGoal,
   listReadyGoalPlanSteps,
   markGoalPlanStepDispatched,
   recordGoalPlanStepOutcome,
@@ -11,7 +12,6 @@ import {
   submitGoal,
   updateGoalPlan,
 } from "@ardurbot/db";
-import type { PrismaClient } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -206,9 +206,9 @@ describePostgres("Chief project plan (PostgreSQL)", () => {
       where: { goalId: room.goalId, clientId: "one" },
       data: { status: "done" },
     });
-    expect((await listReadyGoalPlanSteps(prisma, room.goalId)).map((row) => row.clientId)).toEqual(
-      ["two"],
-    );
+    expect((await listReadyGoalPlanSteps(prisma, room.goalId)).map((row) => row.clientId)).toEqual([
+      "two",
+    ]);
   });
 
   it("derives blocked steps from cancelled prerequisites and keeps the record", async () => {
@@ -216,7 +216,11 @@ describePostgres("Chief project plan (PostgreSQL)", () => {
     await updateGoalPlan(
       prisma,
       { actor },
-      { goalId: room.goalId, baseRevision: 1, steps: [step("one"), step("two", { prerequisiteIds: ["one"] })] },
+      {
+        goalId: room.goalId,
+        baseRevision: 1,
+        steps: [step("one"), step("two", { prerequisiteIds: ["one"] })],
+      },
     );
     await settleGoalPlanStep(
       prisma,
@@ -230,19 +234,24 @@ describePostgres("Chief project plan (PostgreSQL)", () => {
       { actor },
       { goalId: room.goalId, baseRevision: 3, steps: [step("two", { prerequisiteIds: ["one"] })] },
     );
-    const statuses = Object.fromEntries(saved.plan?.steps.map((entry) => [entry.id, entry.status]) ?? []);
+    const statuses = Object.fromEntries(
+      saved.plan?.steps.map((entry) => [entry.id, entry.status]) ?? [],
+    );
     expect(statuses).toEqual({ one: "cancelled", two: "blocked" });
     expect(await listReadyGoalPlanSteps(prisma, room.goalId)).toEqual([]);
   });
 
   it("records outcomes tied to goal records and refuses model-text-only completion", async () => {
     const room = await runningGoal();
-    await updateGoalPlan(prisma, { actor }, { goalId: room.goalId, baseRevision: 1, steps: [step("one")] });
+    await updateGoalPlan(
+      prisma,
+      { actor },
+      { goalId: room.goalId, baseRevision: 1, steps: [step("one")] },
+    );
     await markGoalPlanStepDispatched(
       prisma as unknown as Parameters<typeof markGoalPlanStepDispatched>[0],
       {
-        stepRowId: (await prisma.goalPlanStep.findFirstOrThrow({ where: { clientId: "one" } }))
-          .id,
+        stepRowId: (await prisma.goalPlanStep.findFirstOrThrow({ where: { clientId: "one" } })).id,
         runId: "run-one",
         delegationId: "delegation-one",
         at: new Date(),
@@ -284,7 +293,11 @@ describePostgres("Chief project plan (PostgreSQL)", () => {
       recordGoalPlanStepOutcome(
         prisma,
         { scope: scope(room.threadId), goalId: room.goalId },
-        { stepId: "one", baseRevision: 2, support: [{ kind: "run", recordId: foreignRun.id, revision: null }] },
+        {
+          stepId: "one",
+          baseRevision: 2,
+          support: [{ kind: "run", recordId: foreignRun.id, revision: null }],
+        },
       ),
     ).rejects.toMatchObject({ reason: "run-outside-goal" });
 
@@ -301,12 +314,15 @@ describePostgres("Chief project plan (PostgreSQL)", () => {
 
   it("reopens finished work, clearing outcome and dispatch for a fresh handout", async () => {
     const room = await runningGoal();
-    await updateGoalPlan(prisma, { actor }, { goalId: room.goalId, baseRevision: 1, steps: [step("one")] });
+    await updateGoalPlan(
+      prisma,
+      { actor },
+      { goalId: room.goalId, baseRevision: 1, steps: [step("one")] },
+    );
     await markGoalPlanStepDispatched(
       prisma as unknown as Parameters<typeof markGoalPlanStepDispatched>[0],
       {
-        stepRowId: (await prisma.goalPlanStep.findFirstOrThrow({ where: { clientId: "one" } }))
-          .id,
+        stepRowId: (await prisma.goalPlanStep.findFirstOrThrow({ where: { clientId: "one" } })).id,
         runId: "run-one",
         delegationId: "delegation-one",
         at: new Date(),
@@ -332,9 +348,9 @@ describePostgres("Chief project plan (PostgreSQL)", () => {
     expect(row.dispatchRunId).toBeNull();
     expect(row.outcome).toBeNull();
     // The cleared dispatch marker makes the step ready for a fresh handout.
-    expect((await listReadyGoalPlanSteps(prisma, room.goalId)).map((item) => item.clientId)).toEqual(
-      ["one"],
-    );
+    expect(
+      (await listReadyGoalPlanSteps(prisma, room.goalId)).map((item) => item.clientId),
+    ).toEqual(["one"]);
   });
 
   it("projects the plan on goal reads and freezes it with the goal", async () => {
@@ -356,12 +372,21 @@ describePostgres("Chief project plan (PostgreSQL)", () => {
     // Person-owned and coordinator-owned steps are never auto-dispatched.
     expect(await listReadyGoalPlanSteps(prisma, room.goalId)).toEqual([]);
 
-    await submitGoal(prisma, actor, { goalId: room.goalId, summary: "Done", artifacts: [], reports: [] });
+    await submitGoal(prisma, actor, {
+      goalId: room.goalId,
+      summary: "Done",
+      artifacts: [],
+      reports: [],
+    });
     await expect(
       updateGoalPlan(
         prisma,
         { actor },
-        { goalId: room.goalId, baseRevision: 2, steps: [step("mine", { ownerId: userId, ownerIsUser: true })] },
+        {
+          goalId: room.goalId,
+          baseRevision: 2,
+          steps: [step("mine", { ownerId: userId, ownerIsUser: true })],
+        },
       ),
     ).rejects.toMatchObject({ reason: "not-running" });
   });

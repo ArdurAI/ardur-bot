@@ -3,9 +3,9 @@ import { GOAL_FINAL_REVIEW_DESCRIPTION } from "@ardurbot/contracts";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import type { MobileGroup } from "../lib/api";
 import { rpc } from "../lib/api";
 import { useI18n } from "../lib/i18n";
-import type { MobileGroup } from "../lib/api";
 import { useMobileTokens } from "../lib/native";
 import { RpcError } from "../lib/rpc-error";
 
@@ -42,8 +42,7 @@ export function GoalBudgetDetails({ groupId }: { groupId: string }) {
         if (!active) return;
         const names: Record<string, string> = {};
         for (const group of groups)
-          for (const member of group.members ?? [])
-            names[member.botId] = member.name;
+          for (const member of group.members ?? []) names[member.botId] = member.name;
         setMemberNames(names);
       })
       .catch(() => undefined);
@@ -198,8 +197,7 @@ export function GoalBudgetDetails({ groupId }: { groupId: string }) {
             <View style={{ gap: 2 }}>
               <Text style={{ color: tokens.foreground }}>{t("Plan")}</Text>
               {planSteps.map((step) => {
-                const blockers =
-                  step.status === "blocked" ? planBlockerTitles(step) : [];
+                const blockers = step.status === "blocked" ? planBlockerTitles(step) : [];
                 const outstanding =
                   step.status === "pending" ||
                   step.status === "active" ||
@@ -208,10 +206,8 @@ export function GoalBudgetDetails({ groupId }: { groupId: string }) {
                   <View key={step.id} style={{ gap: 1 }}>
                     <Text style={{ color: tokens.foreground }}>
                       {step.title} ·{" "}
-                      {step.ownerIsUser
-                        ? t("You")
-                        : (memberNames[step.ownerId] ?? step.ownerId)}{" "}
-                      · {planStatus(step.status)}
+                      {step.ownerIsUser ? t("You") : (memberNames[step.ownerId] ?? step.ownerId)} ·{" "}
+                      {planStatus(step.status)}
                     </Text>
                     {blockers.length ? (
                       <Text style={{ color: tokens.mutedForeground }}>

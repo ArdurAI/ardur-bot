@@ -3,7 +3,6 @@ import type {
   ChiefPlanStepActionInput,
   ChiefPlanStepOutcomeInput,
   ChiefPlanUpdateInput,
-  GoalPlan,
   GoalPlanStepActionInput,
   GoalPlanStepInput,
   GoalPlanStepOutcomeInput,
@@ -19,9 +18,9 @@ import {
 } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient, TeamGoal } from "./client.js";
 import { Prisma as PrismaNS } from "./client.js";
+import { appendEventInTransaction } from "./events.js";
 import { loadGoal, lockGoalReview, validateGoalConditionSupport } from "./goals.js";
 import { IsolationError } from "./scope.js";
-import { appendEventInTransaction } from "./events.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 export class GoalPlanConflict extends Error {
@@ -231,10 +230,7 @@ async function commitPlanUpdate(
 }
 
 /** A ready step: prerequisites done, bot-owned, not yet handed out. */
-function isReadyForDispatch(
-  goal: Pick<TeamGoal, "coordinatorBotId">,
-  row: PlanStepRow,
-): boolean {
+function isReadyForDispatch(goal: Pick<TeamGoal, "coordinatorBotId">, row: PlanStepRow): boolean {
   return (
     row.status === "pending" &&
     !row.ownerIsUser &&
@@ -248,7 +244,7 @@ export async function listReadyGoalPlanSteps(
   goalId: string,
 ): Promise<PlanStepRow[]> {
   const goal = await tx.teamGoal.findFirst({ where: { id: goalId } });
-  if (!goal || goal.status !== "running") return [];
+  if (goal?.status !== "running") return [];
   const rows = await tx.goalPlanStep.findMany({ where: { goalId: goal.id } });
   const statuses = new Map(rows.map((row) => [row.clientId, row.status]));
   return rows.filter(
@@ -323,9 +319,7 @@ export async function updateGoalPlan(
   raw: GoalPlanUpdateInput | ChiefPlanUpdateInput,
 ) {
   const byOwner = "actor" in authority;
-  const goalId = byOwner
-    ? GoalPlanUpdateInputSchema.parse(raw).goalId
-    : authority.goalId;
+  const goalId = byOwner ? GoalPlanUpdateInputSchema.parse(raw).goalId : authority.goalId;
   const input = (
     byOwner ? GoalPlanUpdateInputSchema.parse(raw) : ChiefPlanUpdateInputSchema.parse(raw)
   ) as GoalPlanUpdateInput;
@@ -347,7 +341,7 @@ export async function updateGoalPlan(
 
 async function queueGoalPlanWake(prisma: PrismaClient, goalId: string, revision: number) {
   const goal = await prisma.teamGoal.findFirst({ where: { id: goalId } });
-  if (!goal || goal.status !== "running") return;
+  if (goal?.status !== "running") return;
   const group = await prisma.chatGroup.findFirst({
     where: {
       id: goal.groupId,
@@ -421,13 +415,9 @@ export async function recordGoalPlanStepOutcome(
   raw: GoalPlanStepOutcomeInput | ChiefPlanStepOutcomeInput,
 ) {
   const byOwner = "actor" in authority;
-  const goalId = byOwner
-    ? GoalPlanStepOutcomeInputSchema.parse(raw).goalId
-    : authority.goalId;
+  const goalId = byOwner ? GoalPlanStepOutcomeInputSchema.parse(raw).goalId : authority.goalId;
   const input = (
-    byOwner
-      ? GoalPlanStepOutcomeInputSchema.parse(raw)
-      : ChiefPlanStepOutcomeInputSchema.parse(raw)
+    byOwner ? GoalPlanStepOutcomeInputSchema.parse(raw) : ChiefPlanStepOutcomeInputSchema.parse(raw)
   ) as GoalPlanStepOutcomeInput;
   const actorId = byOwner ? authority.actor.userId : authority.scope.coordinatorBotId;
   const goal =
@@ -479,13 +469,9 @@ export async function settleGoalPlanStep(
   raw: GoalPlanStepActionInput | ChiefPlanStepActionInput,
 ) {
   const byOwner = "actor" in authority;
-  const goalId = byOwner
-    ? GoalPlanStepActionInputSchema.parse(raw).goalId
-    : authority.goalId;
+  const goalId = byOwner ? GoalPlanStepActionInputSchema.parse(raw).goalId : authority.goalId;
   const input = (
-    byOwner
-      ? GoalPlanStepActionInputSchema.parse(raw)
-      : ChiefPlanStepActionInputSchema.parse(raw)
+    byOwner ? GoalPlanStepActionInputSchema.parse(raw) : ChiefPlanStepActionInputSchema.parse(raw)
   ) as GoalPlanStepActionInput;
   const goal =
     "actor" in authority

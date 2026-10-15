@@ -678,7 +678,15 @@ export function GroupGoalStrip({
   const allowDecision = goal.status === "completed" && !recordedResult;
   // Next step first: in flight, then ready, then blocked, then finished and cancelled.
   const planRank = (status: string) =>
-    status === "active" ? 0 : status === "pending" ? 1 : status === "blocked" ? 2 : status === "done" ? 3 : 4;
+    status === "active"
+      ? 0
+      : status === "pending"
+        ? 1
+        : status === "blocked"
+          ? 2
+          : status === "done"
+            ? 3
+            : 4;
   const planSteps = goal.plan
     ? [...goal.plan.steps].sort((a, b) => planRank(a.status) - planRank(b.status))
     : [];

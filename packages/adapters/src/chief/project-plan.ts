@@ -75,172 +75,169 @@ export async function dispatchReadyGoalPlanSteps(
         )
       : undefined;
     const committed = await withTransactionRetry(() =>
-      deps.prisma.$transaction(
-        async (tx) => {
-          try {
-            await lockOwnedGroup(tx, run, goal.groupId);
-          } catch (error) {
-            if (error instanceof IsolationError) return { skipped: true } as const;
-            throw error;
-          }
-          const [group, activeSource, current] = await Promise.all([
-            tx.chatGroup.findFirst({
-              where: { id: goal.groupId, archivedAt: null, thread: { id: run.threadId } },
-              include: {
-                members: {
-                  where: { bot: { archivedAt: null } },
-                  include: { bot: { select: { id: true, name: true } } },
-                  orderBy: GROUP_MEMBER_ORDER,
-                },
+      deps.prisma.$transaction(async (tx) => {
+        try {
+          await lockOwnedGroup(tx, run, goal.groupId);
+        } catch (error) {
+          if (error instanceof IsolationError) return { skipped: true } as const;
+          throw error;
+        }
+        const [group, activeSource, current] = await Promise.all([
+          tx.chatGroup.findFirst({
+            where: { id: goal.groupId, archivedAt: null, thread: { id: run.threadId } },
+            include: {
+              members: {
+                where: { bot: { archivedAt: null } },
+                include: { bot: { select: { id: true, name: true } } },
+                orderBy: GROUP_MEMBER_ORDER,
               },
-            }),
-            tx.run.findFirst({
-              where: {
-                id: run.id,
-                spaceId: run.spaceId,
-                threadId: run.threadId,
-                botId: run.botId,
-                userId: run.userId,
-                status: "running",
-              },
-              select: { id: true },
-            }),
-            tx.goalPlanStep.findFirst({ where: { id: step.id } }),
-          ]);
-          if (!group || !activeSource || !current) return { skipped: true } as const;
-          const member = group.members.find((entry) => entry.bot.id === current.ownerId);
-          // Only a still-pending, still-owner-valid step may be handed out; a
-          // plan edit that cancelled it while we queued wins the row lock first.
-          if (!member || current.status !== "pending" || current.dispatchRunId !== null)
-            return { skipped: true } as const;
-
-          // Recovery: the handoff committed but the marker did not. The nonce
-          // names the step and revision, so replay binds the recorded run.
-          const existing = await tx.message.findUnique({
+            },
+          }),
+          tx.run.findFirst({
             where: {
-              threadId_clientNonce: { threadId: run.threadId, clientNonce: admissionKey },
+              id: run.id,
+              spaceId: run.spaceId,
+              threadId: run.threadId,
+              botId: run.botId,
+              userId: run.userId,
+              status: "running",
             },
-            select: {
-              sourceRuns: {
-                orderBy: { createdAt: "asc" },
-                take: 1,
-                select: { id: true, delegationId: true },
-              },
-            },
-          });
-          if (existing) {
-            const recorded = existing.sourceRuns[0];
-            if (!recorded) return { skipped: true } as const;
-            const delegation = await tx.delegation.findFirst({
-              where: { runId: recorded.id },
-              select: { id: true },
-            });
-            if (!delegation) return { skipped: true } as const;
-            await markGoalPlanStepDispatched(tx, {
-              stepRowId: step.id,
-              runId: recorded.id,
-              delegationId: delegation.id,
-              at: new Date(),
-            });
-            return { recovered: true } as const;
-          }
+            select: { id: true },
+          }),
+          tx.goalPlanStep.findFirst({ where: { id: step.id } }),
+        ]);
+        if (!group || !activeSource || !current) return { skipped: true } as const;
+        const member = group.members.find((entry) => entry.bot.id === current.ownerId);
+        // Only a still-pending, still-owner-valid step may be handed out; a
+        // plan edit that cancelled it while we queued wins the row lock first.
+        if (!member || current.status !== "pending" || current.dispatchRunId !== null)
+          return { skipped: true } as const;
 
-          let lockedTarget = preparedTarget;
-          if (!lockedTarget && deps.resolveDelegationPin) {
-            await lockDelegationRootForRun(tx, run.id);
-            lockedTarget = await resolveDelegationTarget(
-              tx,
-              { ...run, actingBotId: step.ownerId, targetThreadId: run.threadId },
-              deps.resolveDelegationPin,
-            );
-          }
-          const admitted = await prepareDelegation(
-            tx,
-            {
-              ...run,
-              parentRunId: run.id,
-              actingBotId: step.ownerId,
-              actingName: member.bot.name,
-              kind: "group-handoff",
-              admissionKey,
-              prompt,
-              tokens: goal.perWorkerTokens,
-              deadlineAt: goal.untilAt,
-              targetThreadId: run.threadId,
+        // Recovery: the handoff committed but the marker did not. The nonce
+        // names the step and revision, so replay binds the recorded run.
+        const existing = await tx.message.findUnique({
+          where: {
+            threadId_clientNonce: { threadId: run.threadId, clientNonce: admissionKey },
+          },
+          select: {
+            sourceRuns: {
+              orderBy: { createdAt: "asc" },
+              take: 1,
+              select: { id: true, delegationId: true },
             },
-            lockedTarget,
-          );
-          if (!admitted.ok) return { failed: admitted.error } as const;
-          const message = await createThreadMessageInTransaction(tx, {
-            threadId: run.threadId,
-            role: "bot",
-            blocks: [
-              {
-                kind: "handoff",
-                fromBotId: run.botId,
-                toBotId: step.ownerId,
-                text: step.title,
-                hop: nextBotMessageHop(undefined),
-              },
-            ],
-            botId: run.botId,
-            runId: run.id,
-            clientNonce: admissionKey,
-            markUnread: false,
+          },
+        });
+        if (existing) {
+          const recorded = existing.sourceRuns[0];
+          if (!recorded) return { skipped: true } as const;
+          const delegation = await tx.delegation.findFirst({
+            where: { runId: recorded.id },
+            select: { id: true },
           });
-          const task = await tx.task.create({
-            data: {
-              spaceId: run.spaceId,
-              botId: step.ownerId,
-              threadId: run.threadId,
-              userId: run.userId,
-              prompt,
-              status: "queued",
-            },
-          });
-          const nextRun = await tx.run.create({
-            data: {
-              ...admitted.runData,
-              spaceId: run.spaceId,
-              userId: run.userId,
-              botId: step.ownerId,
-              threadId: run.threadId,
-              taskId: task.id,
-              status: "queued",
-              trigger: "follow_up",
-              sourceMessageId: message.id,
-            },
-          });
-          await tx.delegation.update({
-            where: { id: admitted.record.id },
-            data: { runId: nextRun.id },
-          });
-          const marked = await markGoalPlanStepDispatched(tx, {
+          if (!delegation) return { skipped: true } as const;
+          await markGoalPlanStepDispatched(tx, {
             stepRowId: step.id,
-            runId: nextRun.id,
-            delegationId: admitted.record.id,
+            runId: recorded.id,
+            delegationId: delegation.id,
             at: new Date(),
           });
-          if (!marked) return { skipped: true } as const;
-          const event = await appendEventInTransaction(tx, {
-            spaceId: run.spaceId,
-            threadId: run.threadId,
-            botId: run.botId,
-            type: "goal.assigned",
-            runId: run.id,
-            payload: {
-              goalId: goal.id,
-              delegationId: admitted.record.id,
-              botId: step.ownerId,
-              stepId: step.clientId,
-              deliveryKey: admissionKey,
+          return { recovered: true } as const;
+        }
+
+        let lockedTarget = preparedTarget;
+        if (!lockedTarget && deps.resolveDelegationPin) {
+          await lockDelegationRootForRun(tx, run.id);
+          lockedTarget = await resolveDelegationTarget(
+            tx,
+            { ...run, actingBotId: step.ownerId, targetThreadId: run.threadId },
+            deps.resolveDelegationPin,
+          );
+        }
+        const admitted = await prepareDelegation(
+          tx,
+          {
+            ...run,
+            parentRunId: run.id,
+            actingBotId: step.ownerId,
+            actingName: member.bot.name,
+            kind: "group-handoff",
+            admissionKey,
+            prompt,
+            tokens: goal.perWorkerTokens,
+            deadlineAt: goal.untilAt,
+            targetThreadId: run.threadId,
+          },
+          lockedTarget,
+        );
+        if (!admitted.ok) return { failed: admitted.error } as const;
+        const message = await createThreadMessageInTransaction(tx, {
+          threadId: run.threadId,
+          role: "bot",
+          blocks: [
+            {
+              kind: "handoff",
+              fromBotId: run.botId,
+              toBotId: step.ownerId,
+              text: step.title,
+              hop: nextBotMessageHop(undefined),
             },
-          });
-          await touchGroupUpdatedAt(tx, goal.groupId);
-          return { ok: true, runId: nextRun.id, eventSeq: event.seq } as const;
-        },
-        DELEGATION_ADMISSION_TRANSACTION,
-      ),
+          ],
+          botId: run.botId,
+          runId: run.id,
+          clientNonce: admissionKey,
+          markUnread: false,
+        });
+        const task = await tx.task.create({
+          data: {
+            spaceId: run.spaceId,
+            botId: step.ownerId,
+            threadId: run.threadId,
+            userId: run.userId,
+            prompt,
+            status: "queued",
+          },
+        });
+        const nextRun = await tx.run.create({
+          data: {
+            ...admitted.runData,
+            spaceId: run.spaceId,
+            userId: run.userId,
+            botId: step.ownerId,
+            threadId: run.threadId,
+            taskId: task.id,
+            status: "queued",
+            trigger: "follow_up",
+            sourceMessageId: message.id,
+          },
+        });
+        await tx.delegation.update({
+          where: { id: admitted.record.id },
+          data: { runId: nextRun.id },
+        });
+        const marked = await markGoalPlanStepDispatched(tx, {
+          stepRowId: step.id,
+          runId: nextRun.id,
+          delegationId: admitted.record.id,
+          at: new Date(),
+        });
+        if (!marked) return { skipped: true } as const;
+        const event = await appendEventInTransaction(tx, {
+          spaceId: run.spaceId,
+          threadId: run.threadId,
+          botId: run.botId,
+          type: "goal.assigned",
+          runId: run.id,
+          payload: {
+            goalId: goal.id,
+            delegationId: admitted.record.id,
+            botId: step.ownerId,
+            stepId: step.clientId,
+            deliveryKey: admissionKey,
+          },
+        });
+        await touchGroupUpdatedAt(tx, goal.groupId);
+        return { ok: true, runId: nextRun.id, eventSeq: event.seq } as const;
+      }, DELEGATION_ADMISSION_TRANSACTION),
     ).catch(delegationFailure);
     if ("ok" in committed && committed.ok) {
       dispatched += 1;
@@ -330,4 +327,3 @@ export async function settlePlanStepFromRun(
     return planToolError(error);
   }
 }
-

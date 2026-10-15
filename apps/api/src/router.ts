@@ -207,15 +207,13 @@ import {
   newestVoiceCredentialOrder,
   Prisma,
   parseComputerMode,
+  recordGoalPlanStepOutcome,
   rejectGoal,
   releaseSpaceDeletionClaim,
   renewSpaceDeletionClaim,
   requestCancel,
   resetBriefRetriesForConnection,
   reviewGoalCondition,
-  recordGoalPlanStepOutcome,
-  settleGoalPlanStep,
-  updateGoalPlan,
   SPACE_DELETION_CLAIM_TIMEOUT_MS,
   SpaceDeletionInProgressError,
   SpaceLimitError,
@@ -225,10 +223,12 @@ import {
   selectSpaceVoicePreference,
   setBotCommunicationPaused,
   settleGoalBoardDelivery,
+  settleGoalPlanStep,
   startGoal,
   stopGoal,
   submitGoal,
   touchGroupUpdatedAt,
+  updateGoalPlan,
   updateUserPreferences,
 } from "@ardurbot/db";
 import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
@@ -6653,7 +6653,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       planStep: authed.goals.planStep.handler(({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
-        return goalReviewCall(() => settleGoalPlanStep(deps.prisma, { actor: context.actor }, input));
+        return goalReviewCall(() =>
+          settleGoalPlanStep(deps.prisma, { actor: context.actor }, input),
+        );
       }),
       planOutcome: authed.goals.planOutcome.handler(({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)

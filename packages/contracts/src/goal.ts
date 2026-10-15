@@ -300,7 +300,9 @@ export type GoalPlanStepActionInput = z.infer<typeof GoalPlanStepActionInputSche
 /** Chief tool inputs: the active goal comes from the coordinator run, never the model. */
 export const ChiefPlanUpdateInputSchema = GoalPlanUpdateInputSchema.omit({ goalId: true });
 export type ChiefPlanUpdateInput = z.infer<typeof ChiefPlanUpdateInputSchema>;
-export const ChiefPlanStepOutcomeInputSchema = GoalPlanStepOutcomeInputSchema.omit({ goalId: true });
+export const ChiefPlanStepOutcomeInputSchema = GoalPlanStepOutcomeInputSchema.omit({
+  goalId: true,
+});
 export type ChiefPlanStepOutcomeInput = z.infer<typeof ChiefPlanStepOutcomeInputSchema>;
 export const ChiefPlanStepActionInputSchema = GoalPlanStepActionInputSchema.omit({ goalId: true });
 export type ChiefPlanStepActionInput = z.infer<typeof ChiefPlanStepActionInputSchema>;

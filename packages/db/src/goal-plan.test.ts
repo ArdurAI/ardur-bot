@@ -103,8 +103,7 @@ function planFixture(options: {
       findUniqueOrThrow: vi.fn(async () => currentGoal),
       update: vi.fn(async (args: { data: Record<string, unknown> }) => {
         for (const [key, value] of Object.entries(args.data)) {
-          (currentGoal as Record<string, unknown>)[key] =
-            value === PrismaNS.DbNull ? null : value;
+          (currentGoal as Record<string, unknown>)[key] = value === PrismaNS.DbNull ? null : value;
         }
         return currentGoal;
       }),
@@ -116,9 +115,7 @@ function planFixture(options: {
     goalPlanStep: {
       findMany: vi.fn(async () => steps),
       findFirst: vi.fn(async (args: { where: { id?: string; clientId?: string } }) =>
-        steps.find(
-          (row) => row.id === args.where.id || row.clientId === args.where.clientId,
-        ),
+        steps.find((row) => row.id === args.where.id || row.clientId === args.where.clientId),
       ),
       create: vi.fn(async (args: { data: Record<string, unknown> & { clientId: string } }) => {
         const row = stepRow({ ...args.data, clientId: args.data.clientId } as Partial<StepRow> & {
@@ -127,17 +124,15 @@ function planFixture(options: {
         steps.push(row);
         return row;
       }),
-      update: vi.fn(
-        async (args: { where: { id: string }; data: Record<string, unknown> }) => {
-          const row = steps.find((entry) => entry.id === args.where.id);
-          if (!row) throw new Error("missing step row");
-          for (const [key, value] of Object.entries(args.data)) {
-            (row as unknown as Record<string, unknown>)[key] =
-              value === PrismaNS.DbNull ? null : value;
-          }
-          return row;
-        },
-      ),
+      update: vi.fn(async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+        const row = steps.find((entry) => entry.id === args.where.id);
+        if (!row) throw new Error("missing step row");
+        for (const [key, value] of Object.entries(args.data)) {
+          (row as unknown as Record<string, unknown>)[key] =
+            value === PrismaNS.DbNull ? null : value;
+        }
+        return row;
+      }),
       updateMany: vi.fn(
         async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
           const row = steps.find((entry) => entry.id === args.where.id);
@@ -195,9 +190,7 @@ describe("plan dependency validation", () => {
         stepInput("b", { prerequisiteIds: ["a"] }),
       ]),
     ).toBe(true);
-    expect(
-      planHasCycle([stepInput("a", { prerequisiteIds: ["a"] })]),
-    ).toBe(true);
+    expect(planHasCycle([stepInput("a", { prerequisiteIds: ["a"] })])).toBe(true);
     expect(
       planHasCycle([
         stepInput("a", { prerequisiteIds: ["b", "c"] }),
@@ -213,7 +206,11 @@ describe("plan dependency validation", () => {
       updateGoalPlan(
         fixture.prisma,
         { actor: owner },
-        { goalId: goal.id, baseRevision: 3, steps: [stepInput("a", { prerequisiteIds: ["ghost"] })] },
+        {
+          goalId: goal.id,
+          baseRevision: 3,
+          steps: [stepInput("a", { prerequisiteIds: ["ghost"] })],
+        },
       ),
     ).rejects.toMatchObject({ reason: "prerequisite-missing" });
   });
@@ -288,7 +285,11 @@ describe("plan update application", () => {
     await updateGoalPlan(
       fixture.prisma,
       { actor: owner },
-      { goalId: goal.id, baseRevision: 3, steps: [stepInput("base"), stepInput("next", { prerequisiteIds: ["base"] })] },
+      {
+        goalId: goal.id,
+        baseRevision: 3,
+        steps: [stepInput("base"), stepInput("next", { prerequisiteIds: ["base"] })],
+      },
     );
     expect(fixture.steps.find((row) => row.clientId === "base")?.status).toBe("cancelled");
     expect(fixture.steps.find((row) => row.clientId === "next")?.status).toBe("blocked");
@@ -454,7 +455,11 @@ describe("step outcome recording", () => {
         },
         goalId: goal.id,
       },
-      { stepId: "active-step", baseRevision: 3, support: [{ kind: "run", recordId: "run-1", revision: null }] },
+      {
+        stepId: "active-step",
+        baseRevision: 3,
+        support: [{ kind: "run", recordId: "run-1", revision: null }],
+      },
     );
     expect(row.status).toBe("done");
     expect(row.outcome).toMatchObject({
@@ -483,7 +488,11 @@ describe("step cancellation and reopening", () => {
       status: "done",
       outcome: { actorId: owner.userId, support: [], recordedAt: new Date().toISOString() },
       dispatchRunId: "run-1",
-      dispatch: { runId: "run-1", delegationId: "delegation-1", dispatchedAt: new Date().toISOString() },
+      dispatch: {
+        runId: "run-1",
+        delegationId: "delegation-1",
+        dispatchedAt: new Date().toISOString(),
+      },
     });
     const fixture = planFixture({ steps: [row] });
     await expect(

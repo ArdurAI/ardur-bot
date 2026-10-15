@@ -9,10 +9,6 @@ import type {
   GoalConditionSupport,
   GoalLinkInput,
   GoalPlan,
-  GoalPlanStepActionInput,
-  GoalPlanStepInput,
-  GoalPlanStepOutcomeInput,
-  GoalPlanUpdateInput,
   GoalRejectInput,
   GoalStartInput,
   GoalSubmitInput,
@@ -250,12 +246,6 @@ export async function loadGoalPlan(
     revision: goal.planRevision,
     steps: rows.map((row) => asPlanStep(row)),
   };
-}
-
-async function loadGoalWithPlan(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) {
-  const goal = await loadGoal(prisma, where);
-  if (!goal) return null;
-  return { ...goal, plan: await loadGoalPlan(prisma, goal.id) };
 }
 
 export function goalExhaustionReason(
@@ -703,7 +693,11 @@ export async function submitGoal(prisma: PrismaClient, actor: Actor, input: Goal
   });
 }
 
-export async function lockGoalReview(tx: Prisma.TransactionClient, threadId: string, rootTaskId: string) {
+export async function lockGoalReview(
+  tx: Prisma.TransactionClient,
+  threadId: string,
+  rootTaskId: string,
+) {
   await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
   await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${rootTaskId} FOR UPDATE`;
 }
