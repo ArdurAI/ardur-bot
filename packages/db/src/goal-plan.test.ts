@@ -513,6 +513,41 @@ describe("step cancellation and reopening", () => {
     expect(row.dispatch).toBeNull();
   });
 
+  it("refuses to reopen a step whose dispatch is still in flight", async () => {
+    const row = stepRow({ clientId: "active-step", status: "active", dispatchRunId: "run-1" });
+    const fixture = planFixture({ steps: [row] });
+    fixture.state.supportRun = { id: "run-1", status: "running" };
+    await expect(
+      settleGoalPlanStep(
+        fixture.prisma,
+        { actor: owner },
+        { goalId: goal.id, stepId: "active-step", baseRevision: 3, action: "reopen" },
+      ),
+    ).rejects.toMatchObject({ reason: "step-in-flight" });
+    // The refusal leaves the dispatch marker in place, so no second worker
+    // becomes eligible for the same work.
+    expect(row.status).toBe("active");
+    expect(row.dispatchRunId).toBe("run-1");
+    const listed = await listReadyGoalPlanSteps(
+      fixture.prisma as unknown as Prisma.TransactionClient,
+      goal.id,
+    );
+    expect(listed).toEqual([]);
+  });
+
+  it("reopens a step whose dispatch already settled", async () => {
+    const row = stepRow({ clientId: "active-step", status: "active", dispatchRunId: "run-1" });
+    const fixture = planFixture({ steps: [row] });
+    fixture.state.supportRun = { id: "run-1", status: "failed" };
+    await settleGoalPlanStep(
+      fixture.prisma,
+      { actor: owner },
+      { goalId: goal.id, stepId: "active-step", baseRevision: 3, action: "reopen" },
+    );
+    expect(row.status).toBe("pending");
+    expect(row.dispatchRunId).toBeNull();
+  });
+
   it("reopens a done step as blocked when a prerequisite was cancelled", async () => {
     const base = stepRow({ clientId: "base", status: "cancelled" });
     const row = stepRow({

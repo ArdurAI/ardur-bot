@@ -33,6 +33,7 @@ export class GoalPlanConflict extends Error {
       | "dependency-cycle"
       | "unknown-step"
       | "step-settled"
+      | "step-in-flight"
       | "missing-support",
   ) {
     super(
@@ -50,12 +51,20 @@ export class GoalPlanConflict extends Error {
                   ? "The step is not in this plan"
                   : reason === "step-settled"
                     ? "The step is already done or cancelled"
-                    : "Finishing a step needs at least one record of the goal's work",
+                    : reason === "step-in-flight"
+                      ? "The step is still being worked on; its run has not finished"
+                      : "Finishing a step needs at least one record of the goal's work",
     );
   }
 }
 
 type PlanStepRow = Prisma.GoalPlanStepGetPayload<object>;
+
+const TERMINAL_RUN_STATUSES = new Set(["completed", "failed", "cancelled"]);
+
+function isTerminalRunStatus(status: string): boolean {
+  return TERMINAL_RUN_STATUSES.has(status);
+}
 
 type CoordinatorScope = {
   spaceId: string;
@@ -491,6 +500,16 @@ export async function settleGoalPlanStep(
         step.status !== "active"
       ) {
         throw new GoalPlanConflict("step-settled");
+      }
+      // Reopening must never make the same work eligible for a second worker
+      // while the first dispatch is still in flight.
+      if (input.action === "reopen" && step.dispatchRunId) {
+        const dispatchRun = await tx.run.findFirst({
+          where: { id: step.dispatchRunId },
+          select: { id: true, status: true },
+        });
+        if (dispatchRun && !isTerminalRunStatus(dispatchRun.status))
+          throw new GoalPlanConflict("step-in-flight");
       }
       const rows = await tx.goalPlanStep.findMany({
         where: { goalId: current.id },
