@@ -21,8 +21,34 @@ describe("optional recording", () => {
   });
 });
 
-describe("recording failure policy", () => {
-  it.each([
+describe("governance gate for project plan tools", () => {
+  it("runs each plan tool through the pre-handler gate with governance on", async () => {
+    const { store, records } = fakeEvidenceStore();
+    const recorder = createEvidenceRecorder({
+      store,
+      secretStore: new EncryptedSecretStore("test-only-encryption-material"),
+    });
+    const run = { id: "run-test", spaceId: "space-test", botId: "bot-test", userId: "user-test" };
+    for (const toolName of [
+      "update_project_plan",
+      "record_plan_step_outcome",
+      "set_plan_step",
+    ] as const) {
+      // The pre-handler gate records the decision before the tool executes;
+      // an unclassified tool used to throw here and never reach the handler.
+      await expect(
+        recordToolDecision(recorder, { run, toolName, viaConnector: false, args: {}, decisionKind: "allowed_by_default" }),
+      ).resolves.toBeUndefined();
+    }
+    expect(records).toHaveLength(3);
+    for (const row of records) {
+      expect(row.toolName).toMatch(/^(update_project_plan|record_plan_step_outcome|set_plan_step)$/);
+      expect(row.verdict).toBe("compliant");
+    }
+  });
+});
+
+describe("recording failure policy", () => {  it.each([
     ["shell", false, true],
     ["write_file", false, true],
     ["mail_send", true, true],
