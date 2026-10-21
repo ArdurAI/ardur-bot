@@ -15,7 +15,7 @@
     "@ardurbot/contracts": "workspace:*",
     "@ardurbot/core": "workspace:*",
     "@ardurbot/logging": "workspace:*",
-    "hono": "4.13.7",
+    "hono": "4.13.11",
     "tsx": "4.23.13"
   },
   "devDependencies": {
