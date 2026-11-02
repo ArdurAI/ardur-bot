@@ -21,7 +21,7 @@
     "posthog-js": "1.430.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "zod": "4.6.2"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",

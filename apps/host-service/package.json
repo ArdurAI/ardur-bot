@@ -14,7 +14,7 @@
     "@ardurbot/host-runtime": "workspace:*",
     "node-pty": "1.1.0",
     "ws": "8.21.3",
-    "zod": "4.6.2"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
