@@ -21,7 +21,7 @@
     "@ardurbot/logging": "workspace:*",
     "@ardurbot/memory": "workspace:*",
     "hono": "4.13.7",
-    "node-forge": "1.4.0",
+    "node-forge": "1.4.3",
     "zod": "4.6.2",
     "@ardurbot/host-runtime": "workspace:*",
     "ws": "8.21.3"
